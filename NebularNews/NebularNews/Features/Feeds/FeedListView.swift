@@ -29,6 +29,23 @@ private struct FeedListContent: View {
 
     var body: some View {
         List {
+            // Poll status banner
+            if viewModel.isPolling {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Refreshing feeds…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .listRowBackground(Color.clear)
+            } else if let message = viewModel.lastPollMessage {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
+            }
+
             if viewModel.feeds.isEmpty && !viewModel.isLoading {
                 ContentUnavailableView(
                     "No Feeds",
@@ -68,11 +85,23 @@ private struct FeedListContent: View {
                     Image(systemName: "plus")
                 }
             }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
+                    Task { await viewModel.refreshAllFeeds() }
+                } label: {
+                    Label("Refresh All", systemImage: "arrow.clockwise")
+                }
+                .disabled(viewModel.isPolling)
+            }
         }
         .sheet(isPresented: $viewModel.showAddSheet) {
             AddFeedSheet { feedUrl, title in
                 Task {
-                    try? await viewModel.feedRepo.add(feedUrl: feedUrl, title: title)
+                    let feed = try? await viewModel.feedRepo.add(feedUrl: feedUrl, title: title)
+                    if let feed {
+                        // Poll immediately for title auto-detection + first articles
+                        await viewModel.pollSingleFeed(id: feed.id)
+                    }
                     await viewModel.loadFeeds()
                 }
             }
@@ -81,7 +110,7 @@ private struct FeedListContent: View {
             await viewModel.loadFeeds()
         }
         .refreshable {
-            await viewModel.loadFeeds()
+            await viewModel.refreshAllFeeds()
         }
     }
 }
