@@ -5,12 +5,14 @@ import SwiftData
 
 public protocol FeedRepositoryProtocol: Sendable {
     func list() async -> [Feed]
+    func listSnapshots() async -> [FeedSnapshot]
     func get(id: String) async -> Feed?
     func getByUrl(_ feedUrl: String) async -> Feed?
     func add(feedUrl: String, title: String) async throws -> Feed
     func delete(id: String) async throws
     func update(_ feed: Feed) async throws
     func setEnabled(id: String, enabled: Bool) async throws
+    func updateMetadata(id: String, title: String?, siteUrl: String?, iconUrl: String?) async throws
     func recordPollSuccess(id: String, etag: String?, lastModified: String?, hadNewItems: Bool) async throws
     func recordPollError(id: String, message: String) async throws
 }
@@ -25,6 +27,22 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
             sortBy: [SortDescriptor(\.title, comparator: .localizedStandard)]
         )
         return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    public func listSnapshots() async -> [FeedSnapshot] {
+        let feeds = await list()
+        return feeds.map { feed in
+            FeedSnapshot(
+                id: feed.id,
+                feedUrl: feed.feedUrl,
+                title: feed.title,
+                etag: feed.etag,
+                lastModified: feed.lastModified,
+                isEnabled: feed.isEnabled,
+                consecutiveErrors: feed.consecutiveErrors,
+                lastPolledAt: feed.lastPolledAt
+            )
+        }
     }
 
     public func get(id: String) async -> Feed? {
@@ -68,6 +86,17 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
     public func setEnabled(id: String, enabled: Bool) async throws {
         guard let feed = await get(id: id) else { return }
         feed.isEnabled = enabled
+        try modelContext.save()
+    }
+
+    public func updateMetadata(id: String, title: String?, siteUrl: String?, iconUrl: String?) async throws {
+        guard let feed = await get(id: id) else { return }
+        // Only update title if it's currently empty (user-set titles take precedence)
+        if let title, feed.title.isEmpty {
+            feed.title = title
+        }
+        if let siteUrl { feed.siteUrl = siteUrl }
+        if let iconUrl { feed.iconUrl = iconUrl }
         try modelContext.save()
     }
 

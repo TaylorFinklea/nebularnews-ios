@@ -30,6 +30,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func insert(_ article: Article) async throws
+    func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
     func react(id: String, value: Int?, reasonCodes: [String]?) async throws
     func addTag(articleId: String, tag: Tag) async throws
@@ -98,6 +99,27 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func insert(_ article: Article) async throws {
         modelContext.insert(article)
+        try modelContext.save()
+    }
+
+    public func insertForFeed(feedId: String, article: ParsedArticle) async throws {
+        // Fetch the Feed from THIS actor's ModelContext so both objects share the same context
+        var descriptor = FetchDescriptor<Feed>(
+            predicate: #Predicate { $0.id == feedId }
+        )
+        descriptor.fetchLimit = 1
+        guard let feed = try? modelContext.fetch(descriptor).first else { return }
+
+        let newArticle = Article(canonicalUrl: article.url, title: article.title)
+        newArticle.author = article.author
+        newArticle.publishedAt = article.publishedAt
+        newArticle.contentHtml = article.contentHtml
+        newArticle.excerpt = article.excerpt
+        newArticle.imageUrl = article.imageUrl
+        newArticle.contentHash = article.contentHash
+        newArticle.feed = feed
+
+        modelContext.insert(newArticle)
         try modelContext.save()
     }
 
