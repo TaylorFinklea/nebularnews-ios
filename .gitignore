@@ -4,6 +4,7 @@
 xcuserdata/
 DerivedData/
 build/
+NebularNews/Config/*.local.xcconfig
 *.moved-aside
 *.pbxuser
 !default.pbxuser

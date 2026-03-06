@@ -1,0 +1,86 @@
+name: iOS CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  nebularnews-ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Swift package tests
+        run: swift test
+        working-directory: NebularNewsKit
+
+      - name: Validate simulator build
+        run: |
+          xcodebuild \
+            -project NebularNews/NebularNews.xcodeproj \
+            -scheme NebularNews \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Validate device build
+        run: |
+          xcodebuild \
+            -project NebularNews/NebularNews.xcodeproj \
+            -scheme NebularNews \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Select an available iPhone simulator
+        run: |
+          python3 <<'PY' >> "$GITHUB_ENV"
+          import json
+          import subprocess
+          import sys
+
+          data = json.loads(subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "-j"],
+              text=True,
+          ))
+
+          candidates = []
+          for runtime, devices in data.get("devices", {}).items():
+              if "iOS" not in runtime:
+                  continue
+              for device in devices:
+                  if not device.get("isAvailable"):
+                      continue
+                  if not device.get("name", "").startswith("iPhone"):
+                      continue
+                  candidates.append((runtime, device["name"], device["udid"]))
+
+          if not candidates:
+              print("No available iPhone simulator found.", file=sys.stderr)
+              sys.exit(1)
+
+          candidates.sort(reverse=True)
+          runtime, name, udid = candidates[0]
+          print(f"SIMULATOR_NAME={name}")
+          print(f"SIMULATOR_RUNTIME={runtime}")
+          print(f"SIMULATOR_UDID={udid}")
+          PY
+
+      - name: Run app unit tests
+        run: |
+          xcrun simctl boot "$SIMULATOR_UDID" || true
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcodebuild \
+            -project NebularNews/NebularNews.xcodeproj \
+            -scheme NebularNews \
+            -destination "id=$SIMULATOR_UDID" \
+            CODE_SIGNING_ALLOWED=NO \
+            -only-testing:NebularNewsTests \
+            test

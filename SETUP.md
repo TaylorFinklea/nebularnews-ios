@@ -1,104 +1,129 @@
-# Nebular News iOS — Setup Guide
+# Nebular News iOS
 
-## Prerequisites
+Nebular News iOS now supports two modes:
 
-- **Xcode 26 beta** (or later) — required for iOS 26 SDK and Liquid Glass APIs
-- **iOS 26 simulator** or device
-- **Apple Developer account** with iCloud/CloudKit entitlements
-- macOS 15+ (Sequoia or later)
+- **Companion mode**: connects to your Nebular News web server and uses it as the source of truth for dashboard data, News Brief, articles, read state, reactions, and tags
+- **Standalone mode**: keeps local feeds and local provider keys on-device
 
-## Step 1: Create the Xcode Project ✅
+Companion mode is the primary production path. Standalone mode remains available for local-only use.
 
-Already created at `NebularNews/NebularNews.xcodeproj`.
+## Requirements
 
-## Step 2: Add the Local Swift Package ✅
+- Xcode 16 or newer with an iOS 18 simulator/runtime
+- macOS 14 or newer
+- no CloudKit or iCloud setup required for a default build
 
-NebularNewsKit added as a local package dependency.
+## Repo defaults
 
-## Step 3: Add Source Files ✅
+The checked-in project is intentionally generic:
 
-Source files are in `NebularNews/NebularNews/` using Xcode's filesystem-synchronized groups —
-they are auto-discovered by the build system (no manual drag-and-drop needed).
+- bundle identifiers default to `com.example.*`
+- CloudKit is disabled by default
+- the default mobile OAuth callback is `nebularnews://oauth/callback`
+- the onboarding server field falls back to `https://api.example.com` unless you set a different default
 
-## Step 4: Remove Auto-Generated Files ✅
+See [NebularNews/Config/AppConfig.example.xcconfig](NebularNews/Config/AppConfig.example.xcconfig) for the optional override keys.
 
-Xcode 26 did not generate ContentView.swift or NebularNewsApp.swift stubs.
-No cleanup needed.
+## Build and run
 
-## Step 5: Configure iCloud + CloudKit
+1. Open [NebularNews/NebularNews.xcodeproj](NebularNews/NebularNews.xcodeproj) in Xcode.
+2. Select the `NebularNews` scheme.
+3. Choose an iOS 18 simulator.
+4. Build and run.
 
-1. Open `NebularNews/NebularNews.xcodeproj` in Xcode
-2. Select the **NebularNews** target → **Signing & Capabilities**
-3. Click **+ Capability** and add:
-   - **iCloud** — check **CloudKit**, create a container `iCloud.com.nebularnews.ios`
-   - **Background Modes** — check **Remote notifications** (required for CloudKit sync)
-4. Ensure the CloudKit container is created in your Apple Developer portal
+The first launch shows onboarding with:
 
-## Step 6: Build & Run
+- `Connect to existing Nebular News server`
+- `Use standalone mode`
 
-1. Install the iOS 26 simulator: **Xcode → Settings → Components → iOS 26**
-2. Select an iOS 26 simulator (e.g., iPhone 16 Pro)
-3. **Cmd+R** to build and run
-4. The onboarding flow should appear on first launch
-5. Add a feed, skip or enter an AI API key, and you're in
+## Companion mode setup
 
-## Project Structure
+Your web deployment must expose a separate public mobile host, for example:
 
-```
-nebularnews-ios/
-├── NebularNews/                         ← Xcode project wrapper
-│   ├── NebularNews.xcodeproj/           ← Xcode project file
-│   ├── NebularNews/                     ← App target (filesystem-synced)
-│   │   ├── App/                         ← Entry point, tab view, app state
-│   │   ├── Features/                    ← Screen modules
-│   │   │   ├── Onboarding/
-│   │   │   ├── Feeds/
-│   │   │   ├── Dashboard/  (Phase 6)
-│   │   │   ├── Articles/   (Phase 3)
-│   │   │   ├── Chat/       (Phase 5)
-│   │   │   ├── Tags/       (Phase 3)
-│   │   │   └── Settings/   (Phase 3)
-│   │   ├── SharedViews/                 ← GlassCard, ScoreBadge, TagPill
-│   │   └── Assets.xcassets/             ← App icons, accent color
-│   ├── NebularNewsTests/
-│   └── NebularNewsUITests/
-│
-├── NebularNewsKit/                      ← Swift Package (core logic)
-│   ├── Package.swift
-│   ├── Sources/NebularNewsKit/
-│   │   ├── Models/                      ← SwiftData @Model types
-│   │   ├── Repositories/                ← Data access layer
-│   │   ├── Ingestion/                   ← RSS fetching (Phase 2)
-│   │   ├── AI/                          ← LLM integration (Phase 4)
-│   │   ├── Keychain/                    ← Secure storage
-│   │   └── Extensions/                  ← Date, Color helpers
-│   └── Tests/NebularNewsKitTests/
-│
-├── SETUP.md                             ← This file
-└── .gitignore
-```
+- protected app host: `https://news.example.com`
+- public mobile host: `https://api.example.com`
 
-> **Filesystem-Synced Groups**: Xcode 26 uses `PBXFileSystemSynchronizedRootGroup` —
-> any `.swift` files placed in the `NebularNews/NebularNews/` folder are automatically
-> compiled as part of the app target. No need to manually add file references.
+The web app must be configured with:
 
-## Running Tests
+- `MOBILE_PUBLIC_ENABLED=true`
+- `MOBILE_PUBLIC_BASE_URL=https://api.example.com`
+- `MOBILE_OAUTH_CLIENT_ID=nebular-news-ios`
+- `MOBILE_OAUTH_CLIENT_NAME=Nebular News iOS`
+- `MOBILE_OAUTH_REDIRECT_URIS=nebularnews://oauth/callback`
 
-The `NebularNewsKit` package has its own test target:
+Companion login uses first-party OAuth Authorization Code + PKCE with `ASWebAuthenticationSession`.
+
+## Optional local config overrides
+
+The app already builds with the checked-in defaults. If you want environment-specific values without editing shared project files:
+
+1. Copy the values you need from [NebularNews/Config/AppConfig.example.xcconfig](NebularNews/Config/AppConfig.example.xcconfig) into a local xcconfig such as `NebularNews/Config/AppConfig.local.xcconfig`.
+2. In Xcode, set that local file as the base configuration for the `NebularNews` target.
+
+Useful overrides:
+
+- `PRODUCT_BUNDLE_IDENTIFIER`
+- `KEYCHAIN_SERVICE`
+- `BACKGROUND_REFRESH_TASK_IDENTIFIER`
+- `CLOUDKIT_CONTAINER_IDENTIFIER`
+- `MOBILE_OAUTH_CLIENT_ID`
+- `MOBILE_OAUTH_CLIENT_NAME`
+- `MOBILE_OAUTH_REDIRECT_URI`
+
+## Testing
+
+### Swift package tests
 
 ```bash
 cd NebularNewsKit
 swift test
 ```
 
-Or in Xcode: select the `NebularNewsKitTests` scheme and press **Cmd+U**.
+### Simulator build
 
-## Next Phases
+```bash
+xcodebuild \
+  -project NebularNews/NebularNews.xcodeproj \
+  -scheme NebularNews \
+  -destination 'generic/platform=iOS Simulator' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
 
-The scaffold is complete. Upcoming implementation:
+### Device-style build validation
 
-- **Phase 2**: FeedKit integration, content extraction, background polling
-- **Phase 3**: Article list with Liquid Glass cards, detail view, reactions
-- **Phase 4**: AI summaries, scoring, key points (direct API calls)
-- **Phase 5**: Chat with streaming AI responses
-- **Phase 6**: Dashboard, polish, accessibility
+```bash
+xcodebuild \
+  -project NebularNews/NebularNews.xcodeproj \
+  -scheme NebularNews \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+### App unit tests
+
+```bash
+xcodebuild \
+  -project NebularNews/NebularNews.xcodeproj \
+  -scheme NebularNews \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  CODE_SIGNING_ALLOWED=NO \
+  -only-testing:NebularNewsTests \
+  test
+```
+
+## CI
+
+GitHub Actions runs:
+
+- `swift test` for `NebularNewsKit`
+- unsigned simulator build validation
+- unsigned generic iOS device build validation
+- `NebularNewsTests` on an automatically selected iPhone simulator
+
+The workflow lives at [.github/workflows/ios.yml](.github/workflows/ios.yml).
+
+## CloudKit note
+
+CloudKit is optional and off by default. Companion mode does not depend on iCloud. If you want standalone sync or CloudKit-backed experiments later, enable that explicitly in your own app configuration and entitlements.

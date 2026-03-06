@@ -11,17 +11,22 @@ public let allModelTypes: [any PersistentModel.Type] = [
     AppSettings.self
 ]
 
-/// Creates a `ModelContainer` with iCloud sync enabled.
+/// Creates a `ModelContainer`.
 ///
-/// CloudKit sync requires:
-/// - iCloud capability with a CloudKit container in the Xcode project
-/// - Remote Notifications in Background Modes
-/// - All @Model properties have defaults or are optional
-public func makeModelContainer() throws -> ModelContainer {
+/// CloudKit sync is optional and disabled by default so the project can build
+/// and run without a personal iCloud container.
+public func makeModelContainer(
+    cloudKitEnabled: Bool = false,
+    cloudKitContainerIdentifier: String? = nil
+) throws -> ModelContainer {
     let schema = Schema(allModelTypes)
     let config = ModelConfiguration(
+        cloudKitContainerIdentifier,
         schema: schema,
-        cloudKitDatabase: .automatic
+        isStoredInMemoryOnly: false,
+        allowsSave: true,
+        groupContainer: .none,
+        cloudKitDatabase: cloudKitEnabled ? .automatic : .none
     )
     return try ModelContainer(for: schema, configurations: [config])
 }

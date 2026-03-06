@@ -1,73 +1,102 @@
 import SwiftUI
 
-/// Root navigation — 4-tab Liquid Glass tab bar.
-///
-/// On iOS 26, TabView automatically adopts the translucent glass material.
-/// The tab bar shrinks on scroll and expands on tap.
 struct MainTabView: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
-        TabView {
-            Tab("Dashboard", systemImage: "house") {
-                DashboardView()
-            }
+        if appState.isCompanionMode {
+            TabView {
+                Tab("Dashboard", systemImage: "house") {
+                    CompanionDashboardView()
+                }
 
-            Tab("Articles", systemImage: "doc.text") {
-                ArticleListView()
-            }
+                Tab("Articles", systemImage: "doc.text") {
+                    CompanionArticlesView()
+                }
 
-            Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
-                ChatPlaceholderView()
-            }
+                Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
+                    CompanionChatPlaceholderView()
+                }
 
-            Tab("More", systemImage: "ellipsis") {
-                MoreView()
+                Tab("More", systemImage: "ellipsis") {
+                    CompanionMoreView()
+                }
+            }
+        } else {
+            TabView {
+                Tab("Dashboard", systemImage: "house") {
+                    LocalDashboardPlaceholderView()
+                }
+
+                Tab("Articles", systemImage: "doc.text") {
+                    LocalArticlesPlaceholderView()
+                }
+
+                Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
+                    LocalChatPlaceholderView()
+                }
+
+                Tab("More", systemImage: "ellipsis") {
+                    LocalMoreView()
+                }
             }
         }
     }
 }
 
-// MARK: - Placeholder Views (to be replaced in later phases)
-
-struct DashboardView: View {
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "Dashboard",
-                systemImage: "house",
-                description: Text("Your reading dashboard will appear here.")
-            )
-            .navigationTitle("Dashboard")
-        }
-    }
-}
-
-struct ArticleListView: View {
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "Articles",
-                systemImage: "doc.text",
-                description: Text("Add some feeds to start reading.")
-            )
-            .navigationTitle("Articles")
-        }
-    }
-}
-
-struct ChatPlaceholderView: View {
+private struct CompanionChatPlaceholderView: View {
     var body: some View {
         NavigationStack {
             ContentUnavailableView(
                 "Chat",
                 systemImage: "bubble.left.and.bubble.right",
-                description: Text("AI chat will be available in a future update.")
+                description: Text("Server-backed article chat stays on the web app for the first companion release.")
             )
             .navigationTitle("Chat")
         }
     }
 }
 
-struct MoreView: View {
+private struct LocalDashboardPlaceholderView: View {
+    var body: some View {
+        NavigationStack {
+            ContentUnavailableView(
+                "Dashboard",
+                systemImage: "house",
+                description: Text("Use standalone mode with local feeds, or connect to your Nebular News server for synced dashboard data.")
+            )
+            .navigationTitle("Dashboard")
+        }
+    }
+}
+
+private struct LocalArticlesPlaceholderView: View {
+    var body: some View {
+        NavigationStack {
+            ContentUnavailableView(
+                "Articles",
+                systemImage: "doc.text",
+                description: Text("Add feeds locally or switch to companion mode to browse your server-backed reading queue.")
+            )
+            .navigationTitle("Articles")
+        }
+    }
+}
+
+private struct LocalChatPlaceholderView: View {
+    var body: some View {
+        NavigationStack {
+            ContentUnavailableView(
+                "Chat",
+                systemImage: "bubble.left.and.bubble.right",
+                description: Text("Local article chat remains available in a later standalone pass.")
+            )
+            .navigationTitle("Chat")
+        }
+    }
+}
+
+private struct LocalMoreView: View {
     var body: some View {
         NavigationStack {
             List {
@@ -78,13 +107,7 @@ struct MoreView: View {
                 }
 
                 NavigationLink {
-                    Text("Tags — coming soon")
-                } label: {
-                    Label("Tags", systemImage: "tag")
-                }
-
-                NavigationLink {
-                    Text("Settings — coming soon")
+                    ContentUnavailableView("Settings", systemImage: "gear")
                 } label: {
                     Label("Settings", systemImage: "gear")
                 }

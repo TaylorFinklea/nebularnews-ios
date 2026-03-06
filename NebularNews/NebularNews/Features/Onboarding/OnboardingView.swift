@@ -1,7 +1,7 @@
 import SwiftUI
+import SwiftData
 import NebularNewsKit
 
-/// First-launch experience: welcome, add a feed, optionally enter AI key.
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
@@ -10,58 +10,105 @@ struct OnboardingView: View {
     @State private var feedUrl = ""
     @State private var apiKey = ""
     @State private var selectedProvider = "anthropic"
+    @State private var companionServerURL = AppConfiguration.shared.mobileDefaultServerURL?.absoluteString ?? "https://api.example.com"
+    @State private var companionError = ""
+    @State private var companionLoading = false
 
     var body: some View {
         TabView(selection: $currentPage) {
-            // Page 1: Welcome
             welcomePage
                 .tag(0)
 
-            // Page 2: Add your first feed
-            addFeedPage
+            standaloneFeedPage
                 .tag(1)
 
-            // Page 3: AI setup (optional)
-            aiSetupPage
+            standaloneAIPage
                 .tag(2)
         }
         .tabViewStyle(.page(indexDisplayMode: .always))
         .indexViewStyle(.page(backgroundDisplayMode: .always))
     }
 
-    // MARK: - Pages
-
     private var welcomePage: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        ScrollView {
+            VStack(spacing: 24) {
+                Spacer(minLength: 48)
 
-            Image(systemName: "sparkles")
-                .font(.system(size: 64))
-                .foregroundStyle(.tint)
+                Image(systemName: "sparkles")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.tint)
 
-            Text("Nebular News")
-                .font(.largeTitle.bold())
+                Text("Nebular News")
+                    .font(.largeTitle.bold())
 
-            Text("Your intelligent news reader.\nAI-powered scoring, summaries, and tagging\nfor the feeds you care about.")
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                Text("Choose how you want to use the app. Companion mode signs into your existing Nebular News server and keeps the iPhone app in sync with the web app.")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
 
-            Spacer()
-
-            Button("Get Started") {
-                withAnimation { currentPage = 1 }
+                companionCard
+                standaloneCard
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-
-            Spacer()
-                .frame(height: 60)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 48)
         }
-        .padding(.horizontal, 32)
     }
 
-    private var addFeedPage: some View {
+    private var companionCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Connect to existing Nebular News server", systemImage: "iphone.and.arrow.forward")
+                .font(.headline)
+            Text("Use the public API hostname for your deployment, sign in once, and read the same dashboard, News Brief, articles, reactions, and tags as the web app.")
+                .foregroundStyle(.secondary)
+            TextField("https://api.example.com", text: $companionServerURL)
+                .textFieldStyle(.roundedBorder)
+                .textContentType(.URL)
+                .keyboardType(.URL)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+
+            if !companionError.isEmpty {
+                Text(companionError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+
+            Button {
+                Task { await connectCompanionMode() }
+            } label: {
+                if companionLoading {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text("Sign in to server")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(companionLoading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var standaloneCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Label("Use standalone mode", systemImage: "internaldrive")
+                .font(.headline)
+            Text("Run feeds, local polling, and optional provider keys directly on the device. This stays available, but companion mode is the primary production path.")
+                .foregroundStyle(.secondary)
+            Button("Set up standalone mode") {
+                withAnimation { currentPage = 1 }
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    private var standaloneFeedPage: some View {
         VStack(spacing: 24) {
             Spacer()
 
@@ -69,10 +116,10 @@ struct OnboardingView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.tint)
 
-            Text("Add Your First Feed")
+            Text("Standalone feeds")
                 .font(.title2.bold())
 
-            Text("Paste an RSS, Atom, or JSON Feed URL to get started.")
+            Text("Add an RSS, Atom, or JSON Feed URL. You can also skip this and add feeds later.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -88,33 +135,31 @@ struct OnboardingView: View {
             Spacer()
 
             HStack(spacing: 16) {
-                Button("Skip") {
-                    withAnimation { currentPage = 2 }
+                Button("Back") {
+                    withAnimation { currentPage = 0 }
                 }
                 .buttonStyle(.bordered)
 
-                Button("Add Feed") {
+                Button("Continue") {
                     Task {
                         let repo = LocalFeedRepository(modelContainer: modelContext.container)
-                        let url = feedUrl.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !url.isEmpty {
-                            _ = try? await repo.add(feedUrl: url, title: "")
+                        let trimmed = feedUrl.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            _ = try? await repo.add(feedUrl: trimmed, title: "")
                         }
                         withAnimation { currentPage = 2 }
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(feedUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .controlSize(.large)
 
-            Spacer()
-                .frame(height: 60)
+            Spacer(minLength: 60)
         }
         .padding(.horizontal, 32)
     }
 
-    private var aiSetupPage: some View {
+    private var standaloneAIPage: some View {
         VStack(spacing: 24) {
             Spacer()
 
@@ -122,10 +167,10 @@ struct OnboardingView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.tint)
 
-            Text("AI Features (Optional)")
+            Text("Standalone AI keys")
                 .font(.title2.bold())
 
-            Text("Enter an API key to enable AI summaries, scoring, and chat. You can always add this later in Settings.")
+            Text("Provider keys are optional in standalone mode and are stored locally on-device.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -146,40 +191,52 @@ struct OnboardingView: View {
             Spacer()
 
             HStack(spacing: 16) {
-                Button("Skip") {
-                    completeOnboarding()
+                Button("Back") {
+                    withAnimation { currentPage = 1 }
                 }
                 .buttonStyle(.bordered)
 
-                Button("Save & Continue") {
-                    saveApiKey()
-                    completeOnboarding()
+                Button("Finish standalone setup") {
+                    if !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        try? appState.saveStandaloneApiKey(provider: selectedProvider, key: apiKey)
+                    }
+                    appState.completeStandaloneOnboarding()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .controlSize(.large)
 
-            Spacer()
-                .frame(height: 60)
+            Button("Skip AI keys") {
+                appState.completeStandaloneOnboarding()
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 60)
         }
         .padding(.horizontal, 32)
     }
 
-    // MARK: - Actions
+    private func connectCompanionMode() async {
+        companionLoading = true
+        companionError = ""
+        defer { companionLoading = false }
 
-    private func saveApiKey() {
-        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
+        let trimmed = companionServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed) else {
+            companionError = "Enter a valid server URL."
+            return
+        }
 
-        let keychainKey = selectedProvider == "anthropic"
-            ? KeychainManager.Key.anthropicApiKey
-            : KeychainManager.Key.openaiApiKey
-
-        try? appState.keychain.set(key, forKey: keychainKey)
-    }
-
-    private func completeOnboarding() {
-        appState.hasCompletedOnboarding = true
+        do {
+            let session = try await appState.mobileOAuthCoordinator.signIn(serverURL: url)
+            try appState.completeCompanionOnboarding(
+                serverURL: session.serverURL,
+                accessToken: session.accessToken,
+                refreshToken: session.refreshToken
+            )
+        } catch {
+            companionError = error.localizedDescription
+        }
     }
 }

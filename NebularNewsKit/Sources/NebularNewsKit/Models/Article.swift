@@ -7,7 +7,7 @@ import SwiftData
 /// (summary, score, key points). User state (read, reactions, tags) is
 /// tracked directly on the model for simplicity in v1.
 @Model
-public final class Article {
+public final class Article: @unchecked Sendable {
     public var id: String = UUID().uuidString
     public var canonicalUrl: String?
     public var title: String?

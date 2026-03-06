@@ -3,7 +3,7 @@ import SwiftData
 
 /// A conversation thread — either global or scoped to a specific article.
 @Model
-public final class ChatThread {
+public final class ChatThread: @unchecked Sendable {
     public var id: String = UUID().uuidString
     public var title: String?
     public var articleId: String?
@@ -22,7 +22,7 @@ public final class ChatThread {
 
 /// A single message within a chat thread.
 @Model
-public final class ChatMessage {
+public final class ChatMessage: @unchecked Sendable {
     public var id: String = UUID().uuidString
     public var role: String = "user"
     public var content: String = ""

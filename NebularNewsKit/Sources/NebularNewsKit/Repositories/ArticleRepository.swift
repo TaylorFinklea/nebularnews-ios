@@ -70,6 +70,14 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         // In-memory filters for conditions #Predicate can't express easily
         articles = applyInMemoryFilters(articles, filter: filter)
+        if sort == .unreadFirst {
+            articles.sort { lhs, rhs in
+                if lhs.isRead != rhs.isRead {
+                    return lhs.isRead == false
+                }
+                return (lhs.publishedAt ?? .distantPast) > (rhs.publishedAt ?? .distantPast)
+            }
+        }
 
         return articles
     }
@@ -197,7 +205,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         case .scoreAsc:
             return [SortDescriptor(\.score, order: .forward)]
         case .unreadFirst:
-            return [SortDescriptor(\.isRead, order: .forward), SortDescriptor(\.publishedAt, order: .reverse)]
+            return [SortDescriptor(\.publishedAt, order: .reverse)]
         }
     }
 

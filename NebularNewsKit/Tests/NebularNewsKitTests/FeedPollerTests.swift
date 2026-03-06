@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import SwiftData
 import FeedKit
@@ -133,7 +134,7 @@ struct FeedPollerTests {
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
 
-        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+        _ = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
 
         let rssData = makeRSSXML(items: [
             ("Same Article", "https://example.com/same"),

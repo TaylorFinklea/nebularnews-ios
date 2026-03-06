@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import FeedKit
 @testable import NebularNewsKit
@@ -90,9 +91,9 @@ struct FeedItemMapperTests {
     // MARK: - Atom Mapping
 
     @Test("Maps Atom entry")
-    func mapAtomEntry() {
-        let feed = makeAtomFeed(entries: [
-            makeAtomEntry(
+    func mapAtomEntry() throws {
+        let feed = try makeAtomFeed(entriesXML: [
+            makeAtomEntryXML(
                 title: "Atom Article",
                 alternateLink: "https://example.com/atom-1",
                 contentValue: "<p>Atom content</p>",
@@ -112,9 +113,10 @@ struct FeedItemMapperTests {
     // MARK: - JSON Feed Mapping
 
     @Test("Maps JSON Feed item")
-    func mapJSONFeedItem() {
-        let feed = makeJSONFeed(items: [
-            makeJSONFeedItem(
+    func mapJSONFeedItem() throws {
+        let feed = try makeJSONFeed(itemsJSON: [
+            makeJSONFeedItemJSON(
+                id: "json-1",
                 title: "JSON Article",
                 url: "https://example.com/json-1",
                 contentHtml: "<p>JSON content</p>",
@@ -204,66 +206,120 @@ struct FeedItemMapperTests {
         return item
     }
 
-    private func makeAtomFeed(entries: [AtomFeedEntry]) -> AtomFeed {
-        let feed = AtomFeed()
-        feed.entries = entries
-        return feed
+    private func makeAtomFeed(entriesXML: [String]) throws -> AtomFeed {
+        let xml = """
+        <?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+            <title>Test Feed</title>
+            \(entriesXML.joined(separator: "\n"))
+        </feed>
+        """
+
+        let feed = try FeedParser(data: Data(xml.utf8)).parse().get()
+        guard let atomFeed = feed.atomFeed else {
+            fatalError("Expected Atom feed in test helper")
+        }
+        return atomFeed
     }
 
-    private func makeAtomEntry(
+    private func makeAtomEntryXML(
         title: String? = nil,
         alternateLink: String? = nil,
         contentValue: String? = nil,
         authorName: String? = nil,
         published: Date? = nil
-    ) -> AtomFeedEntry {
-        let entry = AtomFeedEntry()
-        entry.title = title
-        if let alternateLink {
-            let link = AtomFeedEntryLink()
-            link.attributes = AtomFeedEntryLink.Attributes()
-            link.attributes?.href = alternateLink
-            link.attributes?.rel = "alternate"
-            entry.links = [link]
-        }
-        if let contentValue {
-            entry.content = AtomFeedEntryContent()
-            entry.content?.value = contentValue
-        }
-        if let authorName {
-            let author = AtomFeedEntryAuthor()
-            author.name = authorName
-            entry.authors = [author]
-        }
-        entry.published = published
-        return entry
+    ) -> String {
+        let isoDate = published.map(iso8601String) ?? "2023-11-14T22:13:20Z"
+        let titleXML = title.map { "<title>\($0.xmlEscaped)</title>" } ?? ""
+        let linkXML = alternateLink.map { "<link rel=\"alternate\" href=\"\($0.xmlEscaped)\" />" } ?? ""
+        let contentXML = contentValue.map { "<content type=\"html\"><![CDATA[\($0)]]></content>" } ?? ""
+        let authorXML = authorName.map { "<author><name>\($0.xmlEscaped)</name></author>" } ?? ""
+
+        return """
+        <entry>
+            <id>urn:uuid:\(UUID().uuidString.lowercased())</id>
+            \(titleXML)
+            \(linkXML)
+            \(authorXML)
+            <updated>\(isoDate)</updated>
+            <published>\(isoDate)</published>
+            \(contentXML)
+        </entry>
+        """
     }
 
-    private func makeJSONFeed(items: [JSONFeedItem]) -> JSONFeed {
-        var feed = JSONFeed()
-        feed.title = "Test JSON Feed"
-        feed.items = items
-        return feed
+    private func makeJSONFeed(itemsJSON: [String]) throws -> JSONFeed {
+        let json = """
+        {
+          "version": "https://jsonfeed.org/version/1.1",
+          "title": "Test JSON Feed",
+          "items": [
+            \(itemsJSON.joined(separator: ",\n"))
+          ]
+        }
+        """
+
+        let feed = try FeedParser(data: Data(json.utf8)).parse().get()
+        guard let jsonFeed = feed.jsonFeed else {
+            fatalError("Expected JSON feed in test helper")
+        }
+        return jsonFeed
     }
 
-    private func makeJSONFeedItem(
+    private func makeJSONFeedItemJSON(
+        id: String,
         title: String? = nil,
         url: String? = nil,
         contentHtml: String? = nil,
         summary: String? = nil,
         authorName: String? = nil,
         datePublished: Date? = nil
-    ) -> JSONFeedItem {
-        var item = JSONFeedItem()
-        item.title = title
-        item.url = url
-        item.contentHtml = contentHtml
-        item.summary = summary
-        if let authorName {
-            item.author = JSONFeedAuthor()
-            item.author?.name = authorName
+    ) -> String {
+        var fields: [String] = ["\"id\": \"\(id.jsonEscaped)\""]
+
+        if let title {
+            fields.append("\"title\": \"\(title.jsonEscaped)\"")
         }
-        item.datePublished = datePublished
-        return item
+        if let url {
+            fields.append("\"url\": \"\(url.jsonEscaped)\"")
+        }
+        if let contentHtml {
+            fields.append("\"content_html\": \"\(contentHtml.jsonEscaped)\"")
+        }
+        if let summary {
+            fields.append("\"summary\": \"\(summary.jsonEscaped)\"")
+        }
+        if let authorName {
+            fields.append("\"author\": { \"name\": \"\(authorName.jsonEscaped)\" }")
+        }
+        if let datePublished {
+            fields.append("\"date_published\": \"\(iso8601String(datePublished))\"")
+        }
+
+        return "{ \(fields.joined(separator: ", ")) }"
+    }
+
+    private func iso8601String(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    }
+}
+
+private extension String {
+    var xmlEscaped: String {
+        self
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&apos;")
+    }
+
+    var jsonEscaped: String {
+        self
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
     }
 }

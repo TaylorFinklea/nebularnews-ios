@@ -1,4 +1,5 @@
 import SwiftUI
+import NebularNewsKit
 
 /// Reusable card with iOS 26 Liquid Glass material.
 ///
@@ -11,13 +12,11 @@ struct GlassCard<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
         content
             .padding()
-            .glassEffect(
-                .regular,
-                in: RoundedRectangle(cornerRadius: cornerRadius)
-            )
-            .tint(tintColor)
+            .modifier(GlassCardBackground(shape: shape, tintColor: tintColor))
     }
 }
 
@@ -32,8 +31,7 @@ struct ScoreBadge: View {
                 .monospacedDigit()
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .glassEffect(.regular, in: .capsule)
-                .tint(Color.forScore(score))
+                .modifier(GlassCapsuleBackground(tintColor: Color.forScore(score)))
         }
     }
 }
@@ -48,13 +46,55 @@ struct TagPill: View {
             .font(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .glassEffect(.regular, in: .capsule)
-            .tint(tagColor)
+            .modifier(GlassCapsuleBackground(tintColor: tagColor))
     }
 
     private var tagColor: Color? {
         guard let hex = colorHex else { return nil }
         return Color(hex: hex)
+    }
+}
+
+private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
+    let shape: ShapeType
+    let tintColor: Color?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: shape)
+                .tint(tintColor)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .background(tintFill, in: shape)
+                .overlay(shape.strokeBorder(Color.white.opacity(0.08)))
+        }
+    }
+
+    private var tintFill: Color {
+        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.14)
+    }
+}
+
+private struct GlassCapsuleBackground: ViewModifier {
+    let tintColor: Color?
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: .capsule)
+                .tint(tintColor)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .background(tintFill, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
+        }
+    }
+
+    private var tintFill: Color {
+        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.18)
     }
 }
 

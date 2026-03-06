@@ -7,7 +7,9 @@ import NebularNewsKit
 /// Registers a `BGAppRefreshTask` that polls feeds and cleans up old articles
 /// while the app is in the background. iOS controls exact timing (minimum ~15 min).
 enum BackgroundTaskManager {
-    static let refreshTaskIdentifier = "com.nebularnews.ios.feedRefresh"
+    static var refreshTaskIdentifier: String {
+        AppConfiguration.shared.backgroundRefreshTaskIdentifier
+    }
 
     /// Register the background task handler. Call once from `NebularNewsApp.init()`.
     static func register(modelContainer: ModelContainer) {

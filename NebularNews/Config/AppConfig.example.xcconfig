@@ -1,0 +1,18 @@
+// Optional local overrides for Nebular News iOS.
+//
+// The checked-in project already builds with generic defaults. Copy the values
+// you want into a local xcconfig, then wire it to the target in Xcode if you
+// need environment-specific identifiers or callback values.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.nebularnews.ios
+KEYCHAIN_SERVICE = $(PRODUCT_BUNDLE_IDENTIFIER)
+BACKGROUND_REFRESH_TASK_IDENTIFIER = $(PRODUCT_BUNDLE_IDENTIFIER).feedRefresh
+
+// Leave empty to keep CloudKit disabled.
+CLOUDKIT_CONTAINER_IDENTIFIER =
+CLOUDKIT_ENABLED = NO
+
+MOBILE_DEFAULT_SERVER_URL =
+MOBILE_OAUTH_CLIENT_ID = nebular-news-ios
+MOBILE_OAUTH_CLIENT_NAME = Nebular News iOS
+MOBILE_OAUTH_REDIRECT_URI = nebularnews://oauth/callback

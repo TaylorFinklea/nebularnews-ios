@@ -6,7 +6,7 @@ import SwiftData
 /// Feeds are polled periodically. Conditional-GET headers (`etag`, `lastModified`)
 /// are persisted to avoid re-fetching unchanged content.
 @Model
-public final class Feed {
+public final class Feed: @unchecked Sendable {
     public var id: String = UUID().uuidString
     public var title: String = ""
     public var feedUrl: String = ""

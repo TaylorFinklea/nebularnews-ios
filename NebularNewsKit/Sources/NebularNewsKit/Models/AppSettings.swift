@@ -6,7 +6,7 @@ import SwiftData
 /// AI provider API keys are NOT stored here — they live in the per-device
 /// Keychain for security. This model stores non-sensitive preferences only.
 @Model
-public final class AppSettings {
+public final class AppSettings: @unchecked Sendable {
     public var id: String = "singleton"
 
     // AI configuration

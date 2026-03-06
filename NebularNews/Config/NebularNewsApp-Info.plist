@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
+	</array>
+	<key>BackgroundRefreshTaskIdentifier</key>
+	<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
+	<key>CloudKitContainerIdentifier</key>
+	<string>$(CLOUDKIT_CONTAINER_IDENTIFIER)</string>
+	<key>CloudKitEnabled</key>
+	<string>$(CLOUDKIT_ENABLED)</string>
+	<key>KeychainService</key>
+	<string>$(KEYCHAIN_SERVICE)</string>
+	<key>MobileDefaultServerURL</key>
+	<string>$(MOBILE_DEFAULT_SERVER_URL)</string>
+	<key>MobileOAuthClientId</key>
+	<string>$(MOBILE_OAUTH_CLIENT_ID)</string>
+	<key>MobileOAuthClientName</key>
+	<string>$(MOBILE_OAUTH_CLIENT_NAME)</string>
+	<key>MobileOAuthRedirectURI</key>
+	<string>$(MOBILE_OAUTH_REDIRECT_URI)</string>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+</dict>
+</plist>

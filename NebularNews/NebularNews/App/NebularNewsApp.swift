@@ -6,15 +6,21 @@ import NebularNewsKit
 struct NebularNewsApp: App {
     let modelContainer: ModelContainer
 
-    @State private var appState = AppState()
+    @State private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        let configuration = AppConfiguration.shared
         do {
-            modelContainer = try makeModelContainer()
+            modelContainer = try makeModelContainer(
+                cloudKitEnabled: configuration.cloudKitEnabled,
+                cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier
+            )
         } catch {
             fatalError("Failed to create ModelContainer: \(error)")
         }
+
+        _appState = State(initialValue: AppState(configuration: configuration))
 
         // Register background feed refresh task
         BackgroundTaskManager.register(modelContainer: modelContainer)
@@ -34,8 +40,9 @@ struct NebularNewsApp: App {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .background:
-                // Schedule next background refresh when app goes to background
-                BackgroundTaskManager.scheduleNextRefresh()
+                if appState.isStandaloneMode {
+                    BackgroundTaskManager.scheduleNextRefresh()
+                }
             case .active:
                 // Could trigger foreground poll-if-stale here in the future
                 break
