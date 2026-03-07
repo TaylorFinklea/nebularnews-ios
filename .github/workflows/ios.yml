@@ -9,10 +9,22 @@ on:
 jobs:
   nebularnews-ios:
     runs-on: macos-15
+    env:
+      XCODE_VERSION: "26.3"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          xcode_path="/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+          if [ ! -d "$xcode_path" ]; then
+            echo "Requested Xcode not installed: $xcode_path"
+            ls -1 /Applications | grep '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select -s "$xcode_path"
 
       - name: Show Xcode version
         run: xcodebuild -version
