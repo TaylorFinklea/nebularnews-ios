@@ -8,9 +8,11 @@ PRODUCT_BUNDLE_IDENTIFIER = com.example.nebularnews.ios
 KEYCHAIN_SERVICE = $(PRODUCT_BUNDLE_IDENTIFIER)
 BACKGROUND_REFRESH_TASK_IDENTIFIER = $(PRODUCT_BUNDLE_IDENTIFIER).feedRefresh
 
-// Leave empty to keep CloudKit disabled.
-CLOUDKIT_CONTAINER_IDENTIFIER =
-CLOUDKIT_ENABLED = NO
+// CloudKit sync for standalone mode.
+// Requires iCloud capability + CloudKit container in Apple Developer portal.
+// See SETUP.md "iCloud / CloudKit sync" for full setup steps.
+CLOUDKIT_CONTAINER_IDENTIFIER = iCloud.com.nebularnews.ios
+CLOUDKIT_ENABLED = YES
 
 MOBILE_DEFAULT_SERVER_URL =
 MOBILE_OAUTH_CLIENT_ID = nebular-news-ios
