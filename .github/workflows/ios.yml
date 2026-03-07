@@ -39,12 +39,24 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Select an available iPhone simulator
+      - name: Select stable iPhone simulators
         run: |
           python3 <<'PY' >> "$GITHUB_ENV"
           import json
           import subprocess
           import sys
+
+          preferred_names = [
+              "iPhone 17",
+              "iPhone 17 Pro",
+              "iPhone 17 Pro Max",
+              "iPhone 16 Pro",
+              "iPhone 16 Pro Max",
+              "iPhone 16",
+              "iPhone 15 Pro",
+              "iPhone 15 Pro Max",
+              "iPhone 15",
+          ]
 
           data = json.loads(subprocess.check_output(
               ["xcrun", "simctl", "list", "devices", "available", "-j"],
@@ -66,21 +78,48 @@ jobs:
               print("No available iPhone simulator found.", file=sys.stderr)
               sys.exit(1)
 
-          candidates.sort(reverse=True)
-          runtime, name, udid = candidates[0]
-          print(f"SIMULATOR_NAME={name}")
-          print(f"SIMULATOR_RUNTIME={runtime}")
-          print(f"SIMULATOR_UDID={udid}")
+          def rank(candidate):
+              runtime, name, _ = candidate
+              try:
+                  preferred_index = preferred_names.index(name)
+              except ValueError:
+                  preferred_index = len(preferred_names)
+              return (preferred_index, runtime, name)
+
+          candidates.sort(key=rank)
+          ordered_udids = ",".join(candidate[2] for candidate in candidates)
+          ordered_names = " | ".join(f"{candidate[1]} ({candidate[0]})" for candidate in candidates)
+          print(f"SIMULATOR_CANDIDATE_UDIDS={ordered_udids}")
+          print(f"SIMULATOR_CANDIDATE_NAMES={ordered_names}")
           PY
 
       - name: Run app unit tests
         run: |
-          xcrun simctl boot "$SIMULATOR_UDID" || true
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          IFS=',' read -r -a candidate_udids <<< "$SIMULATOR_CANDIDATE_UDIDS"
+          selected_udid=""
+
+          for candidate_udid in "${candidate_udids[@]}"; do
+            echo "Trying simulator $candidate_udid"
+            xcrun simctl shutdown "$candidate_udid" || true
+            xcrun simctl erase "$candidate_udid" || true
+            if xcrun simctl boot "$candidate_udid" && xcrun simctl bootstatus "$candidate_udid" -b; then
+              selected_udid="$candidate_udid"
+              break
+            fi
+            echo "Simulator $candidate_udid failed to boot cleanly, trying next candidate"
+            xcrun simctl shutdown "$candidate_udid" || true
+          done
+
+          if [ -z "$selected_udid" ]; then
+            echo "No simulator candidate booted successfully"
+            exit 1
+          fi
+
+          echo "Using simulator $selected_udid"
           xcodebuild \
             -project NebularNews/NebularNews.xcodeproj \
             -scheme NebularNews \
-            -destination "id=$SIMULATOR_UDID" \
+            -destination "id=$selected_udid" \
             CODE_SIGNING_ALLOWED=NO \
             -only-testing:NebularNewsTests \
             test
