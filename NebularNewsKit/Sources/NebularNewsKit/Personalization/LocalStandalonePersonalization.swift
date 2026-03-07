@@ -37,7 +37,7 @@ public struct FeedReputation: Sendable, Hashable {
 }
 
 @ModelActor
-public actor LocalPersonalizationRepository {
+actor LocalPersonalizationRepository {
     func bootstrapStarterData() async throws {
         try ensureStarterCanonicalTags()
         try ensureDefaultSignalWeights()
