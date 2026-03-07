@@ -54,8 +54,15 @@ private struct FeedListContent: View {
                 )
             } else {
                 ForEach(viewModel.feeds, id: \.id) { feed in
-                    FeedRow(feed: feed)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    NavigationLink {
+                        ArticleListView(
+                            feedId: feed.id,
+                            feedTitle: feed.title.isEmpty ? feed.feedUrl : feed.title
+                        )
+                    } label: {
+                        FeedRow(feed: feed)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 Task { await viewModel.deleteFeed(feed) }
                             } label: {

@@ -180,6 +180,35 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         try modelContext.save()
     }
 
+    /// Returns snapshots of articles that haven't been AI-processed yet and have content.
+    ///
+    /// Used by `AIEnrichmentService` to find articles needing scoring/summarization.
+    /// Results are `Sendable` structs safe to pass across actor boundaries.
+    public func listUnprocessedSnapshots(limit: Int = 10) async -> [ArticleSnapshot] {
+        var descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.aiProcessedAt == nil },
+            sortBy: [SortDescriptor(\.fetchedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+
+        guard let articles = try? modelContext.fetch(descriptor) else { return [] }
+
+        return articles.compactMap { article in
+            // Need content to send to the LLM
+            let html = article.contentHtml ?? article.excerpt ?? ""
+            let text = html.strippedHTML
+            guard !text.isEmpty else { return nil }
+
+            return ArticleSnapshot(
+                id: article.id,
+                title: article.title,
+                contentText: text,
+                canonicalUrl: article.canonicalUrl,
+                feedTitle: article.feed?.title
+            )
+        }
+    }
+
     public func deleteOlderThan(date: Date) async throws -> Int {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.fetchedAt < date }

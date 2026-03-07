@@ -9,17 +9,20 @@ final class FeedListViewModel {
     // Internal access so FeedListView can call feedRepo.add() from AddFeedSheet
     let feedRepo: LocalFeedRepository
     private let articleRepo: LocalArticleRepository
+    private let modelContainer: ModelContainer
     private var poller: FeedPoller?
 
     var feeds: [Feed] = []
     var isLoading = false
     var isPolling = false
+    var isEnriching = false
     var showAddSheet = false
     var errorMessage: String?
     var lastPollMessage: String?
 
     init(modelContext: ModelContext) {
         let container = modelContext.container
+        self.modelContainer = container
         self.feedRepo = LocalFeedRepository(modelContainer: container)
         self.articleRepo = LocalArticleRepository(modelContainer: container)
     }
@@ -53,6 +56,37 @@ final class FeedListViewModel {
 
         // Reload feed list to show updated article counts + poll timestamps
         await loadFeeds()
+
+        // Trigger AI enrichment for new articles (non-blocking for feed list refresh)
+        if result.newArticles > 0 {
+            await enrichNewArticles()
+        }
+    }
+
+    /// Enrich unprocessed articles with AI-generated scores, summaries, and key points.
+    func enrichNewArticles() async {
+        let keychain = KeychainManager()
+        guard let apiKey = keychain.get(forKey: KeychainManager.Key.anthropicApiKey) else { return }
+
+        isEnriching = true
+        let client = AnthropicClient(apiKey: apiKey)
+        let enricher = AIEnrichmentService(client: client, articleRepo: articleRepo)
+        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
+        let settings = await settingsRepo.get()
+
+        let results = await enricher.enrichUnprocessedArticles(
+            limit: 5,
+            userProfile: settings?.userProfilePrompt,
+            scoringModel: settings?.scoringModel ?? "claude-haiku-4-5-20251001",
+            summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
+            summaryStyle: settings?.summaryStyle ?? "concise"
+        )
+        isEnriching = false
+
+        let enriched = results.filter { $0.succeeded }.count
+        if enriched > 0 {
+            lastPollMessage = (lastPollMessage ?? "") + " · \(enriched) AI-enriched"
+        }
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).

@@ -5,6 +5,7 @@ import NebularNewsKit
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AppState.self) private var appState
+    @Environment(ThemeManager.self) private var themeManager
 
     @Query private var settingsResults: [AppSettings]
 
@@ -97,6 +98,20 @@ struct SettingsView: View {
                 Label("Personalization", systemImage: "person.text.rectangle")
             } footer: {
                 Text("Describe your interests so the AI can score articles by relevance to you.")
+            }
+
+            // MARK: - Appearance
+            Section {
+                Picker("Appearance", selection: Bindable(themeManager).mode) {
+                    ForEach(ThemeManager.Mode.allCases) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Label("Appearance", systemImage: "paintbrush")
+            } footer: {
+                Text("System follows your device's light/dark mode setting.")
             }
 
             // MARK: - About
