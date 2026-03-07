@@ -5,7 +5,6 @@ import NebularNewsKit
 struct ArticleDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(AppState.self) private var appState
 
     let articleId: String
@@ -24,22 +23,29 @@ struct ArticleDetailView: View {
     }
 
     private var article: Article? { articles.first }
-    private var palette: NebularPalette { NebularPalette.forColorScheme(colorScheme) }
 
     var body: some View {
         Group {
             if let article {
-                NebularScreen(emphasis: .reading) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            articleHeaderCard(article)
-                            fitSection(article)
-                            summarySection(article)
-                            keyPointsSection(article)
-                            contentSection(article)
-                        }
-                        .padding()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Header
+                        articleHeader(article)
+
+                        // Fit + optional AI enrichment
+                        fitSection(article)
+                        summarySection(article)
+                        keyPointsSection(article)
+
+                        // Tags
+                        tagSection(article)
+
+                        Divider()
+
+                        // Content
+                        articleContent(article)
                     }
+                    .padding()
                 }
                 .navigationTitle(article.feed?.title ?? "Article")
                 .navigationBarTitleDisplayMode(.inline)
@@ -53,6 +59,7 @@ struct ArticleDetailView: View {
                     ReactionSheet(article: article)
                 }
                 .onAppear {
+                    // Auto-mark as read when opened
                     if !article.isRead {
                         article.isRead = true
                         article.readAt = Date()
@@ -70,55 +77,7 @@ struct ArticleDetailView: View {
         .toolbar(.hidden, for: .tabBar)
     }
 
-    // MARK: - Header + Actions
-
-    @ViewBuilder
-    private func articleHeaderCard(_ article: Article) -> some View {
-        GlassCard(cornerRadius: 30, style: .raised, tintColor: headerAccentColor(for: article)) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if let feedTitle = article.feed?.title, !feedTitle.isEmpty {
-                            Label(feedTitle, systemImage: "antenna.radiowaves.left.and.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text(article.title ?? "Untitled")
-                            .font(.largeTitle.bold())
-                            .tracking(-0.8)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer(minLength: 12)
-
-                    if article.hasReadyScore, let score = article.score {
-                        ScoreBadge(score: score)
-                    }
-                }
-
-                HStack(spacing: 12) {
-                    if let author = article.author, !author.isEmpty {
-                        Label(author, systemImage: "person")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let date = article.publishedAt {
-                        Label(date.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                tagSection(article)
-            }
-            .background(alignment: .topTrailing) {
-                NebularHeaderHalo(color: headerAccentColor(for: article))
-                    .offset(x: 44, y: -52)
-            }
-        }
-    }
+    // MARK: - Header
 
     @ViewBuilder
     private func articleActionBar(_ article: Article) -> some View {
@@ -131,7 +90,7 @@ struct ArticleDetailView: View {
                 } label: {
                     actionIcon(
                         article.isRead ? "envelope.badge" : "envelope.open",
-                        color: palette.primary
+                        color: .primary
                     )
                 }
                 .accessibilityLabel(article.isRead ? "Mark Unread" : "Mark Read")
@@ -144,10 +103,10 @@ struct ArticleDetailView: View {
                             if isEnriching {
                                 ProgressView()
                                     .progressViewStyle(.circular)
-                                    .tint(palette.primary)
+                                    .tint(.primary)
                                     .frame(width: 48, height: 48)
                             } else {
-                                actionIcon("text.alignleft", color: palette.primary)
+                                actionIcon("text.alignleft", color: .primary)
                             }
                         }
                     }
@@ -160,7 +119,7 @@ struct ArticleDetailView: View {
                     Button {
                         openURL(url)
                     } label: {
-                        actionIcon("safari", color: palette.primary)
+                        actionIcon("safari", color: .primary)
                     }
                     .accessibilityLabel("Open in Browser")
                 }
@@ -183,7 +142,7 @@ struct ArticleDetailView: View {
             if let urlString = article.canonicalUrl,
                let url = URL(string: urlString) {
                 ShareLink(item: url) {
-                    actionIcon("square.and.arrow.up", color: palette.primary)
+                    actionIcon("square.and.arrow.up", color: .primary)
                 }
                 .buttonStyle(ArticleActionBarButtonStyle())
                 .modifier(ArticleActionButtonBackground())
@@ -204,27 +163,63 @@ struct ArticleDetailView: View {
             .contentShape(Rectangle())
     }
 
+    @ViewBuilder
+    private func articleHeader(_ article: Article) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title + score badge
+            HStack(alignment: .top) {
+                Text(article.title ?? "Untitled")
+                    .font(.title2)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                if article.hasReadyScore, let score = article.score {
+                    ScoreBadge(score: score)
+                }
+            }
+
+            // Author + date
+            HStack(spacing: 12) {
+                if let author = article.author, !author.isEmpty {
+                    Label(author, systemImage: "person")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let date = article.publishedAt {
+                    Label(date.formatted(date: .abbreviated, time: .shortened), systemImage: "calendar")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Feed name
+            if let feedTitle = article.feed?.title, !feedTitle.isEmpty {
+                Label(feedTitle, systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
     // MARK: - Tags
 
     @ViewBuilder
     private func tagSection(_ article: Article) -> some View {
         let tags = article.tags ?? []
 
-        VStack(alignment: .leading, spacing: 10) {
+        HStack(spacing: 8) {
             if !tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.id) { tag in
-                            TagPill(name: tag.name, colorHex: tag.colorHex)
-                        }
-                    }
+                ForEach(tags, id: \.id) { tag in
+                    TagPill(name: tag.name, colorHex: tag.colorHex)
                 }
             }
 
             Button {
                 showTagPicker = true
             } label: {
-                Label(tags.isEmpty ? "Add Tags" : "Edit Tags", systemImage: "tag")
+                Label(tags.isEmpty ? "Add Tags" : "Edit", systemImage: "tag")
                     .font(.caption)
             }
             .buttonStyle(.bordered)
@@ -244,20 +239,10 @@ struct ArticleDetailView: View {
 
     private func reactionColor(for value: Int?) -> Color {
         switch value {
-        case 1: Color.forScore(5)
-        case -1: palette.danger
-        default: palette.primary
+        case 1: .green
+        case -1: .red
+        default: .primary
         }
-    }
-
-    private func headerAccentColor(for article: Article) -> Color {
-        if article.hasReadyScore, let score = article.score {
-            return Color.forScore(score)
-        }
-        if article.isLearningScore {
-            return .purple
-        }
-        return palette.primary
     }
 
     // MARK: - Fit + Enrichment Sections
@@ -284,7 +269,8 @@ struct ArticleDetailView: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            .modifier(DetailSectionCard(tintColor: Color.forScore(score)))
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         } else if article.isLearningScore {
             VStack(alignment: .leading, spacing: 8) {
                 Label("Learning", systemImage: "sparkles")
@@ -293,14 +279,15 @@ struct ArticleDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .modifier(DetailSectionCard(tintColor: .purple))
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
     @ViewBuilder
     private func summarySection(_ article: Article) -> some View {
         if let summary = article.summaryText, !summary.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 Label("Summary", systemImage: "text.alignleft")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
@@ -308,7 +295,8 @@ struct ArticleDetailView: View {
                     .font(.subheadline)
                     .lineSpacing(3)
             }
-            .modifier(DetailSectionCard(tintColor: palette.primary))
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -316,7 +304,7 @@ struct ArticleDetailView: View {
     private func keyPointsSection(_ article: Article) -> some View {
         let points = article.keyPoints
         if !points.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 Label("Key Points", systemImage: "list.bullet")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
@@ -329,32 +317,22 @@ struct ArticleDetailView: View {
                     }
                 }
             }
-            .modifier(DetailSectionCard(tintColor: Color.forScore(4)))
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
     // MARK: - Content
 
     @ViewBuilder
-    private func contentSection(_ article: Article) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Article text", systemImage: "doc.text")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-            articleContent(article)
-        }
-        .modifier(DetailSectionCard(tintColor: palette.primary))
-    }
-
-    @ViewBuilder
     private func articleContent(_ article: Article) -> some View {
         if let html = article.contentHtml, !html.isEmpty {
+            // Render HTML content as attributed string
             HTMLTextView(html: html)
         } else if let excerpt = article.excerpt, !excerpt.isEmpty {
             Text(excerpt)
                 .font(.body)
                 .lineSpacing(4)
-                .textSelection(.enabled)
         } else {
             VStack(spacing: 12) {
                 Image(systemName: "doc.text.magnifyingglass")
@@ -366,7 +344,7 @@ struct ArticleDetailView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 28)
+            .padding(.top, 40)
         }
     }
 
@@ -405,6 +383,7 @@ struct ArticleDetailView: View {
         )
 
         isEnriching = false
+        // @Query automatically picks up the changes from updateAIFields()
     }
 }
 
@@ -471,15 +450,9 @@ private struct ArticleActionBarButtonStyle: ButtonStyle {
 }
 
 private struct ArticleActionBarCapsuleBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
     func body(content: Content) -> some View {
         glassContent(content)
-            .shadow(color: palette.shadow.opacity(0.34), radius: 20, y: 10)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
+            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
     }
 
     @ViewBuilder
@@ -488,8 +461,6 @@ private struct ArticleActionBarCapsuleBackground: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: Capsule())
-                .tint(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
-                .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
         } else {
             fallbackContent(content)
         }
@@ -501,21 +472,15 @@ private struct ArticleActionBarCapsuleBackground: ViewModifier {
     private func fallbackContent(_ content: Content) -> some View {
         content
             .background(.ultraThinMaterial, in: Capsule())
-            .background(palette.surfaceStrong, in: Capsule())
-            .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.10)))
     }
 }
 
 private struct ArticleActionButtonBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
     func body(content: Content) -> some View {
         glassContent(content)
-            .shadow(color: palette.shadow.opacity(0.28), radius: 18, y: 10)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
+            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
     }
 
     @ViewBuilder
@@ -524,7 +489,6 @@ private struct ArticleActionButtonBackground: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .buttonStyle(.glass)
-                .tint(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
         } else {
             fallbackContent(content)
         }
@@ -537,17 +501,7 @@ private struct ArticleActionButtonBackground: ViewModifier {
         content
             .padding(6)
             .background(.ultraThinMaterial, in: Capsule())
-            .background(palette.surfaceStrong, in: Capsule())
-            .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
-    }
-}
-
-private struct DetailSectionCard: ViewModifier {
-    let tintColor: Color?
-
-    func body(content: Content) -> some View {
-        GlassCard(cornerRadius: 22, style: .standard, tintColor: tintColor) {
-            content
-        }
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.10)))
     }
 }

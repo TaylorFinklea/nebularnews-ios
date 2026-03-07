@@ -2,55 +2,45 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
 
     var body: some View {
-        ZStack {
-            NebularBackdrop()
-
-            if appState.isCompanionMode {
-                TabView {
-                    Tab("Dashboard", systemImage: "house") {
-                        CompanionDashboardView()
-                    }
-
-                    Tab("Articles", systemImage: "doc.text") {
-                        CompanionArticlesView()
-                    }
-
-                    Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
-                        CompanionChatPlaceholderView()
-                    }
-
-                    Tab("More", systemImage: "ellipsis") {
-                        CompanionMoreView()
-                    }
+        if appState.isCompanionMode {
+            TabView {
+                Tab("Dashboard", systemImage: "house") {
+                    CompanionDashboardView()
                 }
-            } else {
-                TabView {
-                    Tab("Dashboard", systemImage: "house") {
-                        StandaloneDashboardView()
-                    }
 
-                    Tab("Articles", systemImage: "doc.text") {
-                        ArticleListView()
-                    }
+                Tab("Articles", systemImage: "doc.text") {
+                    CompanionArticlesView()
+                }
 
-                    Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
-                        LocalChatPlaceholderView()
-                    }
+                Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
+                    CompanionChatPlaceholderView()
+                }
 
-                    Tab("More", systemImage: "ellipsis") {
-                        LocalMoreView()
-                    }
+                Tab("More", systemImage: "ellipsis") {
+                    CompanionMoreView()
+                }
+            }
+        } else {
+            TabView {
+                Tab("Dashboard", systemImage: "house") {
+                    StandaloneDashboardView()
+                }
+
+                Tab("Articles", systemImage: "doc.text") {
+                    ArticleListView()
+                }
+
+                Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
+                    LocalChatPlaceholderView()
+                }
+
+                Tab("More", systemImage: "ellipsis") {
+                    LocalMoreView()
                 }
             }
         }
-        .tint(palette.primary)
     }
 }
 
@@ -83,85 +73,26 @@ private struct LocalChatPlaceholderView: View {
 private struct LocalMoreView: View {
     var body: some View {
         NavigationStack {
-            NebularScreen {
-                List {
-                    Section {
-                        NavigationLink {
-                            FeedListView()
-                        } label: {
-                            MoreDestinationRow(
-                                title: "Feeds",
-                                subtitle: "Manage sources, import OPML, and control polling.",
-                                systemImage: "antenna.radiowaves.left.and.right",
-                                accent: .cyan
-                            )
-                        }
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-
-                        NavigationLink {
-                            TagListView()
-                        } label: {
-                            MoreDestinationRow(
-                                title: "Tags",
-                                subtitle: "Review your manual and system tag taxonomy.",
-                                systemImage: "tag",
-                                accent: .orange
-                            )
-                        }
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-
-                        NavigationLink {
-                            SettingsView()
-                        } label: {
-                            MoreDestinationRow(
-                                title: "Settings",
-                                subtitle: "Tune appearance, polling, and provider behavior.",
-                                systemImage: "gear",
-                                accent: .purple
-                            )
-                        }
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                    } header: {
-                        Text("Workspace")
-                            .textCase(nil)
-                            .font(.caption.weight(.semibold))
-                    }
+            List {
+                NavigationLink {
+                    FeedListView()
+                } label: {
+                    Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
+
+                NavigationLink {
+                    TagListView()
+                } label: {
+                    Label("Tags", systemImage: "tag")
+                }
+
+                NavigationLink {
+                    SettingsView()
+                } label: {
+                    Label("Settings", systemImage: "gear")
+                }
             }
             .navigationTitle("More")
-        }
-    }
-}
-
-private struct MoreDestinationRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-    let accent: Color
-
-    var body: some View {
-        GlassCard(style: .raised, tintColor: accent) {
-            HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 40, height: 40)
-                    .background(accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
         }
     }
 }

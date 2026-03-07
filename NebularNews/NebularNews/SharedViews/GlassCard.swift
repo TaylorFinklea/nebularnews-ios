@@ -1,12 +1,6 @@
 import SwiftUI
 import NebularNewsKit
 
-enum GlassSurfaceStyle {
-    case standard
-    case raised
-    case accented
-}
-
 /// Reusable card with iOS 26 Liquid Glass material.
 ///
 /// Uses `.glassEffect(.regular)` for the standard translucent look
@@ -14,7 +8,6 @@ enum GlassSurfaceStyle {
 /// semantic coloring (e.g., score-colored cards).
 struct GlassCard<Content: View>: View {
     var cornerRadius: CGFloat = 16
-    var style: GlassSurfaceStyle = .standard
     var tintColor: Color?
     @ViewBuilder let content: Content
 
@@ -23,7 +16,7 @@ struct GlassCard<Content: View>: View {
 
         content
             .padding()
-            .modifier(GlassCardBackground(shape: shape, style: style, tintColor: tintColor))
+            .modifier(GlassCardBackground(shape: shape, tintColor: tintColor))
     }
 }
 
@@ -33,12 +26,12 @@ struct ScoreBadge: View {
 
     var body: some View {
         if let score {
-            Text("\(score)/5")
+            Text("\(score)")
                 .font(.caption.bold())
                 .monospacedDigit()
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .modifier(GlassCapsuleBackground(style: .accented, tintColor: Color.forScore(score)))
+                .modifier(GlassCapsuleBackground(tintColor: Color.forScore(score)))
         }
     }
 }
@@ -53,7 +46,7 @@ struct TagPill: View {
             .font(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .modifier(GlassCapsuleBackground(style: .accented, tintColor: tagColor))
+            .modifier(GlassCapsuleBackground(tintColor: tagColor))
     }
 
     private var tagColor: Color? {
@@ -63,65 +56,15 @@ struct TagPill: View {
 }
 
 private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
     let shape: ShapeType
-    let style: GlassSurfaceStyle
     let tintColor: Color?
 
     func body(content: Content) -> some View {
         glassContent(content)
-            .overlay(shape.strokeBorder(borderColor))
-            .shadow(color: shadowColor, radius: shadowRadius, y: shadowYOffset)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
-    private var effectiveTintColor: Color? {
-        switch style {
-        case .standard:
-            return tintColor
-        case .raised:
-            return tintColor ?? palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08)
-        case .accented:
-            return tintColor ?? palette.primary
-        }
     }
 
     private var tintFill: Color {
-        switch style {
-        case .standard:
-            return palette.surface
-        case .raised:
-            return palette.surfaceStrong
-        case .accented:
-            return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.18 : 0.12)
-        }
-    }
-
-    private var borderColor: Color {
-        switch style {
-        case .standard:
-            return palette.surfaceBorder.opacity(colorScheme == .dark ? 0.95 : 0.82)
-        case .raised:
-            return palette.surfaceBorder.opacity(colorScheme == .dark ? 1.0 : 0.9)
-        case .accented:
-            return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.26 : 0.18)
-        }
-    }
-
-    private var shadowColor: Color {
-        palette.shadow.opacity(style == .raised ? 0.42 : 0.18)
-    }
-
-    private var shadowRadius: CGFloat {
-        style == .raised ? 20 : 12
-    }
-
-    private var shadowYOffset: CGFloat {
-        style == .raised ? 10 : 6
+        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.14)
     }
 
     @ViewBuilder
@@ -130,7 +73,7 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: shape)
-                .tint(effectiveTintColor)
+                .tint(tintColor)
         } else {
             fallbackContent(content)
         }
@@ -143,68 +86,19 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
         content
             .background(.ultraThinMaterial, in: shape)
             .background(tintFill, in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.08)))
     }
 }
 
 private struct GlassCapsuleBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    let style: GlassSurfaceStyle
     let tintColor: Color?
 
     func body(content: Content) -> some View {
         glassContent(content)
-            .overlay(Capsule().strokeBorder(borderColor))
-            .shadow(color: shadowColor, radius: shadowRadius, y: shadowYOffset)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
-    private var effectiveTintColor: Color? {
-        switch style {
-        case .standard:
-            return tintColor
-        case .raised:
-            return tintColor ?? palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08)
-        case .accented:
-            return tintColor ?? palette.primary
-        }
     }
 
     private var tintFill: Color {
-        switch style {
-        case .standard:
-            return palette.surface
-        case .raised:
-            return palette.surfaceStrong
-        case .accented:
-            return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.16 : 0.11)
-        }
-    }
-
-    private var borderColor: Color {
-        switch style {
-        case .standard:
-            return palette.surfaceBorder.opacity(colorScheme == .dark ? 0.9 : 0.78)
-        case .raised:
-            return palette.surfaceBorder.opacity(colorScheme == .dark ? 1.0 : 0.85)
-        case .accented:
-            return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.22 : 0.16)
-        }
-    }
-
-    private var shadowColor: Color {
-        palette.shadow.opacity(style == .raised ? 0.26 : 0.12)
-    }
-
-    private var shadowRadius: CGFloat {
-        style == .raised ? 14 : 8
-    }
-
-    private var shadowYOffset: CGFloat {
-        style == .raised ? 8 : 4
+        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.18)
     }
 
     @ViewBuilder
@@ -213,7 +107,7 @@ private struct GlassCapsuleBackground: ViewModifier {
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: Capsule())
-                .tint(effectiveTintColor)
+                .tint(tintColor)
         } else {
             fallbackContent(content)
         }
@@ -226,6 +120,7 @@ private struct GlassCapsuleBackground: ViewModifier {
         content
             .background(.ultraThinMaterial, in: Capsule())
             .background(tintFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
     }
 }
 
