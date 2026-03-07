@@ -50,7 +50,7 @@ private struct FeedListContent: View {
                 ContentUnavailableView(
                     "No Feeds",
                     systemImage: "antenna.radiowaves.left.and.right",
-                    description: Text("Add an RSS feed to start reading.")
+                    description: Text("Add a feed URL or import an OPML file to start reading.")
                 )
             } else {
                 ForEach(viewModel.feeds, id: \.id) { feed in
@@ -102,14 +102,12 @@ private struct FeedListContent: View {
             }
         }
         .sheet(isPresented: $viewModel.showAddSheet) {
-            AddFeedSheet { feedUrl, title in
-                Task {
-                    let feed = try? await viewModel.feedRepo.add(feedUrl: feedUrl, title: title)
-                    if let feed {
-                        // Poll immediately for title auto-detection + first articles
-                        await viewModel.pollSingleFeed(id: feed.id)
-                    }
-                    await viewModel.loadFeeds()
+            AddFeedSheet { request in
+                switch request {
+                case .single(let url, let title):
+                    return await viewModel.addSingleFeed(feedUrl: url, title: title)
+                case .opml(let entries):
+                    return await viewModel.importOPMLFeeds(entries)
                 }
             }
         }

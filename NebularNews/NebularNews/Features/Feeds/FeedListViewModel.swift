@@ -6,7 +6,6 @@ import NebularNewsKit
 @Observable
 @MainActor
 final class FeedListViewModel {
-    // Internal access so FeedListView can call feedRepo.add() from AddFeedSheet
     let feedRepo: LocalFeedRepository
     private let articleRepo: LocalArticleRepository
     private let modelContainer: ModelContainer
@@ -99,6 +98,54 @@ final class FeedListViewModel {
         let poller = getPoller()
         _ = await poller.pollFeed(id: id)
         await loadFeeds()
+    }
+
+    func addSingleFeed(feedUrl: String, title: String) async -> String? {
+        do {
+            if await feedRepo.getByUrl(feedUrl) != nil {
+                lastPollMessage = "Feed already exists"
+                await loadFeeds()
+                return nil
+            }
+
+            let feed = try await feedRepo.add(feedUrl: feedUrl, title: title)
+            await pollSingleFeed(id: feed.id)
+            lastPollMessage = "Added 1 feed"
+            return nil
+        } catch {
+            return "Failed to add feed: \(error.localizedDescription)"
+        }
+    }
+
+    func importOPMLFeeds(_ entries: [OPMLFeedEntry]) async -> String? {
+        var addedCount = 0
+        var skippedCount = 0
+
+        do {
+            for entry in entries {
+                if await feedRepo.getByUrl(entry.feedURL) != nil {
+                    skippedCount += 1
+                    continue
+                }
+
+                _ = try await feedRepo.add(feedUrl: entry.feedURL, title: entry.title)
+                addedCount += 1
+            }
+
+            await loadFeeds()
+
+            if addedCount > 0 && skippedCount > 0 {
+                lastPollMessage = "Imported \(addedCount) feed\(addedCount == 1 ? "" : "s") · \(skippedCount) duplicate\(skippedCount == 1 ? "" : "s") skipped"
+            } else if addedCount > 0 {
+                lastPollMessage = "Imported \(addedCount) feed\(addedCount == 1 ? "" : "s")"
+            } else {
+                lastPollMessage = "All imported feeds already exist"
+            }
+
+            return nil
+        } catch {
+            return "Failed to import feeds: \(error.localizedDescription)"
+        }
     }
 
     func deleteFeed(_ feed: Feed) async {
