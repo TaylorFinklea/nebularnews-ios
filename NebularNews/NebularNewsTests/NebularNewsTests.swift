@@ -12,6 +12,7 @@ import Testing
 private final class BundleProbe {}
 
 struct NebularNewsTests {
+    @MainActor
     @Test func appConfigurationFallsBackToGenericDefaults() async throws {
         let bundle = Bundle(for: BundleProbe.self)
         let expectedBundleIdentifier = bundle.bundleIdentifier ?? "com.example.nebularnews.ios"
@@ -26,5 +27,28 @@ struct NebularNewsTests {
         #expect(configuration.mobileOAuthClientName == "Nebular News iOS")
         #expect(configuration.mobileOAuthRedirectURI.absoluteString == "nebularnews://oauth/callback")
         #expect(configuration.mobileDefaultServerURL == nil)
+    }
+
+    @MainActor
+    @Test func appStateCompletesStandaloneOnboardingAndPersistsObservableState() async throws {
+        let bundle = Bundle(for: BundleProbe.self)
+        let configuration = AppConfiguration(bundle: bundle)
+        let suiteName = "NebularNewsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let appState = AppState(configuration: configuration, defaults: defaults)
+
+        #expect(appState.hasCompletedOnboarding == false)
+        #expect(appState.mode == .standalone)
+
+        appState.completeStandaloneOnboarding()
+
+        #expect(appState.hasCompletedOnboarding == true)
+        #expect(appState.mode == .standalone)
+        #expect(defaults.bool(forKey: "hasCompletedOnboarding") == true)
+        #expect(defaults.string(forKey: "appMode") == "standalone")
+
+        defaults.removePersistentDomain(forName: suiteName)
     }
 }

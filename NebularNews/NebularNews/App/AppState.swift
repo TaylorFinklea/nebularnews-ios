@@ -15,30 +15,36 @@ final class AppState {
         static let appMode = "appMode"
     }
 
+    private let defaults: UserDefaults
     let configuration: AppConfiguration
     let keychain: KeychainManager
     let mobileAPI: MobileAPIClient
     let mobileOAuthCoordinator: MobileOAuthCoordinator
 
-    init(configuration: AppConfiguration? = nil) {
-        let resolvedConfiguration = configuration ?? .shared
-        self.configuration = resolvedConfiguration
-        self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
-        self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
-        self.mobileOAuthCoordinator = MobileOAuthCoordinator(configuration: resolvedConfiguration)
-    }
-
     var hasCompletedOnboarding: Bool {
-        get { UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding) }
-        set { UserDefaults.standard.set(newValue, forKey: DefaultsKey.hasCompletedOnboarding) }
+        didSet {
+            defaults.set(hasCompletedOnboarding, forKey: DefaultsKey.hasCompletedOnboarding)
+        }
     }
 
     var mode: Mode {
-        get {
-            let rawValue = UserDefaults.standard.string(forKey: DefaultsKey.appMode)
-            return rawValue.flatMap(Mode.init(rawValue:)) ?? .standalone
+        didSet {
+            defaults.set(mode.rawValue, forKey: DefaultsKey.appMode)
         }
-        set { UserDefaults.standard.set(newValue.rawValue, forKey: DefaultsKey.appMode) }
+    }
+
+    init(configuration: AppConfiguration? = nil, defaults: UserDefaults = .standard) {
+        let resolvedConfiguration = configuration ?? .shared
+        let resolvedDefaults = defaults
+        let persistedMode = resolvedDefaults.string(forKey: DefaultsKey.appMode).flatMap(Mode.init(rawValue:)) ?? .standalone
+
+        self.defaults = resolvedDefaults
+        self.configuration = resolvedConfiguration
+        self.hasCompletedOnboarding = resolvedDefaults.bool(forKey: DefaultsKey.hasCompletedOnboarding)
+        self.mode = persistedMode
+        self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
+        self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
+        self.mobileOAuthCoordinator = MobileOAuthCoordinator(configuration: resolvedConfiguration)
     }
 
     var isCompanionMode: Bool { mode == .companion }
