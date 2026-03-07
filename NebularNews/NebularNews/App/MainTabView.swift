@@ -29,7 +29,7 @@ struct MainTabView: View {
                 }
 
                 Tab("Articles", systemImage: "doc.text") {
-                    LocalArticlesPlaceholderView()
+                    ArticleListView()
                 }
 
                 Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
@@ -70,19 +70,6 @@ private struct LocalDashboardPlaceholderView: View {
     }
 }
 
-private struct LocalArticlesPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "Articles",
-                systemImage: "doc.text",
-                description: Text("Add feeds locally or switch to companion mode to browse your server-backed reading queue.")
-            )
-            .navigationTitle("Articles")
-        }
-    }
-}
-
 private struct LocalChatPlaceholderView: View {
     var body: some View {
         NavigationStack {
@@ -107,7 +94,7 @@ private struct LocalMoreView: View {
                 }
 
                 NavigationLink {
-                    ContentUnavailableView("Settings", systemImage: "gear")
+                    SettingsView()
                 } label: {
                     Label("Settings", systemImage: "gear")
                 }
