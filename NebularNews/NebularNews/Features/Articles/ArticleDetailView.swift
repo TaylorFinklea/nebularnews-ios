@@ -137,6 +137,7 @@ struct ArticleDetailView: View {
                 )
             }
         }
+        .toolbar(.hidden, for: .tabBar)
     }
 
     // MARK: - Header
