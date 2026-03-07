@@ -28,54 +28,41 @@ private struct FeedListContent: View {
     @Bindable var viewModel: FeedListViewModel
 
     var body: some View {
-        NebularScreen {
-            List {
-                if viewModel.isPolling {
-                    StatusBanner(
-                        title: "Refreshing feeds",
-                        detail: "Polling every enabled source and updating your local queue.",
-                        systemImage: "arrow.clockwise",
-                        accent: .cyan,
-                        showProgress: true
-                    )
-                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                } else if let message = viewModel.lastPollMessage {
-                    StatusBanner(
-                        title: "Latest activity",
-                        detail: message,
-                        systemImage: "sparkles",
-                        accent: .purple,
-                        showProgress: false
-                    )
-                    .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+        List {
+            // Poll status banner
+            if viewModel.isPolling {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Refreshing feeds…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 }
-
-                if viewModel.feeds.isEmpty && !viewModel.isLoading {
-                    ContentUnavailableView(
-                        "No Feeds",
-                        systemImage: "antenna.radiowaves.left.and.right",
-                        description: Text("Add a feed URL or import an OPML file to start reading.")
-                    )
+                .listRowBackground(Color.clear)
+            } else if let message = viewModel.lastPollMessage {
+                Text(message)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                     .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-                } else {
-                    ForEach(viewModel.feeds, id: \.id) { feed in
-                        NavigationLink {
-                            ArticleListView(
-                                feedId: feed.id,
-                                feedTitle: feed.title.isEmpty ? feed.feedUrl : feed.title
-                            )
-                        } label: {
-                            FeedRow(feed: feed)
-                        }
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            }
+
+            if viewModel.feeds.isEmpty && !viewModel.isLoading {
+                ContentUnavailableView(
+                    "No Feeds",
+                    systemImage: "antenna.radiowaves.left.and.right",
+                    description: Text("Add a feed URL or import an OPML file to start reading.")
+                )
+            } else {
+                ForEach(viewModel.feeds, id: \.id) { feed in
+                    NavigationLink {
+                        ArticleListView(
+                            feedId: feed.id,
+                            feedTitle: feed.title.isEmpty ? feed.feedUrl : feed.title
+                        )
+                    } label: {
+                        FeedRow(feed: feed)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 Task { await viewModel.deleteFeed(feed) }
                             } label: {
@@ -93,11 +80,8 @@ private struct FeedListContent: View {
                             }
                             .tint(feed.isEnabled ? .orange : .green)
                         }
-                    }
                 }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
         }
         .navigationTitle("Feeds")
         .toolbar {
@@ -136,111 +120,67 @@ private struct FeedListContent: View {
     }
 }
 
-private struct StatusBanner: View {
-    let title: String
-    let detail: String
-    let systemImage: String
-    let accent: Color
-    let showProgress: Bool
-
-    var body: some View {
-        GlassCard(cornerRadius: 24, style: .raised, tintColor: accent) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(accent.opacity(0.14))
-                        .frame(width: 42, height: 42)
-
-                    if showProgress {
-                        ProgressView()
-                            .tint(accent)
-                    } else {
-                        Image(systemName: systemImage)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(accent)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Feed Row
 
 private struct FeedRow: View {
     let feed: Feed
 
     var body: some View {
-        GlassCard(cornerRadius: 22, style: feed.isEnabled ? .raised : .standard, tintColor: accentColor) {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(accentColor.opacity(0.14))
-                    .frame(width: 46, height: 46)
-                    .overlay {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .foregroundStyle(accentColor)
-                            .font(.system(size: 17, weight: .semibold))
-                    }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    HStack(spacing: 8) {
-                        if !feed.isEnabled {
-                            Text("Paused")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        }
-
-                        if let lastPolled = feed.lastPolledAt {
-                            Text("Polled \(lastPolled.relativeDisplay)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Never polled")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let error = feed.errorMessage {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .help(error)
-                        }
-                    }
-
-                    Text(feed.feedUrl)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+        HStack(spacing: 12) {
+            // Feed icon placeholder
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.quaternary)
+                .frame(width: 40, height: 40)
+                .overlay {
+                    Image(systemName: "antenna.radiowaves.left.and.right")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 16))
                 }
 
-                Spacer()
+            VStack(alignment: .leading, spacing: 2) {
+                Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
+                    .font(.body)
+                    .lineLimit(1)
 
-                Text("\(feed.articles?.count ?? 0)")
-                    .font(.headline.bold())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .background(accentColor.opacity(0.10), in: Capsule())
-                    .overlay(Capsule().strokeBorder(accentColor.opacity(0.16)))
+                HStack(spacing: 8) {
+                    if !feed.isEnabled {
+                        Text("Paused")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+
+                    if let lastPolled = feed.lastPolledAt {
+                        Text("Polled \(lastPolled.relativeDisplay)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Never polled")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let error = feed.errorMessage {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .help(error)
+                    }
+                }
+
+                Text(feed.feedUrl)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
-        }
-    }
 
-    private var accentColor: Color {
-        feed.isEnabled ? .cyan : .orange
+            Spacer()
+
+            Text("\(feed.articles?.count ?? 0)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .padding(.vertical, 2)
+        .opacity(feed.isEnabled ? 1 : 0.6)
     }
 }

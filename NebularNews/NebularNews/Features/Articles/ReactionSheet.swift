@@ -57,7 +57,7 @@ struct ReactionSheet: View {
                                 Spacer()
                                 if selectedCodes.contains(option.code) {
                                     Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.blue)
+                                        .foregroundStyle(.tint)
                                 }
                             }
                         }

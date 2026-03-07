@@ -68,22 +68,20 @@ struct StandaloneDashboardView: View {
 
     var body: some View {
         NavigationStack {
-            NebularScreen {
-                ScrollView {
-                    VStack(spacing: 22) {
-                        heroSection
-                        momentumSection
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Momentum section
+                    momentumSection
 
-                        if !topUnread.isEmpty {
-                            topArticlesSection
-                        }
-
-                        statsSection
+                    // Top scored articles
+                    if !topUnread.isEmpty {
+                        topArticlesSection
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 28)
+
+                    // Stats summary
+                    statsSection
                 }
+                .padding()
             }
             .navigationTitle("Dashboard")
             .navigationDestination(for: String.self) { articleId in
@@ -92,67 +90,12 @@ struct StandaloneDashboardView: View {
         }
     }
 
-    private var heroSection: some View {
-        GlassCard(cornerRadius: 30, style: .raised, tintColor: Color.forScore(5)) {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Reading momentum")
-                        .font(.caption.weight(.semibold))
-                        .textCase(.uppercase)
-                        .tracking(1.1)
-                        .foregroundStyle(.secondary)
-
-                    Text(heroHeadline)
-                        .font(.largeTitle.bold())
-                        .tracking(-0.8)
-
-                    Text(heroSubheadline)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack(spacing: 10) {
-                    HeroPill(label: "Unread", value: "\(unreadCount)", accent: .cyan)
-                    HeroPill(label: "High Fit", value: "\(highFitUnread)", accent: Color.forScore(5))
-                    HeroPill(label: "Scored", value: "\(scoredCount)", accent: .purple)
-                }
-            }
-            .background(alignment: .topTrailing) {
-                NebularHeaderHalo(color: Color.forScore(highFitUnread > 0 ? 5 : 4))
-                    .offset(x: 54, y: -54)
-            }
-        }
-    }
-
-    private var heroHeadline: String {
-        if highFitUnread > 0 {
-            return "\(highFitUnread) strong matches are waiting"
-        }
-        if unread24h > 0 {
-            return "\(unread24h) fresh stories landed today"
-        }
-        if unreadCount > 0 {
-            return "Your queue is primed for a catch-up"
-        }
-        return "You’re fully caught up right now"
-    }
-
-    private var heroSubheadline: String {
-        if unreadCount == 0 {
-            return "Pull feeds again later or add a few more sources to keep the queue fresh."
-        }
-        return "Nebular surfaces the best reading opportunities first, while the rest of the queue stays close at hand."
-    }
-
     // MARK: - Momentum
 
     private var momentumSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            DashboardSectionHeader(
-                title: "Signals",
-                subtitle: "A quick read on volume, recency, and fit."
-            )
+            Label("Reading Momentum", systemImage: "chart.bar.fill")
+                .font(.headline)
 
             LazyVGrid(columns: [
                 GridItem(.flexible()),
@@ -162,7 +105,7 @@ struct StandaloneDashboardView: View {
                     title: "Unread",
                     value: "\(unreadCount)",
                     icon: "envelope.badge",
-                    color: unreadCount > 0 ? .blue : .secondary
+                    color: unreadCount > 0 ? Color.accentColor : .secondary
                 )
                 MetricCard(
                     title: "New Today",
@@ -189,39 +132,35 @@ struct StandaloneDashboardView: View {
     // MARK: - Top Articles
 
     private var topArticlesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            DashboardSectionHeader(
-                title: "Top unread",
-                subtitle: "The strongest candidates in your current queue."
-            )
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Top Unread", systemImage: "arrow.up.right")
+                .font(.headline)
 
             ForEach(topUnread, id: \.id) { article in
                 NavigationLink(value: article.id) {
-                    GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(article.score)) {
-                        HStack(spacing: 12) {
-                            ScoreBadge(score: article.score)
+                    HStack(spacing: 10) {
+                        ScoreBadge(score: article.score)
 
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(article.title ?? "Untitled")
-                                    .font(.headline)
-                                    .lineLimit(2)
-                                if let feedTitle = article.feed?.title {
-                                    Text(feedTitle)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(1)
-                                }
-                            }
-
-                            Spacer(minLength: 8)
-
-                            if let date = article.publishedAt {
-                                Text(date.relativeDisplay)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(article.title ?? "Untitled")
+                                .font(.subheadline)
+                                .lineLimit(2)
+                            if let feedTitle = article.feed?.title {
+                                Text(feedTitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
+
+                        Spacer()
+
+                        if let date = article.publishedAt {
+                            Text(date.relativeDisplay)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
                 .buttonStyle(.plain)
             }
@@ -231,11 +170,9 @@ struct StandaloneDashboardView: View {
     // MARK: - Stats
 
     private var statsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            DashboardSectionHeader(
-                title: "Overview",
-                subtitle: "The shape of your local news workspace."
-            )
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Overview", systemImage: "chart.pie")
+                .font(.headline)
 
             LazyVGrid(columns: [
                 GridItem(.flexible()),
@@ -259,29 +196,20 @@ private struct MetricCard: View {
     let color: Color
 
     var body: some View {
-        GlassCard(cornerRadius: 22, style: .raised, tintColor: color) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Image(systemName: icon)
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(color)
-                        .frame(width: 36, height: 36)
-                        .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    Spacer()
-                }
-
-                Text(value)
-                    .font(.title.bold())
-                    .monospacedDigit()
-
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-            }
+        VStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundStyle(color)
+            Text(value)
+                .font(.title2.bold())
+                .monospacedDigit()
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .padding()
+        .modifier(GlassRoundedBackground(cornerRadius: 12))
     }
 }
 
@@ -290,55 +218,16 @@ private struct StatPill: View {
     let value: String
 
     var body: some View {
-        GlassCard(cornerRadius: 18, style: .standard) {
-            VStack(spacing: 4) {
-                Text(value)
-                    .font(.headline.bold())
-                    .monospacedDigit()
-                Text(label)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                    .tracking(0.7)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-private struct DashboardSectionHeader: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.title3.bold())
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
-private struct HeroPill: View {
-    let label: String
-    let value: String
-    let accent: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(spacing: 2) {
             Text(value)
-                .font(.headline.bold())
+                .font(.subheadline.bold())
                 .monospacedDigit()
             Text(label)
-                .font(.caption2.weight(.semibold))
+                .font(.caption2)
                 .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(accent.opacity(0.14), in: Capsule())
-        .overlay(Capsule().strokeBorder(accent.opacity(0.18)))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .modifier(GlassRoundedBackground(cornerRadius: 8))
     }
 }

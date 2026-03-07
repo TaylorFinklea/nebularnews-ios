@@ -37,7 +37,7 @@ struct TagPickerSheet: View {
 
                             if isAssigned(tag) {
                                 Image(systemName: "checkmark")
-                                    .foregroundStyle(.blue)
+                                    .foregroundStyle(.tint)
                             }
                         }
                     }
