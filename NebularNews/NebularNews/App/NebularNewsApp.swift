@@ -7,6 +7,7 @@ struct NebularNewsApp: App {
     let modelContainer: ModelContainer
 
     @State private var appState: AppState
+    @State private var themeManager = ThemeManager()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -28,13 +29,16 @@ struct NebularNewsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if appState.hasCompletedOnboarding {
-                MainTabView()
-                    .environment(appState)
-            } else {
-                OnboardingView()
-                    .environment(appState)
+            Group {
+                if appState.hasCompletedOnboarding {
+                    MainTabView()
+                } else {
+                    OnboardingView()
+                }
             }
+            .environment(appState)
+            .environment(themeManager)
+            .preferredColorScheme(themeManager.resolvedColorScheme)
         }
         .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in

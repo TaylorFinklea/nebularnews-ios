@@ -11,6 +11,16 @@ struct ArticleListView: View {
     @State private var searchText = ""
     @State private var filterMode: FilterMode = .all
 
+    /// Optional feed filter — when set, only shows articles from this feed.
+    /// Set via navigation from FeedListView.
+    let feedId: String?
+    let feedTitle: String?
+
+    init(feedId: String? = nil, feedTitle: String? = nil) {
+        self.feedId = feedId
+        self.feedTitle = feedTitle
+    }
+
     enum FilterMode: String, CaseIterable {
         case all = "All"
         case unread = "Unread"
@@ -19,6 +29,11 @@ struct ArticleListView: View {
 
     private var filteredArticles: [Article] {
         var result = articles
+
+        // Feed filter (when navigating from feed list)
+        if let feedId {
+            result = result.filter { $0.feed?.id == feedId }
+        }
 
         switch filterMode {
         case .all: break
@@ -71,7 +86,7 @@ struct ArticleListView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle("Articles")
+            .navigationTitle(feedTitle ?? "Articles")
             .navigationDestination(for: String.self) { articleId in
                 ArticleDetailView(articleId: articleId)
             }
@@ -113,7 +128,7 @@ private struct ArticleRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Feed name + date
+            // Feed name + date + score
             HStack {
                 if let feedTitle = article.feed?.title, !feedTitle.isEmpty {
                     Text(feedTitle)
@@ -122,6 +137,11 @@ private struct ArticleRow: View {
                         .lineLimit(1)
                 }
                 Spacer()
+
+                if let score = article.score {
+                    ScoreBadge(score: score)
+                }
+
                 if let date = article.publishedAt {
                     Text(date.relativeDisplay)
                         .font(.caption2)
@@ -136,8 +156,13 @@ private struct ArticleRow: View {
                 .foregroundStyle(article.isRead ? .secondary : .primary)
                 .lineLimit(2)
 
-            // Excerpt
-            if let excerpt = article.excerpt, !excerpt.isEmpty {
+            // Excerpt (or summary if available)
+            if let summary = article.summaryText, !summary.isEmpty {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            } else if let excerpt = article.excerpt, !excerpt.isEmpty {
                 Text(excerpt)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

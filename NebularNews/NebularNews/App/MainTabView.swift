@@ -25,7 +25,7 @@ struct MainTabView: View {
         } else {
             TabView {
                 Tab("Dashboard", systemImage: "house") {
-                    LocalDashboardPlaceholderView()
+                    StandaloneDashboardView()
                 }
 
                 Tab("Articles", systemImage: "doc.text") {
@@ -57,19 +57,6 @@ private struct CompanionChatPlaceholderView: View {
     }
 }
 
-private struct LocalDashboardPlaceholderView: View {
-    var body: some View {
-        NavigationStack {
-            ContentUnavailableView(
-                "Dashboard",
-                systemImage: "house",
-                description: Text("Use standalone mode with local feeds, or connect to your Nebular News server for synced dashboard data.")
-            )
-            .navigationTitle("Dashboard")
-        }
-    }
-}
-
 private struct LocalChatPlaceholderView: View {
     var body: some View {
         NavigationStack {
@@ -91,6 +78,12 @@ private struct LocalMoreView: View {
                     FeedListView()
                 } label: {
                     Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
+                }
+
+                NavigationLink {
+                    TagListView()
+                } label: {
+                    Label("Tags", systemImage: "tag")
                 }
 
                 NavigationLink {
