@@ -78,26 +78,60 @@ struct TagPickerSheet: View {
     private func toggleTag(_ tag: Tag) {
         if isAssigned(tag) {
             article.tags?.removeAll(where: { $0.id == tag.id })
+            persistSystemTagIDs(article.systemTagIds.filter { $0 != tag.id })
         } else {
             if article.tags == nil { article.tags = [] }
             article.tags?.append(tag)
         }
         try? modelContext.save()
+        rescoreArticle()
     }
 
     private func createAndAssign() {
         let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let tag = Tag(name: trimmed, colorHex: defaultColorHex(for: trimmed))
-        modelContext.insert(tag)
+        let normalizedName = Tag.normalizeName(trimmed)
+        let tag: Tag
+        if let existing = allTags.first(where: { $0.nameNormalized == normalizedName }) {
+            tag = existing
+        } else {
+            tag = Tag(
+                name: trimmed,
+                colorHex: defaultColorHex(for: trimmed),
+                slug: Tag.normalizeSlug(trimmed),
+                isCanonical: false
+            )
+            modelContext.insert(tag)
+        }
 
         if article.tags == nil { article.tags = [] }
-        article.tags?.append(tag)
+        if !(article.tags?.contains(where: { $0.id == tag.id }) ?? false) {
+            article.tags?.append(tag)
+        }
         try? modelContext.save()
+        rescoreArticle()
 
         newTagName = ""
         showNewTagField = false
+    }
+
+    private func persistSystemTagIDs(_ tagIDs: [String]) {
+        var seen: Set<String> = []
+        let uniqueTagIDs = tagIDs.filter { seen.insert($0).inserted }
+        article.systemTagIdsJson = uniqueTagIDs.isEmpty ? nil : encodedJSON(uniqueTagIDs)
+    }
+
+    private func encodedJSON(_ values: [String]) -> String? {
+        guard let data = try? JSONEncoder().encode(values) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func rescoreArticle() {
+        Task {
+            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            try? await service.rescoreArticle(articleID: article.id)
+        }
     }
 
     private func tagColor(for tag: Tag) -> Color {

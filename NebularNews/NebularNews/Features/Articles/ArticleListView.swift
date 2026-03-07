@@ -25,6 +25,8 @@ struct ArticleListView: View {
         case all = "All"
         case unread = "Unread"
         case read = "Read"
+        case scored = "Scored"
+        case learning = "Learning"
     }
 
     private var filteredArticles: [Article] {
@@ -39,6 +41,8 @@ struct ArticleListView: View {
         case .all: break
         case .unread: result = result.filter { !$0.isRead }
         case .read: result = result.filter { $0.isRead }
+        case .scored: result = result.filter(\.hasReadyScore)
+        case .learning: result = result.filter(\.isLearningScore)
         }
 
         if !searchText.isEmpty {
@@ -138,8 +142,10 @@ private struct ArticleRow: View {
                 }
                 Spacer()
 
-                if let score = article.score {
+                if article.hasReadyScore, let score = article.score {
                     ScoreBadge(score: score)
+                } else if article.isLearningScore {
+                    LearningBadge()
                 }
 
                 if let date = article.publishedAt {
@@ -178,5 +184,16 @@ private struct ArticleRow: View {
         }
         .padding(.vertical, 4)
         .opacity(article.isRead ? 0.7 : 1)
+    }
+}
+
+private struct LearningBadge: View {
+    var body: some View {
+        Text("Learning")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial, in: Capsule())
     }
 }

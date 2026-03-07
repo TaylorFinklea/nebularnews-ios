@@ -5,7 +5,7 @@ import NebularNewsKit
 /// Dashboard for standalone mode — shows reading momentum, top-scored articles, and quick actions.
 ///
 /// Uses `@Query` for live SwiftData observation. Stats automatically update when
-/// articles are polled, read, or AI-enriched — no manual refresh needed.
+/// articles are polled, read, tagged, or rescored — no manual refresh needed.
 struct StandaloneDashboardView: View {
     @Environment(\.modelContext) private var modelContext
 
@@ -38,20 +38,30 @@ struct StandaloneDashboardView: View {
         let cutoff = Date().addingTimeInterval(-604800)
         return allArticles.count(where: {
             !$0.isRead &&
+            $0.hasReadyScore &&
             ($0.score ?? 0) >= 4 &&
             ($0.publishedAt ?? .distantPast) > cutoff
         })
     }
 
-    private var aiProcessedCount: Int {
-        allArticles.count(where: { $0.aiProcessedAt != nil })
+    private var scoredCount: Int {
+        allArticles.count(where: \.hasReadyScore)
+    }
+
+    private var learningCount: Int {
+        allArticles.count(where: \.isLearningScore)
     }
 
     /// Top unread articles sorted by score (descending), limited to 10.
     private var topUnread: [Article] {
         allArticles
-            .filter { !$0.isRead && $0.score != nil }
-            .sorted { ($0.score ?? 0) > ($1.score ?? 0) }
+            .filter { !$0.isRead && $0.hasReadyScore && $0.score != nil }
+            .sorted {
+                if ($0.score ?? 0) == ($1.score ?? 0) {
+                    return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
+                }
+                return ($0.score ?? 0) > ($1.score ?? 0)
+            }
             .prefix(10)
             .map { $0 }
     }
@@ -164,10 +174,14 @@ struct StandaloneDashboardView: View {
             Label("Overview", systemImage: "chart.pie")
                 .font(.headline)
 
-            HStack(spacing: 16) {
+            LazyVGrid(columns: [
+                GridItem(.flexible()),
+                GridItem(.flexible())
+            ], spacing: 12) {
                 StatPill(label: "Articles", value: "\(allArticles.count)")
                 StatPill(label: "Feeds", value: "\(feeds.count)")
-                StatPill(label: "AI Processed", value: "\(aiProcessedCount)")
+                StatPill(label: "Scored", value: "\(scoredCount)")
+                StatPill(label: "Learning", value: "\(learningCount)")
             }
         }
     }

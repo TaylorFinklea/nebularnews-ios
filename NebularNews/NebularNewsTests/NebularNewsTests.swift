@@ -7,6 +7,7 @@
 
 import Foundation
 import Testing
+import NebularNewsKit
 @testable import NebularNews
 
 private final class BundleProbe {}
@@ -50,5 +51,23 @@ struct NebularNewsTests {
         #expect(defaults.string(forKey: "appMode") == "standalone")
 
         defaults.removePersistentDomain(forName: suiteName)
+    }
+
+    @Test func articleScoreHelpersReflectReadyAndLearningStates() async throws {
+        let readyArticle = Article(canonicalUrl: "https://example.com/a", title: "Ready")
+        readyArticle.score = 4
+        readyArticle.scoreStatus = LocalScoreStatus.ready.rawValue
+        readyArticle.scoreLabel = "Algorithmic (84% confidence)"
+
+        #expect(readyArticle.hasReadyScore == true)
+        #expect(readyArticle.isLearningScore == false)
+        #expect(readyArticle.displayScoreLabel == "Algorithmic (84% confidence)")
+
+        let learningArticle = Article(canonicalUrl: "https://example.com/b", title: "Learning")
+        learningArticle.scoreStatus = LocalScoreStatus.insufficientSignal.rawValue
+
+        #expect(learningArticle.hasReadyScore == false)
+        #expect(learningArticle.isLearningScore == true)
+        #expect(learningArticle.displayScoreLabel == "Learning your preferences")
     }
 }

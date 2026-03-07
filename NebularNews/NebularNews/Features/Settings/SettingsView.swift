@@ -72,32 +72,7 @@ struct SettingsView: View {
             } header: {
                 Label("AI Provider", systemImage: "brain")
             } footer: {
-                Text("API keys are stored securely in your device Keychain and never synced to iCloud.")
-            }
-
-            // MARK: - User Profile
-            Section {
-                NavigationLink {
-                    UserProfileEditor(settings: settings, modelContext: modelContext)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Interest Profile")
-                        if let prompt = settings.userProfilePrompt, !prompt.isEmpty {
-                            Text(prompt)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        } else {
-                            Text("Not configured")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-            } header: {
-                Label("Personalization", systemImage: "person.text.rectangle")
-            } footer: {
-                Text("Describe your interests so the AI can score articles by relevance to you.")
+                Text("API keys are stored securely in your device Keychain and never synced to iCloud. In standalone mode, keys are only used for optional summaries and key points.")
             }
 
             // MARK: - Appearance
@@ -190,40 +165,6 @@ struct SettingsView: View {
                 Text("Not set")
                     .foregroundStyle(.tertiary)
             }
-        }
-    }
-}
-
-// MARK: - User Profile Editor
-
-private struct UserProfileEditor: View {
-    @Bindable var settings: AppSettings
-    let modelContext: ModelContext
-
-    @State private var profileText: String = ""
-
-    var body: some View {
-        Form {
-            Section {
-                TextEditor(text: $profileText)
-                    .frame(minHeight: 150)
-                    .font(.body)
-            } header: {
-                Text("Describe your interests")
-            } footer: {
-                Text("Example: \"I'm a Swift developer interested in iOS frameworks, distributed systems, and AI/ML engineering. I care less about front-end web frameworks and gaming news.\"")
-            }
-        }
-        .navigationTitle("Interest Profile")
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            profileText = settings.userProfilePrompt ?? ""
-        }
-        .onDisappear {
-            let trimmed = profileText.trimmingCharacters(in: .whitespacesAndNewlines)
-            settings.userProfilePrompt = trimmed.isEmpty ? nil : trimmed
-            settings.updatedAt = Date()
-            try? modelContext.save()
         }
     }
 }

@@ -44,6 +44,7 @@ enum BackgroundTaskManager {
         let feedRepo = LocalFeedRepository(modelContainer: modelContainer)
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+        let personalization = LocalStandalonePersonalizationService(modelContainer: modelContainer)
 
         let keychain = KeychainManager()
 
@@ -52,8 +53,9 @@ enum BackgroundTaskManager {
             // Automatic poll respects backoff (not user-initiated)
             _ = await poller.pollAllFeeds(bypassBackoff: false)
             _ = await poller.cleanupOldArticles(retentionDays: 90)
+            _ = await personalization.processPendingArticles(limit: 25)
 
-            // AI enrichment — only if Anthropic key is configured
+            // Optional AI enrichment — only if Anthropic key is configured
             guard !Task.isCancelled,
                   let apiKey = keychain.get(forKey: KeychainManager.Key.anthropicApiKey)
             else { return }
@@ -65,8 +67,6 @@ enum BackgroundTaskManager {
 
             _ = await enricher.enrichUnprocessedArticles(
                 limit: 3,  // Conservative for background tasks
-                userProfile: settings?.userProfilePrompt,
-                scoringModel: settings?.scoringModel ?? "claude-haiku-4-5-20251001",
                 summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
                 summaryStyle: settings?.summaryStyle ?? "concise"
             )

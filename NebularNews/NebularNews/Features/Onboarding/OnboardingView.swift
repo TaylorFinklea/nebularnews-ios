@@ -170,7 +170,7 @@ struct OnboardingView: View {
             Text("Standalone AI keys")
                 .font(.title2.bold())
 
-            Text("Provider keys are optional in standalone mode and are stored locally on-device.")
+            Text("Provider keys are optional in standalone mode, stored locally on-device, and only used for summaries and key points.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

@@ -51,19 +51,22 @@ final class FeedListViewModel {
         // Cleanup old articles (default 90 days)
         let deleted = await poller.cleanupOldArticles(retentionDays: 90)
 
+        let processed = await processStandalonePersonalization()
+
         lastPollMessage = formatPollResult(result, deleted: deleted)
+        if processed > 0 {
+            lastPollMessage = (lastPollMessage ?? "") + " · \(processed) scored"
+        }
         isPolling = false
 
         // Reload feed list to show updated article counts + poll timestamps
         await loadFeeds()
 
-        // Trigger AI enrichment for new articles (non-blocking for feed list refresh)
-        if result.newArticles > 0 {
-            await enrichNewArticles()
-        }
+        // Trigger optional AI enrichment for summary + key points.
+        await enrichNewArticles()
     }
 
-    /// Enrich unprocessed articles with AI-generated scores, summaries, and key points.
+    /// Enrich unprocessed articles with optional AI summaries and key points.
     func enrichNewArticles() async {
         let keychain = KeychainManager()
         guard let apiKey = keychain.get(forKey: KeychainManager.Key.anthropicApiKey) else { return }
@@ -73,11 +76,8 @@ final class FeedListViewModel {
         let enricher = AIEnrichmentService(client: client, articleRepo: articleRepo)
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let settings = await settingsRepo.get()
-
         let results = await enricher.enrichUnprocessedArticles(
             limit: 5,
-            userProfile: settings?.userProfilePrompt,
-            scoringModel: settings?.scoringModel ?? "claude-haiku-4-5-20251001",
             summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
             summaryStyle: settings?.summaryStyle ?? "concise"
         )
@@ -87,6 +87,11 @@ final class FeedListViewModel {
         if enriched > 0 {
             lastPollMessage = (lastPollMessage ?? "") + " · \(enriched) AI-enriched"
         }
+    }
+
+    private func processStandalonePersonalization() async -> Int {
+        let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
+        return await service.processPendingArticles(limit: 50)
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).

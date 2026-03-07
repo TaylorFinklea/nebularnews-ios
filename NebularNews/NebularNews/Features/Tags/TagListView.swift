@@ -66,7 +66,15 @@ struct TagListView: View {
         let trimmed = newTagName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let tag = Tag(name: trimmed, colorHex: defaultColorHex(for: trimmed))
+        let normalizedName = Tag.normalizeName(trimmed)
+        guard !tags.contains(where: { $0.nameNormalized == normalizedName }) else { return }
+
+        let tag = Tag(
+            name: trimmed,
+            colorHex: defaultColorHex(for: trimmed),
+            slug: Tag.normalizeSlug(trimmed),
+            isCanonical: false
+        )
         modelContext.insert(tag)
         try? modelContext.save()
     }

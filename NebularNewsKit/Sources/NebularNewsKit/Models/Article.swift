@@ -28,7 +28,11 @@ public final class Article: @unchecked Sendable {
     public var score: Int?
     public var scoreLabel: String?
     public var scoreConfidence: Double?
+    public var scorePreferenceConfidence: Double?
+    public var scoreWeightedAverage: Double?
     public var scoreExplanation: String?
+    public var scoreStatus: String?
+    public var signalScoresJson: String?
     public var aiProcessedAt: Date?
 
     // User state
@@ -37,6 +41,7 @@ public final class Article: @unchecked Sendable {
     public var reactionValue: Int?
     public var reactionReasonCodes: String?
     public var feedbackRating: Int?
+    public var systemTagIdsJson: String?
 
     // Relationships
     public var feed: Feed?
@@ -55,15 +60,45 @@ public final class Article: @unchecked Sendable {
 
     /// Decoded key points from the JSON string.
     public var keyPoints: [String] {
-        guard let json = keyPointsJson,
-              let data = json.data(using: .utf8),
-              let points = try? JSONDecoder().decode([String].self, from: data)
-        else { return [] }
-        return points
+        decodeJSONString(keyPointsJson, as: [String].self) ?? []
+    }
+
+    public var signalScores: [StoredSignalScore] {
+        decodeJSONString(signalScoresJson, as: [StoredSignalScore].self) ?? []
+    }
+
+    public var systemTagIds: [String] {
+        decodeJSONString(systemTagIdsJson, as: [String].self) ?? []
+    }
+
+    public var scoreStatusValue: LocalScoreStatus? {
+        guard let scoreStatus else { return nil }
+        return LocalScoreStatus(rawValue: scoreStatus)
+    }
+
+    public var hasReadyScore: Bool {
+        scoreStatusValue == .ready && score != nil
+    }
+
+    public var isLearningScore: Bool {
+        scoreStatusValue == .insufficientSignal
     }
 
     /// Human-readable score label, falling back to a default.
     public var displayScoreLabel: String {
-        scoreLabel ?? score.map { "Score \($0)" } ?? "Unscored"
+        if let scoreLabel, !scoreLabel.isEmpty {
+            return scoreLabel
+        }
+        if isLearningScore {
+            return "Learning your preferences"
+        }
+        return score.map { "Score \($0)" } ?? "Unscored"
+    }
+
+    private func decodeJSONString<T: Decodable>(_ json: String?, as type: T.Type) -> T? {
+        guard let json,
+              let data = json.data(using: .utf8)
+        else { return nil }
+        return try? JSONDecoder().decode(type, from: data)
     }
 }

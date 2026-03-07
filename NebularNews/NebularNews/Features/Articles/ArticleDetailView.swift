@@ -32,8 +32,10 @@ struct ArticleDetailView: View {
                         // Header
                         articleHeader(article)
 
-                        // AI Enrichment section (score, summary, key points)
-                        aiEnrichmentSection(article)
+                        // Fit + optional AI enrichment
+                        fitSection(article)
+                        summarySection(article)
+                        keyPointsSection(article)
 
                         // Tags
                         tagSection(article)
@@ -63,15 +65,15 @@ struct ArticleDetailView: View {
 
                         Spacer()
 
-                        // Analyze with AI (on-demand)
-                        if article.aiProcessedAt == nil && appState.hasAnthropicKey {
+                        // Summary generation (on-demand)
+                        if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
                             Button {
                                 Task { await enrichArticle(article) }
                             } label: {
                                 if isEnriching {
                                     ProgressView()
                                 } else {
-                                    Label("Analyze", systemImage: "brain")
+                                    Label("Summarize", systemImage: "text.alignleft")
                                 }
                             }
                             .disabled(isEnriching)
@@ -150,8 +152,8 @@ struct ArticleDetailView: View {
 
                 Spacer()
 
-                if article.score != nil {
-                    ScoreBadge(score: article.score)
+                if article.hasReadyScore, let score = article.score {
+                    ScoreBadge(score: score)
                 }
             }
 
@@ -221,60 +223,75 @@ struct ArticleDetailView: View {
         }
     }
 
-    // MARK: - AI Enrichment Section
+    // MARK: - Fit + Enrichment Sections
 
     @ViewBuilder
-    private func aiEnrichmentSection(_ article: Article) -> some View {
-        if article.aiProcessedAt != nil {
+    private func fitSection(_ article: Article) -> some View {
+        if article.hasReadyScore, let score = article.score {
             VStack(alignment: .leading, spacing: 12) {
-                // Score explanation
-                if let score = article.score {
-                    HStack(spacing: 8) {
-                        ScoreBadge(score: score)
-                        Text(article.displayScoreLabel)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Color.forScore(score))
-                    }
-
-                    if let explanation = article.scoreExplanation, !explanation.isEmpty {
-                        DisclosureGroup("Why this score") {
-                            Text(explanation)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 4)
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                HStack(spacing: 8) {
+                    ScoreBadge(score: score)
+                    Text("Algorithmic fit")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(Color.forScore(score))
                 }
 
-                // Summary
-                if let summary = article.summaryText, !summary.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Summary", systemImage: "text.alignleft")
-                            .font(.caption.bold())
+                if let explanation = article.scoreExplanation, !explanation.isEmpty {
+                    DisclosureGroup("Why this score") {
+                        Text(explanation)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                        Text(summary)
+                            .padding(.top, 4)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        } else if article.isLearningScore {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Learning", systemImage: "sparkles")
+                    .font(.subheadline.bold())
+                Text("Not enough preference signals yet. React to articles or refine tags to improve fit scoring.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    @ViewBuilder
+    private func summarySection(_ article: Article) -> some View {
+        if let summary = article.summaryText, !summary.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Summary", systemImage: "text.alignleft")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                Text(summary)
+                    .font(.subheadline)
+                    .lineSpacing(3)
+            }
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    @ViewBuilder
+    private func keyPointsSection(_ article: Article) -> some View {
+        let points = article.keyPoints
+        if !points.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Key Points", systemImage: "list.bullet")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                ForEach(points, id: \.self) { point in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("•")
+                            .foregroundStyle(.secondary)
+                        Text(point)
                             .font(.subheadline)
-                            .lineSpacing(3)
-                    }
-                }
-
-                // Key points
-                let points = article.keyPoints
-                if !points.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Label("Key Points", systemImage: "list.bullet")
-                            .font(.caption.bold())
-                            .foregroundStyle(.secondary)
-                        ForEach(points, id: \.self) { point in
-                            HStack(alignment: .top, spacing: 6) {
-                                Text("•")
-                                    .foregroundStyle(.secondary)
-                                Text(point)
-                                    .font(.subheadline)
-                            }
-                        }
                     }
                 }
             }
@@ -339,8 +356,6 @@ struct ArticleDetailView: View {
 
         _ = await enricher.enrichArticle(
             snapshot: snapshot,
-            userProfile: settings?.userProfilePrompt,
-            scoringModel: settings?.scoringModel ?? "claude-haiku-4-5-20251001",
             summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
             summaryStyle: settings?.summaryStyle ?? "concise"
         )

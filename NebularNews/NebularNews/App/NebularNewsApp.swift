@@ -39,6 +39,11 @@ struct NebularNewsApp: App {
             .environment(appState)
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
+            .task(id: appState.mode) {
+                guard appState.isStandaloneMode else { return }
+                let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
+                await service.bootstrap()
+            }
         }
         .modelContainer(modelContainer)
         .onChange(of: scenePhase) { _, newPhase in

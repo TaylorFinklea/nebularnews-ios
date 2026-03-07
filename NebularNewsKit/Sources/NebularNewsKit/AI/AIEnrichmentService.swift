@@ -6,9 +6,6 @@ import SwiftData
 /// Result of AI enrichment for a single article.
 public struct EnrichmentResult: Sendable {
     public let articleId: String
-    public let score: Int?
-    public let scoreLabel: String?
-    public let scoreExplanation: String?
     public let summary: String?
     public let keyPoints: [String]?
     public let error: String?
@@ -18,12 +15,12 @@ public struct EnrichmentResult: Sendable {
 
 // MARK: - Service
 
-/// Orchestrates AI enrichment (scoring, summarization, key point extraction) for articles.
+/// Orchestrates optional AI enrichment (summarization and key point extraction) for articles.
 ///
 /// Runs as an `actor` — its own isolation domain separate from MainActor — because
 /// it coordinates multi-step LLM calls that shouldn't block the UI. Each article
-/// goes through up to three sequential API calls (score → summary → key points),
-/// run sequentially to respect Anthropic rate limits.
+/// goes through up to two sequential API calls (summary → key points), run
+/// sequentially to respect Anthropic rate limits.
 public actor AIEnrichmentService {
     private let client: AnthropicClient
     private let articleRepo: LocalArticleRepository
@@ -39,11 +36,9 @@ public actor AIEnrichmentService {
 
     // MARK: - Public API
 
-    /// Enrich a single article with AI-generated score, summary, and key points.
+    /// Enrich a single article with AI-generated summary and key points.
     public func enrichArticle(
         snapshot: ArticleSnapshot,
-        userProfile: String?,
-        scoringModel: String,
         summaryModel: String,
         summaryStyle: String
     ) async -> EnrichmentResult {
@@ -51,29 +46,10 @@ public actor AIEnrichmentService {
         let title = snapshot.title ?? "Untitled"
         let url = snapshot.canonicalUrl ?? ""
 
-        var score: Int?
-        var scoreLabel: String?
-        var scoreExplanation: String?
         var summary: String?
         var keyPoints: [String]?
 
-        // Step 1: Score (only if user has a profile configured)
-        if let profile = userProfile, !profile.isEmpty {
-            do {
-                let result = try await scoreArticle(
-                    title: title, url: url, content: content,
-                    profile: profile, model: scoringModel
-                )
-                score = result.score
-                scoreLabel = result.label
-                scoreExplanation = result.reason
-            } catch {
-                // Non-fatal — continue with summary/key points
-                print("[AIEnrichment] Scoring failed for \(snapshot.id): \(error.localizedDescription)")
-            }
-        }
-
-        // Step 2: Summary
+        // Step 1: Summary
         do {
             summary = try await summarizeArticle(
                 title: title, url: url, content: content,
@@ -83,7 +59,7 @@ public actor AIEnrichmentService {
             print("[AIEnrichment] Summary failed for \(snapshot.id): \(error.localizedDescription)")
         }
 
-        // Step 3: Key points
+        // Step 2: Key points
         do {
             keyPoints = try await extractKeyPoints(
                 title: title, url: url, content: content,
@@ -93,27 +69,34 @@ public actor AIEnrichmentService {
             print("[AIEnrichment] Key points failed for \(snapshot.id): \(error.localizedDescription)")
         }
 
+        guard summary != nil || !(keyPoints?.isEmpty ?? true) else {
+            return EnrichmentResult(
+                articleId: snapshot.id,
+                summary: nil,
+                keyPoints: nil,
+                error: "No AI enrichment generated"
+            )
+        }
+
         // Persist results
         do {
             try await articleRepo.updateAIFields(
                 id: snapshot.id,
                 summary: summary,
                 keyPoints: keyPoints,
-                score: score,
-                scoreLabel: scoreLabel,
-                scoreExplanation: scoreExplanation
+                score: nil,
+                scoreLabel: nil,
+                scoreExplanation: nil
             )
         } catch {
             return EnrichmentResult(
-                articleId: snapshot.id, score: score, scoreLabel: scoreLabel,
-                scoreExplanation: scoreExplanation, summary: summary,
+                articleId: snapshot.id, summary: summary,
                 keyPoints: keyPoints, error: "Failed to save: \(error.localizedDescription)"
             )
         }
 
         return EnrichmentResult(
-            articleId: snapshot.id, score: score, scoreLabel: scoreLabel,
-            scoreExplanation: scoreExplanation, summary: summary,
+            articleId: snapshot.id, summary: summary,
             keyPoints: keyPoints, error: nil
         )
     }
@@ -121,8 +104,6 @@ public actor AIEnrichmentService {
     /// Enrich multiple unprocessed articles. Runs sequentially to respect rate limits.
     public func enrichUnprocessedArticles(
         limit: Int = 5,
-        userProfile: String?,
-        scoringModel: String,
         summaryModel: String,
         summaryStyle: String
     ) async -> [EnrichmentResult] {
@@ -135,8 +116,6 @@ public actor AIEnrichmentService {
 
             let result = await enrichArticle(
                 snapshot: snapshot,
-                userProfile: userProfile,
-                scoringModel: scoringModel,
                 summaryModel: summaryModel,
                 summaryStyle: summaryStyle
             )
@@ -144,68 +123,6 @@ public actor AIEnrichmentService {
         }
 
         return results
-    }
-
-    // MARK: - Scoring
-
-    private func scoreArticle(
-        title: String, url: String, content: String,
-        profile: String, model: String
-    ) async throws -> ScoreResult {
-        let systemPrompt = "You are a transparent relevance scorer. Judge fit against the user profile only, not writing quality."
-
-        let userPrompt = """
-        You are scoring how well this article matches the user's preferences.
-
-        Preferences:
-        \(profile)
-
-        Article:
-        Title: \(title)
-        URL: \(url)
-
-        Content:
-        \(content)
-
-        Return JSON only with keys:
-        - score (1-5 integer)
-        - label (short text)
-        - reason (one paragraph)
-        - evidence (array of short quoted snippets from article content)
-        """
-
-        let response = try await client.chat(
-            messages: [AIMessage(role: "user", content: userPrompt)],
-            system: systemPrompt,
-            model: model,
-            maxTokens: 800,
-            temperature: 0.2
-        )
-
-        return try parseScoreResponse(response.text)
-    }
-
-    private struct ScoreResult {
-        let score: Int
-        let label: String
-        let reason: String
-    }
-
-    private func parseScoreResponse(_ text: String) throws -> ScoreResult {
-        guard let data = extractJSON(from: text)?.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let score = json["score"] as? Int else {
-            throw AnthropicError.parseError(detail: "Could not parse score JSON")
-        }
-
-        let label = json["label"] as? String ?? scoreLabelForScore(score)
-        let reason = json["reason"] as? String ?? ""
-
-        return ScoreResult(
-            score: max(1, min(5, score)),
-            label: label,
-            reason: reason
-        )
     }
 
     // MARK: - Summarization
@@ -334,21 +251,5 @@ public actor AIEnrichmentService {
         }
 
         return nil
-    }
-
-    /// Default score label for a given 1-5 score.
-    ///
-    /// TODO: User contribution — this maps scores to human-readable labels.
-    /// The labels shape how users perceive relevance. Consider what language
-    /// best communicates the scoring signal for your reading workflow.
-    private func scoreLabelForScore(_ score: Int) -> String {
-        switch score {
-        case 5: return "Perfect match"
-        case 4: return "Strong fit"
-        case 3: return "Moderate fit"
-        case 2: return "Weak fit"
-        case 1: return "Low relevance"
-        default: return "Unscored"
-        }
     }
 }

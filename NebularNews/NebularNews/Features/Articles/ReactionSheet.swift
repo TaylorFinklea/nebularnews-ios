@@ -27,8 +27,9 @@ struct ReactionSheet: View {
         )
     }
 
-    private var currentOptions: [ReasonOption] {
-        selectedValue == 1 ? Self.upReasons : Self.downReasons
+    private var currentOptions: [ReactionReasonOption] {
+        guard let selectedValue else { return [] }
+        return reasonOptions(for: selectedValue)
     }
 
     var body: some View {
@@ -117,42 +118,48 @@ struct ReactionSheet: View {
     // MARK: - Actions
 
     private func save() {
-        article.reactionValue = selectedValue
-        let codes = currentOptions
-            .filter { selectedCodes.contains($0.code) }
-            .map(\.code)
-        article.reactionReasonCodes = codes.isEmpty ? nil : codes.joined(separator: ",")
+        let previousValue = article.reactionValue
+        let newValue = selectedValue
+        let canonicalCodes = selectedValue.map {
+            canonicalizeReasonCodes(
+                for: $0,
+                codes: currentOptions
+                    .filter { selectedCodes.contains($0.code) }
+                    .map(\.code)
+            )
+        } ?? []
+
+        article.reactionValue = newValue
+        article.reactionReasonCodes = canonicalCodes.isEmpty ? nil : canonicalCodes.joined(separator: ",")
         try? modelContext.save()
+
+        Task {
+            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            await service.processReactionChange(
+                articleID: article.id,
+                previousValue: previousValue,
+                newValue: newValue,
+                reasonCodes: canonicalCodes
+            )
+        }
         dismiss()
     }
 
     private func clearReaction() {
+        let previousValue = article.reactionValue
         article.reactionValue = nil
         article.reactionReasonCodes = nil
         try? modelContext.save()
+
+        Task {
+            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            await service.processReactionChange(
+                articleID: article.id,
+                previousValue: previousValue,
+                newValue: nil,
+                reasonCodes: []
+            )
+        }
         dismiss()
     }
-
-    // MARK: - Reason Options
-
-    private struct ReasonOption {
-        let code: String
-        let label: String
-    }
-
-    private static let upReasons: [ReasonOption] = [
-        .init(code: "up_interest_match", label: "Matches my interests"),
-        .init(code: "up_source_trust", label: "Trust this source"),
-        .init(code: "up_good_timing", label: "Good timing"),
-        .init(code: "up_good_depth", label: "Good depth"),
-        .init(code: "up_author_like", label: "Like this author"),
-    ]
-
-    private static let downReasons: [ReasonOption] = [
-        .init(code: "down_off_topic", label: "Off topic for me"),
-        .init(code: "down_source_distrust", label: "Don't trust this source"),
-        .init(code: "down_stale", label: "Too old / stale"),
-        .init(code: "down_too_shallow", label: "Too shallow"),
-        .init(code: "down_avoid_author", label: "Avoid this author"),
-    ]
 }
