@@ -366,49 +366,55 @@ struct ArticleDetailView: View {
     }
 }
 
-// MARK: - Simple HTML → AttributedString renderer
+// MARK: - Simple HTML → Plain Text renderer
 
 private struct HTMLTextView: View {
     let html: String
 
     var body: some View {
-        if let attributed = renderHTML(html) {
-            Text(attributed)
+        let plainText = renderPlainText(html)
+
+        if plainText.isEmpty {
+            Text("This article didn't include readable inline text. Open it in your browser for the full version.")
                 .font(.body)
                 .lineSpacing(4)
                 .textSelection(.enabled)
         } else {
-            // Fallback: strip tags and show plain text
-            Text(html.strippedHTML)
+            Text(plainText)
                 .font(.body)
                 .lineSpacing(4)
                 .textSelection(.enabled)
         }
     }
 
-    private func renderHTML(_ html: String) -> AttributedString? {
-        // Wrap in basic styling for readability
-        let styled = """
-        <style>
-            body { font-family: -apple-system; font-size: 17px; line-height: 1.5; }
-            img { max-width: 100%; height: auto; }
-            a { color: #007AFF; }
-            pre, code { font-family: Menlo; font-size: 14px; background: #f5f5f5; padding: 4px; }
-        </style>
-        \(html)
-        """
-
-        guard let data = styled.data(using: .utf8) else { return nil }
-
-        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
-            .documentType: NSAttributedString.DocumentType.html,
-            .characterEncoding: String.Encoding.utf8.rawValue
-        ]
-
-        guard let nsAttr = try? NSAttributedString(data: data, options: options, documentAttributes: nil) else {
-            return nil
-        }
-
-        return try? AttributedString(nsAttr, including: \.uiKit)
+    private func renderPlainText(_ html: String) -> String {
+        html
+            .replacingOccurrences(
+                of: "(?i)<\\s*br\\s*/?\\s*>",
+                with: "\n",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)<\\s*/\\s*(p|div|section|article|h[1-6]|ul|ol|li|blockquote|tr)\\s*>",
+                with: "\n",
+                options: .regularExpression
+            )
+            .replacingOccurrences(
+                of: "(?i)<\\s*li\\b[^>]*>",
+                with: "• ",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .replacingOccurrences(of: "&nbsp;", with: " ")
+            .replacingOccurrences(of: "[ \\t\\f\\r]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
+            .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
