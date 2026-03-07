@@ -60,20 +60,33 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
     let tintColor: Color?
 
     func body(content: Content) -> some View {
+        glassContent(content)
+    }
+
+    private var tintFill: Color {
+        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.14)
+    }
+
+    @ViewBuilder
+    private func glassContent(_ content: Content) -> some View {
+#if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content
                 .glassEffect(.regular, in: shape)
                 .tint(tintColor)
         } else {
-            content
-                .background(.ultraThinMaterial, in: shape)
-                .background(tintFill, in: shape)
-                .overlay(shape.strokeBorder(Color.white.opacity(0.08)))
+            fallbackContent(content)
         }
+#else
+        fallbackContent(content)
+#endif
     }
 
-    private var tintFill: Color {
-        (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.14)
+    private func fallbackContent(_ content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: shape)
+            .background(tintFill, in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.08)))
     }
 }
 
@@ -81,20 +94,33 @@ private struct GlassCapsuleBackground: ViewModifier {
     let tintColor: Color?
 
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular, in: .capsule)
-                .tint(tintColor)
-        } else {
-            content
-                .background(.ultraThinMaterial, in: Capsule())
-                .background(tintFill, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
-        }
+        glassContent(content)
     }
 
     private var tintFill: Color {
         (tintColor ?? Color.white).opacity(tintColor == nil ? 0.05 : 0.18)
+    }
+
+    @ViewBuilder
+    private func glassContent(_ content: Content) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+                .tint(tintColor)
+        } else {
+            fallbackContent(content)
+        }
+#else
+        fallbackContent(content)
+#endif
+    }
+
+    private func fallbackContent(_ content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(tintFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
     }
 }
 
