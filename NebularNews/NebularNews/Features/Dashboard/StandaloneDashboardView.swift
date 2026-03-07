@@ -105,7 +105,7 @@ struct StandaloneDashboardView: View {
                     title: "Unread",
                     value: "\(unreadCount)",
                     icon: "envelope.badge",
-                    color: unreadCount > 0 ? .blue : .secondary
+                    color: unreadCount > 0 ? Color.accentColor : .secondary
                 )
                 MetricCard(
                     title: "New Today",
@@ -209,7 +209,7 @@ private struct MetricCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .modifier(GlassRoundedBackground(cornerRadius: 12))
     }
 }
 
@@ -228,6 +228,6 @@ private struct StatPill: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+        .modifier(GlassRoundedBackground(cornerRadius: 8))
     }
 }

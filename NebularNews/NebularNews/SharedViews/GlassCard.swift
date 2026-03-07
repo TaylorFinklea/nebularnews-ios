@@ -55,6 +55,37 @@ struct TagPill: View {
     }
 }
 
+/// Applies glass or material background to any rounded rectangle.
+/// Use this for dashboard cards, stat pills, or any element that
+/// should get Liquid Glass on iOS 26+ without the full GlassCard padding.
+struct GlassRoundedBackground: ViewModifier {
+    var cornerRadius: CGFloat = 12
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        glassContent(content, shape: shape)
+    }
+
+    @ViewBuilder
+    private func glassContent(_ content: Content, shape: RoundedRectangle) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            fallbackContent(content, shape: shape)
+        }
+#else
+        fallbackContent(content, shape: shape)
+#endif
+    }
+
+    private func fallbackContent(_ content: Content, shape: RoundedRectangle) -> some View {
+        content
+            .background(.ultraThinMaterial, in: shape)
+            .overlay(shape.strokeBorder(Color.white.opacity(0.08)))
+    }
+}
+
 private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
     let shape: ShapeType
     let tintColor: Color?
