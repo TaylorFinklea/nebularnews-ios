@@ -49,71 +49,8 @@ struct ArticleDetailView: View {
                 }
                 .navigationTitle(article.feed?.title ?? "Article")
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItemGroup(placement: .bottomBar) {
-                        // Mark read/unread
-                        Button {
-                            article.isRead.toggle()
-                            article.readAt = article.isRead ? Date() : nil
-                            try? modelContext.save()
-                        } label: {
-                            Label(
-                                article.isRead ? "Mark Unread" : "Mark Read",
-                                systemImage: article.isRead ? "envelope.badge" : "envelope.open"
-                            )
-                        }
-
-                        Spacer()
-
-                        // Summary generation (on-demand)
-                        if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
-                            Button {
-                                Task { await enrichArticle(article) }
-                            } label: {
-                                if isEnriching {
-                                    ProgressView()
-                                } else {
-                                    Label("Summarize", systemImage: "text.alignleft")
-                                }
-                            }
-                            .disabled(isEnriching)
-                        }
-
-                        Spacer()
-
-                        // Open in browser
-                        if let urlString = article.canonicalUrl,
-                           let url = URL(string: urlString) {
-                            Button {
-                                openURL(url)
-                            } label: {
-                                Label("Open in Browser", systemImage: "safari")
-                            }
-                        }
-
-                        Spacer()
-
-                        // Reaction
-                        Button {
-                            showReactionSheet = true
-                        } label: {
-                            Label(
-                                "React",
-                                systemImage: reactionIcon(for: article.reactionValue)
-                            )
-                            .foregroundStyle(reactionColor(for: article.reactionValue))
-                        }
-
-                        Spacer()
-
-                        // Share
-                        if let urlString = article.canonicalUrl,
-                           let url = URL(string: urlString) {
-                            ShareLink(item: url) {
-                                Label("Share", systemImage: "square.and.arrow.up")
-                            }
-                        }
-                    }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    articleActionBar(article)
                 }
                 .sheet(isPresented: $showTagPicker) {
                     TagPickerSheet(article: article)
@@ -141,6 +78,90 @@ struct ArticleDetailView: View {
     }
 
     // MARK: - Header
+
+    @ViewBuilder
+    private func articleActionBar(_ article: Article) -> some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 0) {
+                Button {
+                    article.isRead.toggle()
+                    article.readAt = article.isRead ? Date() : nil
+                    try? modelContext.save()
+                } label: {
+                    actionIcon(
+                        article.isRead ? "envelope.badge" : "envelope.open",
+                        color: .primary
+                    )
+                }
+                .accessibilityLabel(article.isRead ? "Mark Unread" : "Mark Read")
+
+                if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
+                    Button {
+                        Task { await enrichArticle(article) }
+                    } label: {
+                        Group {
+                            if isEnriching {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .tint(.primary)
+                                    .frame(width: 48, height: 48)
+                            } else {
+                                actionIcon("text.alignleft", color: .primary)
+                            }
+                        }
+                    }
+                    .disabled(isEnriching)
+                    .accessibilityLabel("Summarize")
+                }
+
+                if let urlString = article.canonicalUrl,
+                   let url = URL(string: urlString) {
+                    Button {
+                        openURL(url)
+                    } label: {
+                        actionIcon("safari", color: .primary)
+                    }
+                    .accessibilityLabel("Open in Browser")
+                }
+
+                Button {
+                    showReactionSheet = true
+                } label: {
+                    actionIcon(
+                        reactionIcon(for: article.reactionValue),
+                        color: reactionColor(for: article.reactionValue)
+                    )
+                }
+                .accessibilityLabel("React")
+            }
+            .buttonStyle(ArticleActionBarButtonStyle())
+            .padding(.horizontal, 6)
+            .padding(.vertical, 6)
+            .modifier(ArticleActionBarCapsuleBackground())
+
+            if let urlString = article.canonicalUrl,
+               let url = URL(string: urlString) {
+                ShareLink(item: url) {
+                    actionIcon("square.and.arrow.up", color: .primary)
+                }
+                .buttonStyle(ArticleActionBarButtonStyle())
+                .modifier(ArticleActionButtonBackground())
+                .accessibilityLabel("Share")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity)
+    }
+
+    private func actionIcon(_ systemName: String, color: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 19, weight: .medium))
+            .foregroundStyle(color)
+            .frame(width: 48, height: 48)
+            .contentShape(Rectangle())
+    }
 
     @ViewBuilder
     private func articleHeader(_ article: Article) -> some View {
@@ -416,5 +437,71 @@ private struct HTMLTextView: View {
             .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
             .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private struct ArticleActionBarButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.68 : 1)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
+    }
+}
+
+private struct ArticleActionBarCapsuleBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        glassContent(content)
+            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+    }
+
+    @ViewBuilder
+    private func glassContent(_ content: Content) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            fallbackContent(content)
+        }
+#else
+        fallbackContent(content)
+#endif
+    }
+
+    private func fallbackContent(_ content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.10)))
+    }
+}
+
+private struct ArticleActionButtonBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        glassContent(content)
+            .shadow(color: .black.opacity(0.16), radius: 16, y: 8)
+    }
+
+    @ViewBuilder
+    private func glassContent(_ content: Content) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .buttonStyle(.glass)
+        } else {
+            fallbackContent(content)
+        }
+#else
+        fallbackContent(content)
+#endif
+    }
+
+    private func fallbackContent(_ content: Content) -> some View {
+        content
+            .padding(6)
+            .background(.ultraThinMaterial, in: Capsule())
+            .background(Color.white.opacity(0.08), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.10)))
     }
 }
