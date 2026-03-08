@@ -1,8 +1,12 @@
 import SwiftUI
+import SwiftData
+import NebularNewsKit
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
+    @Query(filter: #Predicate<Article> { $0.readingListAddedAt != nil })
+    private var readingListArticles: [Article]
 
     private var palette: NebularPalette {
         NebularPalette.forColorScheme(colorScheme)
@@ -21,7 +25,7 @@ struct MainTabView: View {
         .tint(palette.primary)
     }
 
-    // MARK: - Standalone: Today / Feed / Discover
+    // MARK: - Standalone: Today / Feed / Reading List / Discover
 
     private var standaloneTabs: some View {
         TabView {
@@ -32,6 +36,11 @@ struct MainTabView: View {
             Tab("Feed", systemImage: "doc.richtext") {
                 FeedTabView()
             }
+
+            Tab("Reading List", systemImage: "bookmark") {
+                ReadingListView()
+            }
+            .badge(readingListArticles.count)
 
             Tab("Discover", systemImage: "safari") {
                 DiscoverView()

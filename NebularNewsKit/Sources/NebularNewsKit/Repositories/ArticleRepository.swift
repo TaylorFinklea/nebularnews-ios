@@ -234,7 +234,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func deleteOlderThan(date: Date) async throws -> Int {
         let descriptor = FetchDescriptor<Article>()
         let old = try modelContext.fetch(descriptor).filter { article in
-            article.retentionReferenceDate < date
+            !article.isInReadingList && article.retentionReferenceDate < date
         }
 
         guard !old.isEmpty else {

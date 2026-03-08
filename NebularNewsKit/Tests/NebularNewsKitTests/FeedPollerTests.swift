@@ -280,4 +280,34 @@ struct FeedPollerTests {
         let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         #expect(remaining.count == 1)
     }
+
+    @Test("Cleanup keeps saved articles even when they are older than retention")
+    func cleanupKeepsSavedArticles() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        let savedArticle = ParsedArticle(
+            url: "https://example.com/saved-archive",
+            title: "Saved Archive Article",
+            publishedAt: Date(timeIntervalSinceNow: -120 * 86400),
+            contentHash: "savedarchivehash123"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: savedArticle)
+
+        let articles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        let article = try #require(articles.first)
+        article.addToReadingList(at: Date())
+
+        let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+
+        #expect(deleted == 0)
+
+        let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.isInReadingList == true)
+    }
 }

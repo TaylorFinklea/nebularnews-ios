@@ -394,6 +394,18 @@ struct ArticleDetailView: View {
             }
 
             Button {
+                toggleReadingList(for: article)
+            } label: {
+                toolbarLabel(
+                    article.isInReadingList ? "Remove from Reading List" : "Add to Reading List",
+                    systemImage: article.isInReadingList ? "bookmark.fill" : "bookmark",
+                    tint: article.isInReadingList ? palette.primary : .secondary
+                )
+            }
+            .accessibilityLabel(article.isInReadingList ? "Remove from Reading List" : "Add to Reading List")
+            Spacer()
+
+            Button {
                 showReactionSheet = true
             } label: {
                 toolbarLabel(
@@ -405,13 +417,6 @@ struct ArticleDetailView: View {
             .accessibilityLabel("React")
             .accessibilityValue(reactionAccessibilityValue(for: article.reactionValue))
 
-            if let url = articleURL(for: article) {
-                Spacer()
-                ShareLink(item: url) {
-                    toolbarLabel("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-
             Spacer()
             overflowMenu(article)
         }
@@ -419,6 +424,12 @@ struct ArticleDetailView: View {
 
     private func overflowMenu(_ article: Article) -> some View {
         Menu {
+            if let url = articleURL(for: article) {
+                ShareLink(item: url) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+
             Button(
                 article.isRead ? "Mark Unread" : "Mark Read",
                 systemImage: article.isRead ? "envelope.badge" : "envelope.open"
@@ -545,6 +556,11 @@ struct ArticleDetailView: View {
 
     private func toggleReadState(for article: Article) {
         if article.isRead { article.markUnread() } else { article.markRead() }
+        try? modelContext.save()
+    }
+
+    private func toggleReadingList(for article: Article) {
+        article.toggleReadingList()
         try? modelContext.save()
     }
 

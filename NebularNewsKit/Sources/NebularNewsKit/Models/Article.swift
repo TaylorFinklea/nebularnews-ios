@@ -47,6 +47,7 @@ public final class Article: @unchecked Sendable {
     public var isRead: Bool = false
     public var readAt: Date?
     public var dismissedAt: Date?
+    public var readingListAddedAt: Date?
     public var reactionValue: Int?
     public var reactionReasonCodes: String?
     public var feedbackRating: Int?
@@ -115,6 +116,10 @@ public final class Article: @unchecked Sendable {
         dismissedAt != nil
     }
 
+    public var isInReadingList: Bool {
+        readingListAddedAt != nil
+    }
+
     public var isUnreadQueueCandidate: Bool {
         !isRead && !isDismissed
     }
@@ -161,5 +166,21 @@ public final class Article: @unchecked Sendable {
 
     public func clearDismissal() {
         dismissedAt = nil
+    }
+
+    public func addToReadingList(at date: Date = Date()) {
+        readingListAddedAt = date
+    }
+
+    public func removeFromReadingList() {
+        readingListAddedAt = nil
+    }
+
+    public func toggleReadingList(at date: Date = Date()) {
+        if isInReadingList {
+            removeFromReadingList()
+        } else {
+            addToReadingList(at: date)
+        }
     }
 }

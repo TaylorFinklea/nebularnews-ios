@@ -70,4 +70,62 @@ struct NebularNewsTests {
         #expect(learningArticle.isLearningScore == true)
         #expect(learningArticle.displayScoreLabel == "Learning your preferences")
     }
+
+    @Test func articleReadingListHelpersTrackSavedState() async throws {
+        let article = Article(canonicalUrl: "https://example.com/reading-list", title: "Saved")
+        let savedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        #expect(article.isInReadingList == false)
+        #expect(article.readingListAddedAt == nil)
+
+        article.addToReadingList(at: savedAt)
+
+        #expect(article.isInReadingList)
+        #expect(article.readingListAddedAt == savedAt)
+
+        article.toggleReadingList()
+
+        #expect(article.isInReadingList == false)
+        #expect(article.readingListAddedAt == nil)
+    }
+
+    @Test func readingListContentFiltersAndSortsBySaveDateThenPublishDate() async throws {
+        let oldestSaved = Article(canonicalUrl: "https://example.com/1", title: "Birding Dispatch")
+        oldestSaved.feed = Feed(feedUrl: "https://example.com/feed", title: "Birding Weekly")
+        oldestSaved.readingListAddedAt = Date(timeIntervalSince1970: 100)
+        oldestSaved.publishedAt = Date(timeIntervalSince1970: 1_000)
+
+        let newestSavedUnread = Article(canonicalUrl: "https://example.com/2", title: "City Budget Vote")
+        newestSavedUnread.feed = Feed(feedUrl: "https://example.com/local", title: "Kansas City Today")
+        newestSavedUnread.readingListAddedAt = Date(timeIntervalSince1970: 300)
+        newestSavedUnread.publishedAt = Date(timeIntervalSince1970: 900)
+
+        let newestSavedRead = Article(canonicalUrl: "https://example.com/3", title: "Transit Expansion")
+        newestSavedRead.feed = Feed(feedUrl: "https://example.com/local", title: "Kansas City Today")
+        newestSavedRead.readingListAddedAt = Date(timeIntervalSince1970: 300)
+        newestSavedRead.publishedAt = Date(timeIntervalSince1970: 950)
+        newestSavedRead.markRead(at: Date(timeIntervalSince1970: 400))
+
+        let ordered = ReadingListContent.filteredArticles(
+            from: [oldestSaved, newestSavedUnread, newestSavedRead],
+            searchText: "",
+            filterMode: .all
+        )
+
+        #expect(ordered.compactMap(\.title) == ["Transit Expansion", "City Budget Vote", "Birding Dispatch"])
+
+        let unreadOnly = ReadingListContent.filteredArticles(
+            from: [oldestSaved, newestSavedUnread, newestSavedRead],
+            searchText: "",
+            filterMode: .unread
+        )
+        #expect(unreadOnly.compactMap(\.title) == ["City Budget Vote", "Birding Dispatch"])
+
+        let searchResults = ReadingListContent.filteredArticles(
+            from: [oldestSaved, newestSavedUnread, newestSavedRead],
+            searchText: "Kansas",
+            filterMode: .all
+        )
+        #expect(searchResults.compactMap(\.title) == ["Transit Expansion", "City Budget Vote"])
+    }
 }
