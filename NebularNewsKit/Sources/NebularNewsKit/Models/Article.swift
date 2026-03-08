@@ -19,6 +19,7 @@ public final class Article: @unchecked Sendable {
     public var contentHtml: String?
     public var excerpt: String?
     public var imageUrl: String?
+    public var ogImageUrl: String?
     public var contentHash: String?
 
     // AI-generated enrichments
@@ -59,6 +60,11 @@ public final class Article: @unchecked Sendable {
     }
 
     // MARK: - Computed Helpers
+
+    /// Best available image URL: RSS-provided imageUrl, then cached OG image.
+    public var resolvedImageUrl: String? {
+        imageUrl ?? ogImageUrl
+    }
 
     /// Decoded key points from the JSON string.
     public var keyPoints: [String] {

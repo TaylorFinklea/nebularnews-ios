@@ -14,6 +14,7 @@ struct ArticleDetailView: View {
     @State private var isEnriching = false
     @State private var showTagPicker = false
     @State private var showReactionSheet = false
+    @State private var scrollOffset: CGFloat = 0
 
     init(articleId: String) {
         self.articleId = articleId
@@ -29,41 +30,19 @@ struct ArticleDetailView: View {
     var body: some View {
         Group {
             if let article {
-                NebularScreen(emphasis: .reading) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            articleHeaderCard(article)
-                            fitSection(article)
-                            summarySection(article)
-                            keyPointsSection(article)
-                            contentSection(article)
-                        }
-                        .padding()
+                immersiveReader(article)
+                    .sheet(isPresented: $showTagPicker) {
+                        TagPickerSheet(article: article)
                     }
-                }
-                .navigationTitle(article.feed?.title ?? "Article")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    articleToolbar(article)
-                }
-                .sheet(isPresented: $showTagPicker) {
-                    TagPickerSheet(article: article)
-                }
-                .sheet(isPresented: $showReactionSheet) {
-                    ReactionSheet(article: article)
-                }
-                .onAppear {
-                    let shouldSave = article.isDismissed || !article.isRead
-                    if article.isDismissed {
-                        article.clearDismissal()
+                    .sheet(isPresented: $showReactionSheet) {
+                        ReactionSheet(article: article)
                     }
-                    if !article.isRead {
-                        article.markRead()
+                    .onAppear {
+                        let shouldSave = article.isDismissed || !article.isRead
+                        if article.isDismissed { article.clearDismissal() }
+                        if !article.isRead { article.markRead() }
+                        if shouldSave { try? modelContext.save() }
                     }
-                    if shouldSave {
-                        try? modelContext.save()
-                    }
-                }
             } else {
                 ContentUnavailableView(
                     "Article Not Found",
@@ -73,35 +52,81 @@ struct ArticleDetailView: View {
             }
         }
         .toolbar(.hidden, for: .tabBar)
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    // MARK: - Header + Actions
+    // MARK: - Immersive Reader Layout
 
     @ViewBuilder
-    private func articleHeaderCard(_ article: Article) -> some View {
-        GlassCard(cornerRadius: 30, style: .raised, tintColor: headerAccentColor(for: article)) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        if let feedTitle = article.feed?.title, !feedTitle.isEmpty {
-                            Label(feedTitle, systemImage: "antenna.radiowaves.left.and.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
+    private func immersiveReader(_ article: Article) -> some View {
+        NebularScreen(emphasis: .immersive) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Scroll offset tracker
+                    GeometryReader { geo in
+                        Color.clear
+                            .preference(
+                                key: ScrollOffsetKey.self,
+                                value: geo.frame(in: .named("immersiveScroll")).minY
+                            )
+                    }
+                    .frame(height: 0)
 
-                        Text(article.title ?? "Untitled")
-                            .font(.largeTitle.bold())
-                            .tracking(-0.8)
-                            .fixedSize(horizontal: false, vertical: true)
+                    // Parallax hero image
+                    ImmersiveHeroImage(article: article, scrollOffset: scrollOffset)
+
+                    // Content cards overlapping the hero bottom
+                    VStack(spacing: 16) {
+                        immersiveHeader(article)
+                        fitSection(article)
+                        summarySection(article)
+                        keyPointsSection(article)
+                        contentSection(article)
+                        tagSection(article)
+                        actionBar(article)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, -32)
+                    .padding(.bottom, 40)
+                }
+            }
+            .coordinateSpace(name: "immersiveScroll")
+            .onPreferenceChange(ScrollOffsetKey.self) { value in
+                scrollOffset = value
+            }
+        }
+        .toolbar {
+            articleToolbar(article)
+        }
+    }
+
+    // MARK: - Immersive Header
+
+    @ViewBuilder
+    private func immersiveHeader(_ article: Article) -> some View {
+        GlassCard(cornerRadius: 28, style: .raised, tintColor: headerAccentColor(for: article)) {
+            VStack(alignment: .leading, spacing: 14) {
+                // Feed source + score
+                HStack(spacing: 8) {
+                    if let feedTitle = article.feed?.title, !feedTitle.isEmpty {
+                        Label(feedTitle, systemImage: "antenna.radiowaves.left.and.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(palette.primary)
                     }
 
-                    Spacer(minLength: 12)
+                    Spacer()
 
                     if article.hasReadyScore, let score = article.score {
                         ScoreBadge(score: score)
                     }
                 }
 
+                // Title
+                Text(article.title ?? "Untitled")
+                    .font(NebularTypography.heroTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // Author + date
                 HStack(spacing: 12) {
                     if let author = article.author, !author.isEmpty {
                         Label(author, systemImage: "person")
@@ -115,8 +140,6 @@ struct ArticleDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-
-                tagSection(article)
             }
             .background(alignment: .topTrailing) {
                 NebularHeaderHalo(color: headerAccentColor(for: article))
@@ -125,234 +148,84 @@ struct ArticleDetailView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private func articleToolbar(_ article: Article) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .bottomBar) {
-            if let url = articleURL(for: article) {
-                Button {
-                    openURL(url)
-                } label: {
-                    toolbarLabel("Open in Browser", systemImage: "safari")
-                }
-                Spacer()
-            }
-
-            Button {
-                showReactionSheet = true
-            } label: {
-                toolbarLabel(
-                    "React",
-                    systemImage: reactionIcon(for: article.reactionValue),
-                    tint: reactionToolbarTint(for: article.reactionValue)
-                )
-            }
-            .accessibilityLabel("React")
-            .accessibilityValue(reactionAccessibilityValue(for: article.reactionValue))
-
-            if let url = articleURL(for: article) {
-                Spacer()
-                ShareLink(item: url) {
-                    toolbarLabel("Share", systemImage: "square.and.arrow.up")
-                }
-            }
-
-            Spacer()
-            overflowMenu(article)
-        }
-    }
-
-    private func overflowMenu(_ article: Article) -> some View {
-        Menu {
-            Button(
-                article.isRead ? "Mark Unread" : "Mark Read",
-                systemImage: article.isRead ? "envelope.badge" : "envelope.open"
-            ) {
-                toggleReadState(for: article)
-            }
-
-            if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
-                Button {
-                    Task { await enrichArticle(article) }
-                } label: {
-                    Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
-                }
-                .disabled(isEnriching)
-            }
-        } label: {
-            toolbarLabel("More", systemImage: "ellipsis")
-        }
-    }
-
-    // MARK: - Tags
-
-    @ViewBuilder
-    private func tagSection(_ article: Article) -> some View {
-        let tags = article.tags ?? []
-
-        VStack(alignment: .leading, spacing: 10) {
-            if !tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.id) { tag in
-                            TagPill(name: tag.name, colorHex: tag.colorHex)
-                        }
-                    }
-                }
-            }
-
-            Button {
-                showTagPicker = true
-            } label: {
-                Label(tags.isEmpty ? "Add Tags" : "Edit Tags", systemImage: "tag")
-                    .font(.caption)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-        }
-    }
-
-    // MARK: - Reaction Helpers
-
-    private func reactionIcon(for value: Int?) -> String {
-        switch value {
-        case 1: "hand.thumbsup.fill"
-        case -1: "hand.thumbsdown.fill"
-        default: "hand.thumbsup"
-        }
-    }
-
-    private func reactionColor(for value: Int?) -> Color {
-        switch value {
-        case 1: Color.forScore(5)
-        case -1: palette.danger
-        default: palette.primary
-        }
-    }
-
-    private func reactionToolbarTint(for value: Int?) -> Color {
-        switch value {
-        case 1, -1:
-            return reactionColor(for: value)
-        default:
-            return .secondary
-        }
-    }
-
-    private func reactionAccessibilityValue(for value: Int?) -> String {
-        switch value {
-        case 1:
-            return "Liked"
-        case -1:
-            return "Disliked"
-        default:
-            return "Not set"
-        }
-    }
-
-    private func toggleReadState(for article: Article) {
-        if article.isRead {
-            article.markUnread()
-        } else {
-            article.markRead()
-        }
-        try? modelContext.save()
-    }
-
-    private func articleURL(for article: Article) -> URL? {
-        guard let urlString = article.canonicalUrl else { return nil }
-        return URL(string: urlString)
-    }
-
-    private func toolbarLabel(
-        _ title: LocalizedStringKey,
-        systemImage: String,
-        tint: Color = .secondary
-    ) -> some View {
-        Label(title, systemImage: systemImage)
-            .labelStyle(.iconOnly)
-            .foregroundStyle(tint)
-    }
-
-    private func headerAccentColor(for article: Article) -> Color {
-        if article.hasReadyScore, let score = article.score {
-            return Color.forScore(score)
-        }
-        if article.isLearningScore {
-            return .purple
-        }
-        return palette.primary
-    }
-
-    // MARK: - Fit + Enrichment Sections
+    // MARK: - Fit Section
 
     @ViewBuilder
     private func fitSection(_ article: Article) -> some View {
         if article.hasReadyScore, let score = article.score {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    ScoreBadge(score: score)
-                    Text("Algorithmic fit")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(Color.forScore(score))
-                }
-
-                if let explanation = article.scoreExplanation, !explanation.isEmpty {
-                    DisclosureGroup("Why this score") {
-                        Text(explanation)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+            GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(score)) {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        ScoreBadge(score: score)
+                        Text("Algorithmic fit")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(Color.forScore(score))
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+
+                    if let explanation = article.scoreExplanation, !explanation.isEmpty {
+                        DisclosureGroup("Why this score") {
+                            Text(explanation)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
-            .modifier(DetailSectionCard(tintColor: Color.forScore(score)))
         } else if article.isLearningScore {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Learning", systemImage: "sparkles")
-                    .font(.subheadline.bold())
-                Text("Not enough preference signals yet. React to articles or refine tags to improve fit scoring.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            GlassCard(cornerRadius: 22, style: .standard, tintColor: .purple) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Learning", systemImage: "sparkles")
+                        .font(.subheadline.bold())
+                    Text("Not enough preference signals yet. React to articles or refine tags to improve fit scoring.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .modifier(DetailSectionCard(tintColor: .purple))
         }
     }
+
+    // MARK: - Summary
 
     @ViewBuilder
     private func summarySection(_ article: Article) -> some View {
         if let summary = article.summaryText, !summary.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Summary", systemImage: "text.alignleft")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                Text(summary)
-                    .font(.subheadline)
-                    .lineSpacing(3)
+            GlassCard(cornerRadius: 22, style: .standard, tintColor: palette.primary) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Summary", systemImage: "text.alignleft")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                    Text(summary)
+                        .font(.subheadline)
+                        .lineSpacing(3)
+                }
             }
-            .modifier(DetailSectionCard(tintColor: palette.primary))
         }
     }
+
+    // MARK: - Key Points
 
     @ViewBuilder
     private func keyPointsSection(_ article: Article) -> some View {
         let points = article.keyPoints
         if !points.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Key Points", systemImage: "list.bullet")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
-                ForEach(points, id: \.self) { point in
-                    HStack(alignment: .top, spacing: 6) {
-                        Text("•")
-                            .foregroundStyle(.secondary)
-                        Text(point)
-                            .font(.subheadline)
+            GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(4)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Key Points", systemImage: "list.bullet")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                    ForEach(points, id: \.self) { point in
+                        HStack(alignment: .top, spacing: 6) {
+                            Text("•")
+                                .foregroundStyle(.secondary)
+                            Text(point)
+                                .font(.subheadline)
+                        }
                     }
                 }
             }
-            .modifier(DetailSectionCard(tintColor: Color.forScore(4)))
         }
     }
 
@@ -360,13 +233,14 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func contentSection(_ article: Article) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("Article text", systemImage: "doc.text")
-                .font(.caption.bold())
-                .foregroundStyle(.secondary)
-            articleContent(article)
+        GlassCard(cornerRadius: 22, style: .standard, tintColor: palette.primary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Article text", systemImage: "doc.text")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+                articleContent(article)
+            }
         }
-        .modifier(DetailSectionCard(tintColor: palette.primary))
     }
 
     @ViewBuilder
@@ -391,6 +265,155 @@ struct ArticleDetailView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 28)
         }
+    }
+
+    // MARK: - Tags
+
+    @ViewBuilder
+    private func tagSection(_ article: Article) -> some View {
+        let tags = article.tags ?? []
+
+        GlassCard(cornerRadius: 22, style: .standard) {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("Tags", systemImage: "tag")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+
+                if !tags.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(tags, id: \.id) { tag in
+                                TagPill(name: tag.name, colorHex: tag.colorHex)
+                            }
+                        }
+                    }
+                }
+
+                Button {
+                    showTagPicker = true
+                } label: {
+                    Label(tags.isEmpty ? "Add Tags" : "Edit Tags", systemImage: "pencil")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    // MARK: - Action Bar
+
+    @ViewBuilder
+    private func actionBar(_ article: Article) -> some View {
+        GlassCard(cornerRadius: 22, style: .raised, tintColor: palette.primary) {
+            HStack(spacing: 0) {
+                if let url = articleURL(for: article) {
+                    actionButton("Safari", systemImage: "safari") {
+                        openURL(url)
+                    }
+                    Spacer()
+                }
+
+                actionButton(
+                    "React",
+                    systemImage: reactionIcon(for: article.reactionValue),
+                    tint: reactionColor(for: article.reactionValue)
+                ) {
+                    showReactionSheet = true
+                }
+
+                if let url = articleURL(for: article) {
+                    Spacer()
+                    ShareLink(item: url) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("Share")
+                                .font(.caption2)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                actionButton(
+                    article.isRead ? "Unread" : "Read",
+                    systemImage: article.isRead ? "envelope.badge" : "envelope.open"
+                ) {
+                    toggleReadState(for: article)
+                }
+            }
+        }
+    }
+
+    private func actionButton(
+        _ title: String,
+        systemImage: String,
+        tint: Color = .secondary,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .medium))
+                Text(title)
+                    .font(.caption2)
+            }
+            .foregroundStyle(tint)
+        }
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private func articleToolbar(_ article: Article) -> some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
+                Button {
+                    Task { await enrichArticle(article) }
+                } label: {
+                    Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
+                }
+                .disabled(isEnriching)
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func reactionIcon(for value: Int?) -> String {
+        switch value {
+        case 1: "hand.thumbsup.fill"
+        case -1: "hand.thumbsdown.fill"
+        default: "hand.thumbsup"
+        }
+    }
+
+    private func reactionColor(for value: Int?) -> Color {
+        switch value {
+        case 1: Color.forScore(5)
+        case -1: palette.danger
+        default: palette.primary
+        }
+    }
+
+    private func toggleReadState(for article: Article) {
+        if article.isRead { article.markUnread() } else { article.markRead() }
+        try? modelContext.save()
+    }
+
+    private func articleURL(for article: Article) -> URL? {
+        guard let urlString = article.canonicalUrl else { return nil }
+        return URL(string: urlString)
+    }
+
+    private func headerAccentColor(for article: Article) -> Color {
+        if article.hasReadyScore, let score = article.score {
+            return Color.forScore(score)
+        }
+        if article.isLearningScore { return .purple }
+        return palette.primary
     }
 
     // MARK: - On-Demand AI Enrichment
@@ -431,7 +454,16 @@ struct ArticleDetailView: View {
     }
 }
 
-// MARK: - Simple HTML → Plain Text renderer
+// MARK: - Scroll Offset Tracking
+
+private struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Simple HTML → Plain Text Renderer
 
 private struct HTMLTextView: View {
     let html: String
@@ -481,15 +513,5 @@ private struct HTMLTextView: View {
             .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
             .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-private struct DetailSectionCard: ViewModifier {
-    let tintColor: Color?
-
-    func body(content: Content) -> some View {
-        GlassCard(cornerRadius: 22, style: .standard, tintColor: tintColor) {
-            content
-        }
     }
 }

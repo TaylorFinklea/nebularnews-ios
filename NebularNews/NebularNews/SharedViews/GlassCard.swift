@@ -5,6 +5,9 @@ enum GlassSurfaceStyle {
     case standard
     case raised
     case accented
+    case hero
+    case medium
+    case compact
 }
 
 /// Reusable card with iOS 26 Liquid Glass material.
@@ -112,9 +115,9 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
 
     private var effectiveTintColor: Color? {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return tintColor
-        case .raised:
+        case .raised, .hero, .medium:
             return tintColor ?? palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08)
         case .accented:
             return tintColor ?? palette.primary
@@ -123,9 +126,9 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
 
     private var tintFill: Color {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return palette.surface
-        case .raised:
+        case .raised, .hero, .medium:
             return palette.surfaceStrong
         case .accented:
             return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.18 : 0.12)
@@ -134,9 +137,9 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
 
     private var borderColor: Color {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return palette.surfaceBorder.opacity(colorScheme == .dark ? 0.95 : 0.82)
-        case .raised:
+        case .raised, .hero, .medium:
             return palette.surfaceBorder.opacity(colorScheme == .dark ? 1.0 : 0.9)
         case .accented:
             return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.26 : 0.18)
@@ -144,15 +147,27 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
     }
 
     private var shadowColor: Color {
-        palette.shadow.opacity(style == .raised ? 0.42 : 0.18)
+        switch style {
+        case .raised, .hero: palette.shadow.opacity(0.42)
+        case .medium: palette.shadow.opacity(0.30)
+        default: palette.shadow.opacity(0.18)
+        }
     }
 
     private var shadowRadius: CGFloat {
-        style == .raised ? 20 : 12
+        switch style {
+        case .hero: 24
+        case .raised, .medium: 20
+        default: 12
+        }
     }
 
     private var shadowYOffset: CGFloat {
-        style == .raised ? 10 : 6
+        switch style {
+        case .hero: 12
+        case .raised, .medium: 10
+        default: 6
+        }
     }
 
     @ViewBuilder
@@ -195,9 +210,9 @@ private struct GlassCapsuleBackground: ViewModifier {
 
     private var effectiveTintColor: Color? {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return tintColor
-        case .raised:
+        case .raised, .hero, .medium:
             return tintColor ?? palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08)
         case .accented:
             return tintColor ?? palette.primary
@@ -206,9 +221,9 @@ private struct GlassCapsuleBackground: ViewModifier {
 
     private var tintFill: Color {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return palette.surface
-        case .raised:
+        case .raised, .hero, .medium:
             return palette.surfaceStrong
         case .accented:
             return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.16 : 0.11)
@@ -217,9 +232,9 @@ private struct GlassCapsuleBackground: ViewModifier {
 
     private var borderColor: Color {
         switch style {
-        case .standard:
+        case .standard, .compact:
             return palette.surfaceBorder.opacity(colorScheme == .dark ? 0.9 : 0.78)
-        case .raised:
+        case .raised, .hero, .medium:
             return palette.surfaceBorder.opacity(colorScheme == .dark ? 1.0 : 0.85)
         case .accented:
             return (tintColor ?? palette.primary).opacity(colorScheme == .dark ? 0.22 : 0.16)
@@ -227,15 +242,24 @@ private struct GlassCapsuleBackground: ViewModifier {
     }
 
     private var shadowColor: Color {
-        palette.shadow.opacity(style == .raised ? 0.26 : 0.12)
+        switch style {
+        case .raised, .hero, .medium: palette.shadow.opacity(0.26)
+        default: palette.shadow.opacity(0.12)
+        }
     }
 
     private var shadowRadius: CGFloat {
-        style == .raised ? 14 : 8
+        switch style {
+        case .raised, .hero, .medium: 14
+        default: 8
+        }
     }
 
     private var shadowYOffset: CGFloat {
-        style == .raised ? 8 : 4
+        switch style {
+        case .raised, .hero, .medium: 8
+        default: 4
+        }
     }
 
     @ViewBuilder
@@ -257,6 +281,23 @@ private struct GlassCapsuleBackground: ViewModifier {
         content
             .background(.ultraThinMaterial, in: Capsule())
             .background(tintFill, in: Capsule())
+    }
+}
+
+/// Card variant where the image fills the background and glass effect
+/// applies only to the text overlay region.
+struct GlassImageCard<Content: View>: View {
+    var cornerRadius: CGFloat = 20
+    var style: GlassSurfaceStyle = .hero
+    var tintColor: Color?
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        content
+            .clipShape(shape)
+            .modifier(GlassCardBackground(shape: shape, style: style, tintColor: tintColor))
     }
 }
 

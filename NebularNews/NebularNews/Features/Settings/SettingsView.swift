@@ -4,8 +4,12 @@ import NebularNewsKit
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     @Environment(AppState.self) private var appState
     @Environment(ThemeManager.self) private var themeManager
+
+    /// When true, shows a Done button for sheet dismissal.
+    var showsDismissButton: Bool = false
 
     @Query private var settingsResults: [AppSettings]
 
@@ -118,6 +122,13 @@ struct SettingsView: View {
         .scrollContentBackground(.hidden)
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
+        .toolbar {
+            if showsDismissButton {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 
     // MARK: - Bindings that auto-save

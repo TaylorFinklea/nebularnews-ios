@@ -306,21 +306,6 @@ private struct StatPill: View {
     }
 }
 
-private struct DashboardSectionHeader: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.title3.bold())
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-    }
-}
-
 private struct HeroPill: View {
     let label: String
     let value: String

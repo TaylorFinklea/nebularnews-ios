@@ -18,6 +18,13 @@ struct NebularPalette {
     let danger: Color
     let shadow: Color
 
+    // Magazine redesign tokens
+    let cardImageOverlay: Color
+    let heroGradientStart: Color
+    let heroGradientEnd: Color
+    let readingSurface: Color
+    let scoreGlow: Color
+
     static func forColorScheme(_ colorScheme: ColorScheme) -> NebularPalette {
         switch colorScheme {
         case .dark:
@@ -37,7 +44,12 @@ struct NebularPalette {
                 primaryStrong: rgb(0x6B57E8),
                 primarySoft: rgba(124, 106, 239, 0.12),
                 danger: rgb(0xF47A94),
-                shadow: rgba(0, 2, 12, 0.50)
+                shadow: rgba(0, 2, 12, 0.50),
+                cardImageOverlay: rgba(3, 7, 17, 0.60),
+                heroGradientStart: Color.clear,
+                heroGradientEnd: rgb(0x030711),
+                readingSurface: rgba(8, 11, 28, 0.90),
+                scoreGlow: rgba(124, 106, 239, 0.30)
             )
         default:
             return NebularPalette(
@@ -56,7 +68,12 @@ struct NebularPalette {
                 primaryStrong: rgb(0x4C30C4),
                 primarySoft: rgba(90, 62, 214, 0.08),
                 danger: rgb(0xB82850),
-                shadow: rgba(40, 20, 100, 0.10)
+                shadow: rgba(40, 20, 100, 0.10),
+                cardImageOverlay: rgba(248, 247, 252, 0.50),
+                heroGradientStart: Color.clear,
+                heroGradientEnd: rgb(0xF8F7FC),
+                readingSurface: rgba(255, 255, 255, 0.96),
+                scoreGlow: rgba(90, 62, 214, 0.20)
             )
         }
     }
@@ -74,10 +91,26 @@ struct NebularPalette {
     }
 }
 
+// MARK: - Typography
+
+struct NebularTypography {
+    static let heroTitle: Font = .system(size: 28, weight: .bold)
+    static let mediumCardTitle: Font = .system(size: 17, weight: .semibold)
+    static let compactTitle: Font = .system(size: 15, weight: .medium)
+    static let feedSource: Font = .caption.weight(.semibold)
+    static let briefingHeadline: Font = .title2.bold()
+    static let sectionHeader: Font = .title3.bold()
+    static let statValue: Font = .system(size: 34, weight: .bold, design: .rounded)
+}
+
+// MARK: - Backdrop
+
 enum NebularBackdropEmphasis {
     case standard
     case hero
     case reading
+    case immersive
+    case discover
 }
 
 struct NebularBackdrop: View {
@@ -148,6 +181,9 @@ struct NebularBackdrop: View {
                     .blur(radius: 20)
             }
             .overlay {
+                NebularStarField()
+            }
+            .overlay {
                 LinearGradient(
                     colors: [Color.white.opacity(colorScheme == .dark ? 0.02 : 0.08), .clear],
                     startPoint: .top,
@@ -165,6 +201,10 @@ struct NebularBackdrop: View {
             return primary ? 1.18 : 1.12
         case .reading:
             return primary ? 0.72 : 0.60
+        case .immersive:
+            return primary ? 0.40 : 0.30
+        case .discover:
+            return primary ? 1.05 : 1.0
         }
     }
 
@@ -173,9 +213,68 @@ struct NebularBackdrop: View {
         case .standard: 0.05
         case .hero: 0.08
         case .reading: 0.03
+        case .immersive: 0.02
+        case .discover: 0.06
         }
     }
 }
+
+// MARK: - Star Field
+
+/// Subtle star dots layered onto the backdrop for cosmic reinforcement.
+struct NebularStarField: View {
+    private struct Star: Identifiable {
+        let id: Int
+        let x: CGFloat
+        let y: CGFloat
+        let size: CGFloat
+        let opacity: Double
+    }
+
+    private let stars: [Star] = {
+        // Deterministic pseudo-random using a simple LCG
+        var seed: UInt64 = 0xAEB01A
+        func next() -> Double {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Double(seed >> 33) / Double(UInt32.max)
+        }
+        return (0..<40).map { i in
+            Star(
+                id: i,
+                x: CGFloat(next()),
+                y: CGFloat(next()),
+                size: CGFloat(1.0 + next() * 2.0),
+                opacity: 0.03 + next() * 0.05
+            )
+        }
+    }()
+
+    @State private var pulse = false
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(stars) { star in
+                Circle()
+                    .fill(Color.white.opacity(star.opacity))
+                    .frame(width: star.size, height: star.size)
+                    .position(
+                        x: star.x * geo.size.width,
+                        y: star.y * geo.size.height
+                    )
+                    .scaleEffect(pulse ? 1.3 : 1.0)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+    }
+}
+
+// MARK: - Screen Wrapper
 
 struct NebularScreen<Content: View>: View {
     var emphasis: NebularBackdropEmphasis = .standard
@@ -189,6 +288,8 @@ struct NebularScreen<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
+
+// MARK: - Header Halo
 
 struct NebularHeaderHalo: View {
     @Environment(\.colorScheme) private var colorScheme

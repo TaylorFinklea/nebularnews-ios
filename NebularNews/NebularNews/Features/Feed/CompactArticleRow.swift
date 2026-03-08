@@ -1,0 +1,43 @@
+import SwiftUI
+import NebularNewsKit
+
+/// Compact row for score-3 and below articles in the magazine grid.
+struct CompactArticleRow: View {
+    let article: Article
+
+    var body: some View {
+        GlassCard(cornerRadius: 16, style: .compact, tintColor: Color.forScore(article.score)) {
+            HStack(spacing: 12) {
+                ArticleImageView(article: article, size: .thumbnail)
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(article.title ?? "Untitled")
+                        .font(NebularTypography.compactTitle)
+                        .lineLimit(2)
+
+                    HStack(spacing: 6) {
+                        if let feedTitle = article.feed?.title {
+                            Text(feedTitle)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        ScoreBadge(score: article.score)
+
+                        if let date = article.publishedAt {
+                            Text(date.relativeDisplay)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
+        }
+        .opacity((article.isRead || article.isDismissed) ? 0.7 : 1)
+    }
+}

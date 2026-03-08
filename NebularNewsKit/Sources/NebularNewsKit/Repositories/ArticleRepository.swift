@@ -212,6 +212,12 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         }
     }
 
+    public func updateOGImageUrl(id: String, ogImageUrl: String) async throws {
+        guard let article = await get(id: id) else { return }
+        article.ogImageUrl = ogImageUrl
+        try modelContext.save()
+    }
+
     public func deleteOlderThan(date: Date) async throws -> Int {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate { $0.fetchedAt < date }
