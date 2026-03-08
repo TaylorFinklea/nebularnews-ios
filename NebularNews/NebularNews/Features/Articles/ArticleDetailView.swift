@@ -43,8 +43,8 @@ struct ArticleDetailView: View {
                 }
                 .navigationTitle(article.feed?.title ?? "Article")
                 .navigationBarTitleDisplayMode(.inline)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    articleActionBar(article)
+                .toolbar {
+                    articleToolbar(article)
                 }
                 .sheet(isPresented: $showTagPicker) {
                     TagPickerSheet(article: article)
@@ -120,88 +120,62 @@ struct ArticleDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func articleActionBar(_ article: Article) -> some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 0) {
+    @ToolbarContentBuilder
+    private func articleToolbar(_ article: Article) -> some ToolbarContent {
+        ToolbarItemGroup(placement: .bottomBar) {
+            if let url = articleURL(for: article) {
                 Button {
-                    article.isRead.toggle()
-                    article.readAt = article.isRead ? Date() : nil
-                    try? modelContext.save()
+                    openURL(url)
                 } label: {
-                    actionIcon(
-                        article.isRead ? "envelope.badge" : "envelope.open",
-                        color: palette.primary
-                    )
+                    toolbarLabel("Open in Browser", systemImage: "safari")
                 }
-                .accessibilityLabel(article.isRead ? "Mark Unread" : "Mark Read")
-
-                if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
-                    Button {
-                        Task { await enrichArticle(article) }
-                    } label: {
-                        Group {
-                            if isEnriching {
-                                ProgressView()
-                                    .progressViewStyle(.circular)
-                                    .tint(palette.primary)
-                                    .frame(width: 48, height: 48)
-                            } else {
-                                actionIcon("text.alignleft", color: palette.primary)
-                            }
-                        }
-                    }
-                    .disabled(isEnriching)
-                    .accessibilityLabel("Summarize")
-                }
-
-                if let urlString = article.canonicalUrl,
-                   let url = URL(string: urlString) {
-                    Button {
-                        openURL(url)
-                    } label: {
-                        actionIcon("safari", color: palette.primary)
-                    }
-                    .accessibilityLabel("Open in Browser")
-                }
-
-                Button {
-                    showReactionSheet = true
-                } label: {
-                    actionIcon(
-                        reactionIcon(for: article.reactionValue),
-                        color: reactionColor(for: article.reactionValue)
-                    )
-                }
-                .accessibilityLabel("React")
+                Spacer()
             }
-            .buttonStyle(ArticleActionBarButtonStyle())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 6)
-            .modifier(ArticleActionBarCapsuleBackground())
 
-            if let urlString = article.canonicalUrl,
-               let url = URL(string: urlString) {
+            Button {
+                showReactionSheet = true
+            } label: {
+                toolbarLabel(
+                    "React",
+                    systemImage: reactionIcon(for: article.reactionValue),
+                    tint: reactionToolbarTint(for: article.reactionValue)
+                )
+            }
+            .accessibilityLabel("React")
+            .accessibilityValue(reactionAccessibilityValue(for: article.reactionValue))
+
+            if let url = articleURL(for: article) {
+                Spacer()
                 ShareLink(item: url) {
-                    actionIcon("square.and.arrow.up", color: palette.primary)
+                    toolbarLabel("Share", systemImage: "square.and.arrow.up")
                 }
-                .buttonStyle(ArticleActionBarButtonStyle())
-                .modifier(ArticleActionButtonBackground())
-                .accessibilityLabel("Share")
             }
+
+            Spacer()
+            overflowMenu(article)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity)
     }
 
-    private func actionIcon(_ systemName: String, color: Color) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 19, weight: .medium))
-            .foregroundStyle(color)
-            .frame(width: 48, height: 48)
-            .contentShape(Rectangle())
+    private func overflowMenu(_ article: Article) -> some View {
+        Menu {
+            Button(
+                article.isRead ? "Mark Unread" : "Mark Read",
+                systemImage: article.isRead ? "envelope.badge" : "envelope.open"
+            ) {
+                toggleReadState(for: article)
+            }
+
+            if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
+                Button {
+                    Task { await enrichArticle(article) }
+                } label: {
+                    Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
+                }
+                .disabled(isEnriching)
+            }
+        } label: {
+            toolbarLabel("More", systemImage: "ellipsis")
+        }
     }
 
     // MARK: - Tags
@@ -248,6 +222,47 @@ struct ArticleDetailView: View {
         case -1: palette.danger
         default: palette.primary
         }
+    }
+
+    private func reactionToolbarTint(for value: Int?) -> Color {
+        switch value {
+        case 1, -1:
+            return reactionColor(for: value)
+        default:
+            return .secondary
+        }
+    }
+
+    private func reactionAccessibilityValue(for value: Int?) -> String {
+        switch value {
+        case 1:
+            return "Liked"
+        case -1:
+            return "Disliked"
+        default:
+            return "Not set"
+        }
+    }
+
+    private func toggleReadState(for article: Article) {
+        article.isRead.toggle()
+        article.readAt = article.isRead ? Date() : nil
+        try? modelContext.save()
+    }
+
+    private func articleURL(for article: Article) -> URL? {
+        guard let urlString = article.canonicalUrl else { return nil }
+        return URL(string: urlString)
+    }
+
+    private func toolbarLabel(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        tint: Color = .secondary
+    ) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.iconOnly)
+            .foregroundStyle(tint)
     }
 
     private func headerAccentColor(for article: Article) -> Color {
@@ -458,87 +473,6 @@ private struct HTMLTextView: View {
             .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
             .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-private struct ArticleActionBarButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .opacity(configuration.isPressed ? 0.68 : 1)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.snappy(duration: 0.16), value: configuration.isPressed)
-    }
-}
-
-private struct ArticleActionBarCapsuleBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        glassContent(content)
-            .shadow(color: palette.shadow.opacity(0.34), radius: 20, y: 10)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
-    @ViewBuilder
-    private func glassContent(_ content: Content) -> some View {
-#if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular, in: Capsule())
-                .tint(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
-                .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
-        } else {
-            fallbackContent(content)
-        }
-#else
-        fallbackContent(content)
-#endif
-    }
-
-    private func fallbackContent(_ content: Content) -> some View {
-        content
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(palette.surfaceStrong, in: Capsule())
-            .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
-    }
-}
-
-private struct ArticleActionButtonBackground: ViewModifier {
-    @Environment(\.colorScheme) private var colorScheme
-
-    func body(content: Content) -> some View {
-        glassContent(content)
-            .shadow(color: palette.shadow.opacity(0.28), radius: 18, y: 10)
-    }
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
-    @ViewBuilder
-    private func glassContent(_ content: Content) -> some View {
-#if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            content
-                .buttonStyle(.glass)
-                .tint(palette.primary.opacity(colorScheme == .dark ? 0.12 : 0.08))
-        } else {
-            fallbackContent(content)
-        }
-#else
-        fallbackContent(content)
-#endif
-    }
-
-    private func fallbackContent(_ content: Content) -> some View {
-        content
-            .padding(6)
-            .background(.ultraThinMaterial, in: Capsule())
-            .background(palette.surfaceStrong, in: Capsule())
-            .overlay(Capsule().strokeBorder(palette.surfaceBorder.opacity(0.9)))
     }
 }
 
