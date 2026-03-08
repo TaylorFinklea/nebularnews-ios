@@ -54,6 +54,17 @@ public struct PersonalizationDebugSnapshot: Sendable, Hashable {
     public let preferenceConfidence: Double?
 }
 
+#if DEBUG
+public struct TrackedTechCoverageSnapshot: Sendable, Hashable {
+    public let familyName: String
+    public let total: Int
+    public let currentVersion: Int
+    public let systemTagged: Int
+    public let reacted: Int
+    public let reactedTagged: Int
+}
+#endif
+
 public struct FeedReputation: Sendable, Hashable {
     public let feedbackCount: Int
     public let weightedFeedbackCount: Double
@@ -75,7 +86,7 @@ actor LocalPersonalizationRepository {
         try ensureDefaultSignalWeights()
     }
 
-    func listStaleArticleIDs(limit: Int = 25) async -> [String] {
+    func listStaleArticleIDs(limit: Int = 25, trackedTechOnly: Bool = false) async -> [String] {
         let staleVersion = currentPersonalizationVersion
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { $0.personalizationVersion < staleVersion },
@@ -86,7 +97,29 @@ actor LocalPersonalizationRepository {
             return []
         }
 
-        return Array(articles.prefix(limit)).map(\.id)
+        var reactedTrackedTechArticleIDs: [String] = []
+        var trackedTechArticleIDs: [String] = []
+        var otherArticleIDs: [String] = []
+
+        for article in articles {
+            let context = makeArticleContext(from: article)
+            let isTrackedTech = primaryTrackedTechFeedFamily(
+                feedTitle: context.feedTitle,
+                siteHostname: context.siteHostname
+            ) != nil
+
+            if isTrackedTech {
+                if article.reactionValue != nil {
+                    reactedTrackedTechArticleIDs.append(article.id)
+                } else {
+                    trackedTechArticleIDs.append(article.id)
+                }
+            } else if !trackedTechOnly {
+                otherArticleIDs.append(article.id)
+            }
+        }
+
+        return Array((reactedTrackedTechArticleIDs + trackedTechArticleIDs + otherArticleIDs).prefix(limit))
     }
 
     fileprivate func storedArticleSnapshot(for articleID: String) async -> StoredArticlePersonalizationSnapshot? {
@@ -111,6 +144,60 @@ actor LocalPersonalizationRepository {
         guard let article = try? fetchArticle(articleID) else { return false }
         return article.personalizationVersion < currentPersonalizationVersion || (article.tags?.isEmpty ?? true)
     }
+
+#if DEBUG
+    func trackedTechCoverageSnapshot() async -> [TrackedTechCoverageSnapshot] {
+        struct Counts {
+            var total = 0
+            var currentVersion = 0
+            var systemTagged = 0
+            var reacted = 0
+            var reactedTagged = 0
+        }
+
+        let descriptor = FetchDescriptor<Article>()
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+        var countsByFamilyName = Dictionary(uniqueKeysWithValues: trackedTechFeedFamilies.map { ($0.name, Counts()) })
+
+        for article in articles {
+            let context = makeArticleContext(from: article)
+            guard let family = primaryTrackedTechFeedFamily(
+                feedTitle: context.feedTitle,
+                siteHostname: context.siteHostname
+            ) else {
+                continue
+            }
+
+            var counts = countsByFamilyName[family.name] ?? Counts()
+            counts.total += 1
+            if article.personalizationVersion == currentPersonalizationVersion {
+                counts.currentVersion += 1
+            }
+            if !article.systemTagIds.isEmpty {
+                counts.systemTagged += 1
+            }
+            if article.reactionValue != nil {
+                counts.reacted += 1
+                if !article.systemTagIds.isEmpty {
+                    counts.reactedTagged += 1
+                }
+            }
+            countsByFamilyName[family.name] = counts
+        }
+
+        return trackedTechFeedFamilies.map { family in
+            let counts = countsByFamilyName[family.name] ?? Counts()
+            return TrackedTechCoverageSnapshot(
+                familyName: family.name,
+                total: counts.total,
+                currentVersion: counts.currentVersion,
+                systemTagged: counts.systemTagged,
+                reacted: counts.reacted,
+                reactedTagged: counts.reactedTagged
+            )
+        }
+    }
+#endif
 
     func impactedArticleIDs(for articleID: String, limit: Int) async -> [String] {
         guard let article = try? fetchArticle(articleID) else { return [] }
@@ -565,6 +652,32 @@ public actor LocalStandalonePersonalizationService {
         }
 
         return totalProcessed
+    }
+
+    @discardableResult
+    public func reprocessTrackedTechFeeds(batchSize: Int = 200) async -> Int {
+        await bootstrap()
+        var totalProcessed = 0
+
+        while true {
+            let articleIDs = await repository.listStaleArticleIDs(limit: batchSize, trackedTechOnly: true)
+            totalProcessed += articleIDs.count
+
+            for articleID in articleIDs {
+                try? await retagAndScoreArticle(articleID: articleID)
+            }
+
+            if articleIDs.count < batchSize {
+                break
+            }
+        }
+
+        return totalProcessed
+    }
+
+    public func trackedTechCoverageSnapshot() async -> [TrackedTechCoverageSnapshot] {
+        await bootstrap()
+        return await repository.trackedTechCoverageSnapshot()
     }
 #endif
 

@@ -69,6 +69,15 @@ struct StandalonePersonalizationTests {
         return try #require(context.fetch(descriptor).first)
     }
 
+#if DEBUG
+    private func coverageRow(
+        named familyName: String,
+        in snapshots: [TrackedTechCoverageSnapshot]
+    ) throws -> TrackedTechCoverageSnapshot {
+        try #require(snapshots.first(where: { $0.familyName == familyName }))
+    }
+#endif
+
     private func longContent(_ phrase: String, repeating count: Int = 220) -> String {
         Array(repeating: phrase, count: count).joined(separator: " ")
     }
@@ -147,6 +156,84 @@ struct StandalonePersonalizationTests {
         #expect(snapshot.matchedSourceProfiles.contains("OpenAI News"))
         #expect(tagNames.isSuperset(of: ["Artificial Intelligence", "Generative AI", "Large Language Models"]))
         #expect(snapshot.systemTagIDs.count == 3)
+    }
+
+    @Test("Source profiles match normalized feed-title aliases and host aliases")
+    func sourceProfilesMatchNormalizedAliasesAndHosts() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let mitFeed = try insertFeed(
+            in: context,
+            title: " Artificial intelligence   -   MIT Technology Review ",
+            feedURL: "https://www.technologyreview.com/topic/artificial-intelligence/rss.xml"
+        )
+        let mitArticle = try insertArticle(
+            in: context,
+            feed: mitFeed,
+            title: "Weekly briefing",
+            content: "A short update without article-level keywords.",
+            publishedAt: .now
+        )
+
+        let openAIHostFeed = try insertFeed(
+            in: context,
+            title: "Lab Notes",
+            feedURL: "https://example.com/openai.xml",
+            siteURL: "https://www.openai.com/news"
+        )
+        let openAIHostArticle = try insertArticle(
+            in: context,
+            feed: openAIHostFeed,
+            title: "Platform changes",
+            content: "Release notes and availability changes.",
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let mitSnapshot = try #require(await service.debugSnapshot(articleID: mitArticle.id))
+        let mitTagNames = Set(mitSnapshot.currentTags.map(\.name))
+        #expect(mitSnapshot.matchedSourceProfiles.contains("Artificial intelligence – MIT Technology Review"))
+        #expect(mitTagNames.isSuperset(of: ["Artificial Intelligence", "Research", "Large Language Models"]))
+
+        let openAISnapshot = try #require(await service.debugSnapshot(articleID: openAIHostArticle.id))
+        let openAITagNames = Set(openAISnapshot.currentTags.map(\.name))
+        #expect(openAISnapshot.matchedSourceProfiles.contains("OpenAI News"))
+        #expect(openAITagNames.isSuperset(of: ["Artificial Intelligence", "Generative AI", "Large Language Models"]))
+    }
+
+    @Test("The Berkeley AI Research feed gets tags from its source profile")
+    func berkeleyAIResearchFeedGetsProfileTags() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "The Berkeley Artificial Intelligence Research Blog",
+            feedURL: "https://bair.berkeley.edu/blog/feed.xml",
+            siteURL: "https://bair.berkeley.edu/blog/"
+        )
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Lab update",
+            content: "Announcements from the lab.",
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let snapshot = try #require(await service.debugSnapshot(articleID: article.id))
+        let tagNames = Set(snapshot.currentTags.map(\.name))
+
+        #expect(snapshot.matchedSourceProfiles.contains("The Berkeley Artificial Intelligence Research Blog"))
+        #expect(tagNames.isSuperset(of: ["Artificial Intelligence", "Research"]))
+        #expect(snapshot.systemTagIDs.count == 2)
     }
 
     @Test("Manual tags survive system tagging and are not marked as system-managed")
@@ -290,6 +377,62 @@ struct StandalonePersonalizationTests {
         #expect(storedCurrent.systemTagIds.isEmpty)
         #expect(storedStale.personalizationVersion == currentPersonalizationVersion)
         #expect(storedStale.systemTagIds.isEmpty == false)
+    }
+
+    @Test("Stale selection prioritizes reacted tracked tech articles before unrelated backlog")
+    func staleSelectionPrioritizesReactedTrackedTechArticles() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let trackedFeed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+        let otherFeed = try insertFeed(in: context, title: "General Interest")
+
+        let reactedTracked = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "GPT release reaction target",
+            content: longContent("GPT reasoning model notes."),
+            publishedAt: .now.addingTimeInterval(-600)
+        )
+        reactedTracked.reactionValue = 1
+        reactedTracked.fetchedAt = Date(timeIntervalSince1970: 1)
+
+        let tracked = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "OpenAI backlog item",
+            content: longContent("Generic OpenAI platform update."),
+            publishedAt: .now.addingTimeInterval(-300)
+        )
+        tracked.fetchedAt = Date(timeIntervalSince1970: 2)
+
+        let other = try insertArticle(
+            in: context,
+            feed: otherFeed,
+            title: "Newest unrelated backlog item",
+            content: longContent("A general news roundup."),
+            publishedAt: .now
+        )
+        other.fetchedAt = Date(timeIntervalSince1970: 3)
+        try context.save()
+
+        let processed = await service.processPendingArticles(limit: 2)
+
+        let storedReactedTracked = try fetchArticle(reactedTracked.id, in: context)
+        let storedTracked = try fetchArticle(tracked.id, in: context)
+        let storedOther = try fetchArticle(other.id, in: context)
+
+        #expect(processed == 2)
+        #expect(storedReactedTracked.personalizationVersion == currentPersonalizationVersion)
+        #expect(storedTracked.personalizationVersion == currentPersonalizationVersion)
+        #expect(storedOther.personalizationVersion < currentPersonalizationVersion)
     }
 
     @Test("Source trust learning targets source reputation and rescored cohort articles in the same feed")
@@ -457,6 +600,110 @@ struct StandalonePersonalizationTests {
         #expect(authorSignal.rawValue < 0)
         #expect((rescoredB.scoreWeightedAverage ?? 0) < baselineB)
     }
+
+#if DEBUG
+    @Test("Tracked tech reprocess drains tracked-feed stale items only")
+    func trackedTechReprocessDrainsTrackedFeedStaleItemsOnly() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let trackedFeed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+        let otherFeed = try insertFeed(in: context, title: "General Interest")
+
+        let trackedA = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "Tracked item one",
+            content: longContent("GPT release notes."),
+            publishedAt: .now
+        )
+        let trackedB = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "Tracked item two",
+            content: longContent("Another GPT update."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+        let other = try insertArticle(
+            in: context,
+            feed: otherFeed,
+            title: "Other backlog item",
+            content: longContent("General news roundup."),
+            publishedAt: .now.addingTimeInterval(120)
+        )
+
+        let processed = await service.reprocessTrackedTechFeeds(batchSize: 1)
+
+        let storedTrackedA = try fetchArticle(trackedA.id, in: context)
+        let storedTrackedB = try fetchArticle(trackedB.id, in: context)
+        let storedOther = try fetchArticle(other.id, in: context)
+
+        #expect(processed == 2)
+        #expect(storedTrackedA.personalizationVersion == currentPersonalizationVersion)
+        #expect(storedTrackedB.personalizationVersion == currentPersonalizationVersion)
+        #expect(storedOther.personalizationVersion < currentPersonalizationVersion)
+    }
+
+    @Test("Tracked tech coverage snapshot reports per-feed counts")
+    func trackedTechCoverageSnapshotReportsPerFeedCounts() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let trackedFeed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+        let otherFeed = try insertFeed(in: context, title: "General Interest")
+
+        let reactedTracked = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "Reacted tracked article",
+            content: longContent("GPT reasoning model release notes."),
+            publishedAt: .now
+        )
+        reactedTracked.reactionValue = 1
+
+        _ = try insertArticle(
+            in: context,
+            feed: trackedFeed,
+            title: "Stale tracked article",
+            content: longContent("Another OpenAI update."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = try insertArticle(
+            in: context,
+            feed: otherFeed,
+            title: "Untracked article",
+            content: longContent("General news roundup."),
+            publishedAt: .now.addingTimeInterval(120)
+        )
+        try context.save()
+
+        _ = await service.processPendingArticles(limit: 1)
+
+        let snapshots = await service.trackedTechCoverageSnapshot()
+        let openAI = try coverageRow(named: "OpenAI News", in: snapshots)
+
+        #expect(openAI.total == 2)
+        #expect(openAI.currentVersion == 1)
+        #expect(openAI.systemTagged == 1)
+        #expect(openAI.reacted == 1)
+        #expect(openAI.reactedTagged == 1)
+    }
+#endif
 
     @Test("Score band thresholds use the new fixed ranges")
     func scoreBandThresholds() {

@@ -102,7 +102,7 @@ private func normalizeText(_ value: String?) -> String {
     return " \(normalized) "
 }
 
-private func normalizeSourceProfileText(_ value: String?) -> String {
+func normalizeTrackedTechFeedText(_ value: String?) -> String {
     (value ?? "")
         .lowercased()
         .replacingOccurrences(of: "&#?[a-z0-9]+;", with: " ", options: .regularExpression)
@@ -111,7 +111,7 @@ private func normalizeSourceProfileText(_ value: String?) -> String {
         .trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
-private func normalizeHost(_ value: String?) -> String {
+func normalizeTrackedTechFeedHost(_ value: String?) -> String {
     (value ?? "")
         .lowercased()
         .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
@@ -139,22 +139,54 @@ private func overlapCount(_ candidateTokens: [String], haystackTokens: Set<Strin
 }
 
 private func hostMatches(actualHost: String, expectedHost: String) -> Bool {
-    let actual = normalizeHost(actualHost)
-    let expected = normalizeHost(expectedHost)
+    let actual = normalizeTrackedTechFeedHost(actualHost)
+    let expected = normalizeTrackedTechFeedHost(expectedHost)
     guard !actual.isEmpty, !expected.isEmpty else { return false }
     return actual == expected || actual.hasSuffix(".\(expected)")
 }
 
+private func matchesFeedIdentity(
+    feedTitle: String?,
+    siteHostname: String?,
+    feedTitleAliases: [String],
+    siteHosts: [String]
+) -> Bool {
+    let normalizedFeedTitle = normalizeTrackedTechFeedText(feedTitle)
+    let normalizedHost = normalizeTrackedTechFeedHost(siteHostname)
+
+    let matchesTitle = feedTitleAliases
+        .map(normalizeTrackedTechFeedText)
+        .contains(normalizedFeedTitle)
+    let matchesHost = siteHosts.contains { hostMatches(actualHost: normalizedHost, expectedHost: $0) }
+    return matchesTitle || matchesHost
+}
+
+func matchingTrackedTechFeedFamilies(feedTitle: String?, siteHostname: String?) -> [TrackedTechFeedFamily] {
+    trackedTechFeedFamilies.filter { family in
+        matchesFeedIdentity(
+            feedTitle: feedTitle,
+            siteHostname: siteHostname,
+            feedTitleAliases: family.feedTitleAliases,
+            siteHosts: family.siteHosts
+        )
+    }
+}
+
+func primaryTrackedTechFeedFamily(feedTitle: String?, siteHostname: String?) -> TrackedTechFeedFamily? {
+    matchingTrackedTechFeedFamilies(feedTitle: feedTitle, siteHostname: siteHostname).first
+}
+
 private func matchingSourceProfiles(for context: DeterministicTaggingContext) -> [DeterministicTagSourceProfile] {
-    let normalizedFeedTitle = normalizeSourceProfileText(context.feedTitle)
-    let normalizedHost = normalizeHost(context.siteHostname)
+    let normalizedFeedTitle = normalizeTrackedTechFeedText(context.feedTitle)
+    let normalizedHost = normalizeTrackedTechFeedHost(context.siteHostname)
 
     return deterministicTagSourceProfiles.filter { profile in
-        let matchesTitle = profile.feedTitles
-            .map(normalizeSourceProfileText)
-            .contains(normalizedFeedTitle)
-        let matchesHost = profile.siteHosts.contains { hostMatches(actualHost: normalizedHost, expectedHost: $0) }
-        return matchesTitle || matchesHost
+        matchesFeedIdentity(
+            feedTitle: normalizedFeedTitle,
+            siteHostname: normalizedHost,
+            feedTitleAliases: profile.feedTitles,
+            siteHosts: profile.siteHosts
+        )
     }
 }
 

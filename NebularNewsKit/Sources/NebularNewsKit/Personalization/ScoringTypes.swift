@@ -98,7 +98,7 @@ public let minDataBackedSignalsToPublish = 2
 public let minPreferenceBackedSignalsToPublish = 1
 public let sourceReputationVoteWeight = 1.5
 public let sourceReputationPriorWeight = 3.0
-public let currentPersonalizationVersion = 2
+public let currentPersonalizationVersion = 3
 
 private let scoreNeutralPriorWeight = 1.0
 private let scoreNeutralPriorValue = 0.5
