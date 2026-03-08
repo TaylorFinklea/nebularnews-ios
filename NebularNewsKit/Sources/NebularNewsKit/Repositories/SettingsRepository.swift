@@ -24,4 +24,9 @@ public actor LocalSettingsRepository {
         try? modelContext.save()
         return settings
     }
+
+    /// Return the configured retention window, falling back to a safe minimum.
+    public func retentionDays() async -> Int {
+        max(await getOrCreate().retentionDays, 1)
+    }
 }

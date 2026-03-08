@@ -198,8 +198,8 @@ struct FeedPollerTests {
         #expect(result.feedsPolled == 0)
     }
 
-    @Test("Cleanup deletes old articles")
-    func cleanupOldArticles() async throws {
+    @Test("Cleanup deletes old articles by fetched date when published date is missing")
+    func cleanupOldArticlesByFetchedDateFallback() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -224,5 +224,60 @@ struct FeedPollerTests {
         let deleted = await poller.cleanupOldArticles(retentionDays: 90)
 
         #expect(deleted == 1)
+    }
+
+    @Test("Cleanup deletes newly fetched articles when their published date is outside retention")
+    func cleanupOldArticlesByPublishedDate() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        let oldArticle = ParsedArticle(
+            url: "https://example.com/archive",
+            title: "Archive Article",
+            publishedAt: Date(timeIntervalSinceNow: -120 * 86400),
+            contentHash: "archivehash123"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: oldArticle)
+
+        let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+
+        #expect(deleted == 1)
+
+        let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        #expect(remaining.isEmpty)
+    }
+
+    @Test("Cleanup keeps articles when published date is still within retention")
+    func cleanupKeepsRecentlyPublishedArticles() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        let recentArticle = ParsedArticle(
+            url: "https://example.com/recent",
+            title: "Recent Article",
+            publishedAt: Date(timeIntervalSinceNow: -7 * 86400),
+            contentHash: "recenthash123"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: recentArticle)
+
+        let articles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        if let article = articles.first {
+            article.fetchedAt = Date(timeIntervalSinceNow: -100 * 86400)
+        }
+
+        let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+
+        #expect(deleted == 0)
+
+        let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        #expect(remaining.count == 1)
     }
 }

@@ -100,6 +100,11 @@ public final class Article: @unchecked Sendable {
         !isRead && !isDismissed
     }
 
+    /// Retention uses the article's own age when available, falling back to fetch time.
+    public var retentionReferenceDate: Date {
+        publishedAt ?? fetchedAt
+    }
+
     /// Human-readable score label, falling back to a default.
     public var displayScoreLabel: String {
         if let scoreLabel, !scoreLabel.isEmpty {

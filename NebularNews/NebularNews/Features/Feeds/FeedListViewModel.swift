@@ -45,10 +45,11 @@ final class FeedListViewModel {
         lastPollMessage = nil
 
         let poller = getPoller()
+        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
+        let retentionDays = await settingsRepo.retentionDays()
         let result = await poller.pollAllFeeds(bypassBackoff: true)
 
-        // Cleanup old articles (default 90 days)
-        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+        let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
 
         let processed = await processStandalonePersonalization()
 

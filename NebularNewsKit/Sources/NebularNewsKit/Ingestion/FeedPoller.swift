@@ -112,7 +112,8 @@ public actor FeedPoller {
         return await pollSingleFeedInternal(snapshot)
     }
 
-    /// Delete articles older than `retentionDays` days.
+    /// Delete articles older than `retentionDays` days using `publishedAt`
+    /// when available, falling back to `fetchedAt`.
     public func cleanupOldArticles(retentionDays: Int) async -> Int {
         let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
         return (try? await articleRepo.deleteOlderThan(date: cutoff)) ?? 0
