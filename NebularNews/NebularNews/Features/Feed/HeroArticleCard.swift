@@ -33,7 +33,7 @@ struct HeroArticleCard: View {
                             endPoint: .bottom
                         )
                     }
-                    .overlay(alignment: .bottomLeading) {
+                    .overlay(alignment: .bottom) {
                         VStack(alignment: .leading, spacing: 6) {
                             if let feedTitle = article.feed?.title {
                                 Text(feedTitle.strippedHTML)
@@ -48,7 +48,6 @@ struct HeroArticleCard: View {
                                 .font(NebularTypography.heroTitle)
                                 .foregroundStyle(.white)
                                 .lineLimit(3)
-                                .fixedSize(horizontal: false, vertical: true)
                                 .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
 
                             HStack(spacing: 8) {
@@ -63,7 +62,8 @@ struct HeroArticleCard: View {
                                 }
                             }
                         }
-                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(24)
                     }
 
                 if let summary = article.summaryText, !summary.isEmpty {
