@@ -17,27 +17,27 @@ struct StandaloneDashboardView: View {
     // MARK: - Computed Stats
 
     private var unreadCount: Int {
-        allArticles.count(where: { !$0.isRead })
+        allArticles.count(where: \.isUnreadQueueCandidate)
     }
 
     private var unread24h: Int {
         let cutoff = Date().addingTimeInterval(-86400)
         return allArticles.count(where: {
-            !$0.isRead && ($0.publishedAt ?? .distantPast) > cutoff
+            $0.isUnreadQueueCandidate && ($0.publishedAt ?? .distantPast) > cutoff
         })
     }
 
     private var unread7d: Int {
         let cutoff = Date().addingTimeInterval(-604800)
         return allArticles.count(where: {
-            !$0.isRead && ($0.publishedAt ?? .distantPast) > cutoff
+            $0.isUnreadQueueCandidate && ($0.publishedAt ?? .distantPast) > cutoff
         })
     }
 
     private var highFitUnread: Int {
         let cutoff = Date().addingTimeInterval(-604800)
         return allArticles.count(where: {
-            !$0.isRead &&
+            $0.isUnreadQueueCandidate &&
             $0.hasReadyScore &&
             ($0.score ?? 0) >= 4 &&
             ($0.publishedAt ?? .distantPast) > cutoff
@@ -55,7 +55,7 @@ struct StandaloneDashboardView: View {
     /// Top unread articles sorted by score (descending), limited to 10.
     private var topUnread: [Article] {
         allArticles
-            .filter { !$0.isRead && $0.hasReadyScore && $0.score != nil }
+            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.score != nil }
             .sorted {
                 if ($0.score ?? 0) == ($1.score ?? 0) {
                     return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)

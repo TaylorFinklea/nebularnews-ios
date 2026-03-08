@@ -9,6 +9,7 @@ public let allModelTypes: [any PersistentModel.Type] = [
     SignalWeight.self,
     TopicAffinity.self,
     AuthorAffinity.self,
+    FeedAffinity.self,
     ChatThread.self,
     ChatMessage.self,
     AppSettings.self

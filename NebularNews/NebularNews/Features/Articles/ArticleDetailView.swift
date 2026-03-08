@@ -53,9 +53,14 @@ struct ArticleDetailView: View {
                     ReactionSheet(article: article)
                 }
                 .onAppear {
+                    let shouldSave = article.isDismissed || !article.isRead
+                    if article.isDismissed {
+                        article.clearDismissal()
+                    }
                     if !article.isRead {
-                        article.isRead = true
-                        article.readAt = Date()
+                        article.markRead()
+                    }
+                    if shouldSave {
                         try? modelContext.save()
                     }
                 }
@@ -245,8 +250,11 @@ struct ArticleDetailView: View {
     }
 
     private func toggleReadState(for article: Article) {
-        article.isRead.toggle()
-        article.readAt = article.isRead ? Date() : nil
+        if article.isRead {
+            article.markUnread()
+        } else {
+            article.markRead()
+        }
         try? modelContext.save()
     }
 

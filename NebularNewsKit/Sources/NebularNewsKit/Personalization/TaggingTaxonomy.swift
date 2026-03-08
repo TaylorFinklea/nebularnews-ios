@@ -36,10 +36,27 @@ public let starterCanonicalTags: [StarterCanonicalTag] = [
     .init(id: "tag-privacy", name: "Privacy", slug: "privacy"),
     .init(id: "tag-iot", name: "IoT", slug: "iot"),
     .init(id: "tag-consumer-hardware", name: "Consumer Hardware", slug: "consumer-hardware"),
-    .init(id: "tag-research", name: "Research", slug: "research")
+    .init(id: "tag-research", name: "Research", slug: "research"),
+    .init(id: "tag-birding", name: "Birding", slug: "birding"),
+    .init(id: "tag-wildlife", name: "Wildlife", slug: "wildlife"),
+    .init(id: "tag-conservation", name: "Conservation", slug: "conservation"),
+    .init(id: "tag-nature", name: "Nature", slug: "nature"),
+    .init(id: "tag-local-news", name: "Local News", slug: "local-news"),
+    .init(id: "tag-kansas-city", name: "Kansas City", slug: "kansas-city"),
+    .init(id: "tag-civics", name: "Civics", slug: "civics"),
+    .init(id: "tag-transportation", name: "Transportation", slug: "transportation"),
+    .init(id: "tag-housing", name: "Housing", slug: "housing"),
+    .init(id: "tag-economics", name: "Economics", slug: "economics"),
+    .init(id: "tag-monetary-policy", name: "Monetary Policy", slug: "monetary-policy"),
+    .init(id: "tag-inflation", name: "Inflation", slug: "inflation"),
+    .init(id: "tag-banking", name: "Banking", slug: "banking"),
+    .init(id: "tag-standards", name: "Standards", slug: "standards"),
+    .init(id: "tag-manufacturing", name: "Manufacturing", slug: "manufacturing"),
+    .init(id: "tag-observability", name: "Observability", slug: "observability"),
+    .init(id: "tag-site-reliability", name: "Site Reliability", slug: "site-reliability")
 ]
 
-public struct TrackedTechFeedFamily: Sendable, Hashable {
+public struct PersonalizationTargetFeedFamily: Sendable, Hashable {
     public let name: String
     public let feedTitleAliases: [String]
     public let siteHosts: [String]
@@ -67,7 +84,7 @@ public struct DeterministicTagSourceProfile: Sendable, Hashable {
     }
 }
 
-public let trackedTechFeedFamilies: [TrackedTechFeedFamily] = [
+public let personalizationTargetFeedFamilies: [PersonalizationTargetFeedFamily] = [
     .init(
         name: "OpenAI News",
         feedTitleAliases: ["OpenAI News"],
@@ -89,6 +106,7 @@ public let trackedTechFeedFamilies: [TrackedTechFeedFamily] = [
     .init(
         name: "Microsoft Research Blog - Microsoft Research",
         feedTitleAliases: ["Microsoft Research Blog - Microsoft Research", "Microsoft Research Blog"],
+        siteHosts: ["research.microsoft.com"],
         tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
     ),
     .init(
@@ -101,8 +119,10 @@ public let trackedTechFeedFamilies: [TrackedTechFeedFamily] = [
         name: "Artificial intelligence – MIT Technology Review",
         feedTitleAliases: [
             "Artificial intelligence - MIT Technology Review",
-            "Artificial intelligence – MIT Technology Review"
+            "Artificial intelligence – MIT Technology Review",
+            "Artificial intelligence &#8211; MIT Technology Review"
         ],
+        siteHosts: ["technologyreview.com"],
         tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
     ),
     .init(
@@ -120,6 +140,7 @@ public let trackedTechFeedFamilies: [TrackedTechFeedFamily] = [
     .init(
         name: "InfoQ - DevOps",
         feedTitleAliases: ["InfoQ - DevOps"],
+        siteHosts: ["infoq.com"],
         tagSlugs: ["cloud-infrastructure", "open-source", "developer-tools"]
     ),
     .init(
@@ -133,10 +154,87 @@ public let trackedTechFeedFamilies: [TrackedTechFeedFamily] = [
         feedTitleAliases: ["The Berkeley Artificial Intelligence Research Blog", "Berkeley AI Research Blog"],
         siteHosts: ["bair.berkeley.edu"],
         tagSlugs: ["artificial-intelligence", "research"]
+    ),
+    .init(
+        name: "The American Birding Podcast",
+        feedTitleAliases: ["The American Birding Podcast"],
+        siteHosts: ["aba.org"],
+        tagSlugs: ["birding", "wildlife", "conservation", "nature"]
+    ),
+    .init(
+        name: "video | All About Birds",
+        feedTitleAliases: ["video | All About Birds"],
+        siteHosts: ["allaboutbirds.org"],
+        tagSlugs: ["birding", "wildlife", "conservation", "nature"]
+    ),
+    .init(
+        name: "Nature Boost",
+        feedTitleAliases: ["Nature Boost"],
+        tagSlugs: ["wildlife", "conservation", "nature"]
+    ),
+    .init(
+        name: "Kansas City Today",
+        feedTitleAliases: ["Kansas City Today"],
+        siteHosts: ["kcur.org"],
+        tagSlugs: ["local-news", "kansas-city", "civics"]
+    ),
+    .init(
+        name: "Up To Date",
+        feedTitleAliases: ["Up To Date"],
+        siteHosts: ["kcur.org"],
+        tagSlugs: ["local-news", "kansas-city", "civics"]
+    ),
+    .init(
+        name: "Federal Reserve Bank of Kansas City publications",
+        feedTitleAliases: ["Federal Reserve Bank of Kansas City publications"],
+        siteHosts: ["kansascityfed.org"],
+        tagSlugs: ["economics", "monetary-policy", "inflation", "banking"]
+    ),
+    .init(
+        name: "NIST News",
+        feedTitleAliases: ["NIST News"],
+        siteHosts: ["nist.gov"],
+        tagSlugs: ["standards", "research"]
+    ),
+    .init(
+        name: "News and Events Feed by Topic",
+        feedTitleAliases: ["News and Events Feed by Topic"],
+        siteHosts: ["nist.gov"],
+        tagSlugs: ["standards", "research"]
+    ),
+    .init(
+        name: "Distill",
+        feedTitleAliases: ["Distill"],
+        siteHosts: ["distill.pub"],
+        tagSlugs: ["research", "artificial-intelligence", "deep-learning"]
+    ),
+    .init(
+        name: "NVIDIA Blog",
+        feedTitleAliases: ["NVIDIA Blog"],
+        siteHosts: ["nvidia.com"],
+        tagSlugs: ["artificial-intelligence", "gpus", "semiconductors", "data-centers"]
+    ),
+    .init(
+        name: "Cloud Native Computing Foundation",
+        feedTitleAliases: ["Cloud Native Computing Foundation"],
+        siteHosts: ["cncf.io"],
+        tagSlugs: ["cloud-infrastructure", "kubernetes", "open-source"]
+    ),
+    .init(
+        name: "Grafana Labs blog on Grafana Labs",
+        feedTitleAliases: ["Grafana Labs blog on Grafana Labs"],
+        siteHosts: ["grafana.com"],
+        tagSlugs: ["observability", "open-source", "developer-tools"]
+    ),
+    .init(
+        name: "Security on Grafana Labs",
+        feedTitleAliases: ["Security on Grafana Labs"],
+        siteHosts: ["grafana.com"],
+        tagSlugs: ["cybersecurity", "observability", "developer-tools"]
     )
 ]
 
-public let deterministicTagSourceProfiles: [DeterministicTagSourceProfile] = trackedTechFeedFamilies.map { family in
+public let deterministicTagSourceProfiles: [DeterministicTagSourceProfile] = personalizationTargetFeedFamilies.map { family in
     DeterministicTagSourceProfile(
         name: family.name,
         feedTitles: family.feedTitleAliases,
@@ -167,7 +265,7 @@ public let deterministicTagKeywordsBySlug: [String: [String]] = [
     "ai-agents": ["ai agent", "ai agents", "agentic", "tool use", "tool-using agent"],
     "ai-safety": ["ai safety", "alignment", "model eval", "model evals", "guardrail", "guardrails"],
     "conversational-ai": ["chatbot", "assistant", "conversational ai"],
-    "deep-learning": ["deep learning", "neural network", "neural networks"],
+    "deep-learning": ["deep learning", "neural network", "neural networks", "graph neural network", "graph neural networks"],
     "robotics": ["robot", "robots", "robotics", "humanoid"],
     "cybersecurity": [
         "cybersecurity",
@@ -193,8 +291,33 @@ public let deterministicTagKeywordsBySlug: [String: [String]] = [
     "enterprise-software": ["enterprise software", "saas", "b2b software"],
     "startups": ["startup", "startups", "funding", "venture", "vc"],
     "regulation": ["regulation", "policy", "policies", "antitrust", "compliance"],
-    "privacy": ["privacy", "tracking", "surveillance", "data protection"],
+    "privacy": [
+        "privacy",
+        "ad tracking",
+        "app tracking",
+        "tracking pixel",
+        "tracking cookie",
+        "cross-site tracking",
+        "location tracking",
+        "surveillance",
+        "data protection"
+    ],
     "iot": ["iot", "internet of things", "connected device", "connected devices"],
     "consumer-hardware": ["smartphone", "smartphones", "laptop", "laptops", "wearable", "wearables", "headset"],
-    "research": ["research", "paper", "papers", "study", "studies", "arxiv", "benchmark", "dataset", "preprint", "conference", "workshop"]
+    "research": ["research", "paper", "papers", "study", "studies", "arxiv", "benchmark", "dataset", "preprint", "conference", "workshop"],
+    "birding": ["birding", "bird", "birds", "avian", "owl", "owls", "warbler", "warblers", "raptor", "raptors"],
+    "wildlife": ["wildlife", "species", "habitat", "poaching", "migration", "migratory", "tarantula", "tarantulas", "snake", "snakes"],
+    "conservation": ["conservation", "habitat", "restoration", "endangered", "protected area", "poaching"],
+    "nature": ["nature", "ecosystem", "meadow", "prairie", "outdoors", "biodiversity"],
+    "civics": ["city council", "mayor", "ordinance", "ballot", "election", "id invalidated"],
+    "transportation": ["bus fare", "transit", "kcata", "transportation", "public transit"],
+    "housing": ["housing", "zoning", "rent", "affordable housing", "development"],
+    "economics": ["economics", "economy", "labor market", "wages", "income convergence"],
+    "monetary-policy": ["monetary policy", "interest rate", "interest rates", "federal reserve", "central bank"],
+    "inflation": ["inflation", "inflation expectations", "price growth", "gasoline prices"],
+    "banking": ["banking", "payment fraud", "card-present", "card-not-present", "payments"],
+    "standards": ["standards", "metrology", "reference material", "interoperability"],
+    "manufacturing": ["manufacturing", "industrial", "factory", "factories", "production"],
+    "observability": ["observability", "metrics", "logs", "tracing"],
+    "site-reliability": ["site reliability", "sre", "slo", "slos", "incident", "incidents"]
 ]

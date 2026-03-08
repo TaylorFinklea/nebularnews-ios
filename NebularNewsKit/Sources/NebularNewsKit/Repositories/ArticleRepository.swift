@@ -72,8 +72,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         articles = applyInMemoryFilters(articles, filter: filter)
         if sort == .unreadFirst {
             articles.sort { lhs, rhs in
-                if lhs.isRead != rhs.isRead {
-                    return lhs.isRead == false
+                if lhs.isUnreadQueueCandidate != rhs.isUnreadQueueCandidate {
+                    return lhs.isUnreadQueueCandidate
                 }
                 return (lhs.publishedAt ?? .distantPast) > (rhs.publishedAt ?? .distantPast)
             }
@@ -133,8 +133,11 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func markRead(id: String, isRead: Bool) async throws {
         guard let article = await get(id: id) else { return }
-        article.isRead = isRead
-        article.readAt = isRead ? Date() : nil
+        if isRead {
+            article.markRead()
+        } else {
+            article.markUnread()
+        }
         try modelContext.save()
     }
 
@@ -244,7 +247,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         switch filter.readFilter {
         case .all: break
         case .read: result = result.filter { $0.isRead }
-        case .unread: result = result.filter { !$0.isRead }
+        case .unread: result = result.filter(\.isUnreadQueueCandidate)
         }
 
         if let min = filter.minScore {

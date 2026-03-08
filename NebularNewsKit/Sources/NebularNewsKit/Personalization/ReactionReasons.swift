@@ -34,8 +34,8 @@ public let downReactionReasonOptions: [ReactionReasonOption] = [
 public let allReactionReasonOptions = upReactionReasonOptions + downReactionReasonOptions
 
 public let reactionReasonSignalMap: [ArticleReactionReasonCode: Set<SignalName>] = [
-    "up_interest_match": [.topicAffinity, .tagMatchRatio],
-    "down_off_topic": [.topicAffinity, .tagMatchRatio],
+    "up_interest_match": [.topicAffinity, .feedAffinity, .tagMatchRatio],
+    "down_off_topic": [.topicAffinity, .feedAffinity, .tagMatchRatio],
     "up_source_trust": [.sourceReputation],
     "down_source_distrust": [.sourceReputation],
     "up_good_timing": [.contentFreshness],
@@ -59,6 +59,11 @@ public let sourceReputationReactionCodes: Set<ArticleReactionReasonCode> = [
 public let authorReactionReasonCodes: Set<ArticleReactionReasonCode> = [
     "up_author_like",
     "down_avoid_author"
+]
+
+public let feedAffinityReactionCodes: Set<ArticleReactionReasonCode> = [
+    "up_interest_match",
+    "down_off_topic"
 ]
 
 public func reasonOptions(for value: ReactionValue) -> [ReactionReasonOption] {
@@ -86,6 +91,10 @@ public func hasSourceReason(_ reasonCodes: [ArticleReactionReasonCode]) -> Bool 
 
 public func hasAuthorReason(_ reasonCodes: [ArticleReactionReasonCode]) -> Bool {
     !authorReactionReasonCodes.isDisjoint(with: reasonCodes)
+}
+
+public func hasFeedAffinityReason(_ reasonCodes: [ArticleReactionReasonCode]) -> Bool {
+    !feedAffinityReactionCodes.isDisjoint(with: reasonCodes)
 }
 
 public func shouldLearnFromReactionChange(previousValue: Int?, newValue: Int?) -> Bool {

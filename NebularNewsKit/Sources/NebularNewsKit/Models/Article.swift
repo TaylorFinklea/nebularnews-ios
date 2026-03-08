@@ -39,6 +39,7 @@ public final class Article: @unchecked Sendable {
     // User state
     public var isRead: Bool = false
     public var readAt: Date?
+    public var dismissedAt: Date?
     public var reactionValue: Int?
     public var reactionReasonCodes: String?
     public var feedbackRating: Int?
@@ -85,6 +86,14 @@ public final class Article: @unchecked Sendable {
         scoreStatusValue == .insufficientSignal
     }
 
+    public var isDismissed: Bool {
+        dismissedAt != nil
+    }
+
+    public var isUnreadQueueCandidate: Bool {
+        !isRead && !isDismissed
+    }
+
     /// Human-readable score label, falling back to a default.
     public var displayScoreLabel: String {
         if let scoreLabel, !scoreLabel.isEmpty {
@@ -101,5 +110,26 @@ public final class Article: @unchecked Sendable {
               let data = json.data(using: .utf8)
         else { return nil }
         return try? JSONDecoder().decode(type, from: data)
+    }
+
+    public func markRead(at date: Date = Date()) {
+        dismissedAt = nil
+        isRead = true
+        readAt = date
+    }
+
+    public func markUnread() {
+        isRead = false
+        readAt = nil
+    }
+
+    public func markDismissed(at date: Date = Date()) {
+        isRead = false
+        readAt = nil
+        dismissedAt = date
+    }
+
+    public func clearDismissal() {
+        dismissedAt = nil
     }
 }

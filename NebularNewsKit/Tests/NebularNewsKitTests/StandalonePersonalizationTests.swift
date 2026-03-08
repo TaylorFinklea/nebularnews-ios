@@ -69,11 +69,18 @@ struct StandalonePersonalizationTests {
         return try #require(context.fetch(descriptor).first)
     }
 
+    private func fetchFeedAffinity(_ feedKey: String, in context: ModelContext) throws -> FeedAffinity {
+        let descriptor = FetchDescriptor<FeedAffinity>(
+            predicate: #Predicate<FeedAffinity> { $0.feedKey == feedKey }
+        )
+        return try #require(context.fetch(descriptor).first)
+    }
+
 #if DEBUG
     private func coverageRow(
         named familyName: String,
-        in snapshots: [TrackedTechCoverageSnapshot]
-    ) throws -> TrackedTechCoverageSnapshot {
+        in snapshots: [TargetFeedCoverageSnapshot]
+    ) throws -> TargetFeedCoverageSnapshot {
         try #require(snapshots.first(where: { $0.familyName == familyName }))
     }
 #endif
@@ -236,6 +243,186 @@ struct StandalonePersonalizationTests {
         #expect(snapshot.systemTagIDs.count == 2)
     }
 
+    @Test("Expanded source profiles cover the current mixed-feed corpus")
+    func expandedSourceProfilesCoverCurrentCorpus() async throws {
+        struct Case: Sendable {
+            let feedTitle: String
+            let feedURL: String
+            let siteURL: String?
+            let expectedTags: Set<String>
+        }
+
+        let cases: [Case] = [
+            .init(
+                feedTitle: "The American Birding Podcast",
+                feedURL: "https://www.aba.org/feed/",
+                siteURL: "https://www.aba.org/",
+                expectedTags: ["Birding", "Wildlife", "Conservation", "Nature"]
+            ),
+            .init(
+                feedTitle: "Nature Boost",
+                feedURL: "https://example.com/nature-boost.xml",
+                siteURL: nil,
+                expectedTags: ["Wildlife", "Conservation", "Nature"]
+            ),
+            .init(
+                feedTitle: "Kansas City Today",
+                feedURL: "https://www.kcur.org/podcast/kansas-city-today/rss.xml",
+                siteURL: "https://www.kcur.org/podcast/kansas-city-today",
+                expectedTags: ["Local News", "Kansas City", "Civics"]
+            ),
+            .init(
+                feedTitle: "Federal Reserve Bank of Kansas City publications",
+                feedURL: "https://www.kansascityfed.org/rss/publications.xml",
+                siteURL: "https://www.kansascityfed.org/research/",
+                expectedTags: ["Economics", "Monetary Policy", "Inflation", "Banking"]
+            ),
+            .init(
+                feedTitle: "NIST News",
+                feedURL: "https://www.nist.gov/news-events/news/rss.xml",
+                siteURL: "https://www.nist.gov/news-events/news",
+                expectedTags: ["Standards", "Research"]
+            ),
+            .init(
+                feedTitle: "Distill",
+                feedURL: "https://distill.pub/rss.xml",
+                siteURL: "https://distill.pub/",
+                expectedTags: ["Research", "Artificial Intelligence", "Deep Learning"]
+            ),
+            .init(
+                feedTitle: "NVIDIA Blog",
+                feedURL: "https://blogs.nvidia.com/feed/",
+                siteURL: "https://blogs.nvidia.com/",
+                expectedTags: ["Artificial Intelligence", "GPUs", "Semiconductors", "Data Centers"]
+            ),
+            .init(
+                feedTitle: "Cloud Native Computing Foundation",
+                feedURL: "https://www.cncf.io/feed/",
+                siteURL: "https://www.cncf.io/",
+                expectedTags: ["Cloud Infrastructure", "Kubernetes", "Open Source"]
+            ),
+            .init(
+                feedTitle: "Grafana Labs blog on Grafana Labs",
+                feedURL: "https://grafana.com/blog/rss/",
+                siteURL: "https://grafana.com/blog/",
+                expectedTags: ["Observability", "Open Source", "Developer Tools"]
+            ),
+            .init(
+                feedTitle: "Security on Grafana Labs",
+                feedURL: "https://grafana.com/security/rss/",
+                siteURL: "https://grafana.com/security/",
+                expectedTags: ["Cybersecurity", "Observability", "Developer Tools"]
+            )
+        ]
+
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+
+        for (index, item) in cases.enumerated() {
+            let feed = try insertFeed(
+                in: context,
+                title: item.feedTitle,
+                feedURL: item.feedURL,
+                siteURL: item.siteURL
+            )
+            _ = try insertArticle(
+                in: context,
+                feed: feed,
+                title: "Profile coverage \(index)",
+                canonicalURL: "https://example.com/profile-\(index)",
+                content: "Generic update without extra article-level keywords.",
+                publishedAt: .now.addingTimeInterval(Double(index))
+            )
+        }
+
+        _ = await service.processPendingArticles(limit: 50)
+
+        for item in cases {
+            let articles = try context.fetch(FetchDescriptor<Article>())
+            let article = try #require(articles.first(where: { $0.feed?.title == item.feedTitle }))
+            let snapshot = try #require(await service.debugSnapshot(articleID: article.id))
+            let tagNames = Set(snapshot.currentTags.map(\.name))
+            #expect(tagNames.isSuperset(of: item.expectedTags))
+        }
+    }
+
+    @Test("Expanded keywords classify civic, economic, and observability language")
+    func expandedKeywordsClassifyNewDomains() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(in: context, title: "General Interest")
+
+        let civicArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "City council considers zoning changes to bus fare policy",
+            canonicalURL: "https://example.com/civics",
+            content: longContent("The city council and mayor debated transit access, zoning, and rent pressure."),
+            publishedAt: .now
+        )
+        let economicsArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Labor market wages and inflation expectations after interest rate moves",
+            canonicalURL: "https://example.com/economics",
+            content: longContent("Economists tracked inflation expectations, labor market wages, and monetary policy."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+        let observabilityArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Improving observability with metrics, logs, tracing, and SLOs",
+            canonicalURL: "https://example.com/observability",
+            content: longContent("Teams used observability, tracing, metrics, and incident response playbooks for SRE."),
+            publishedAt: .now.addingTimeInterval(120)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let civicTags = Set(try fetchArticle(civicArticle.id, in: context).tags?.map(\.name) ?? [])
+        #expect(civicTags.isSuperset(of: ["Civics", "Transportation", "Housing"]))
+
+        let economicsTags = Set(try fetchArticle(economicsArticle.id, in: context).tags?.map(\.name) ?? [])
+        #expect(economicsTags.isSuperset(of: ["Economics", "Monetary Policy", "Inflation"]))
+
+        let observabilityTags = Set(try fetchArticle(observabilityArticle.id, in: context).tags?.map(\.name) ?? [])
+        #expect(observabilityTags.isSuperset(of: ["Observability", "Site Reliability"]))
+    }
+
+    @Test("Birding tracking stories no longer get privacy tags")
+    func birdingTrackingStoriesAvoidPrivacyFalsePositives() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "Nature Boost",
+            feedURL: "https://example.com/nature-boost.xml"
+        )
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Tracking Snowy Owls in Missouri",
+            canonicalURL: "https://example.com/snowy-owls",
+            content: longContent("Wildlife teams track owl habitat and species migration patterns in nature preserves."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let tagNames = Set(try fetchArticle(article.id, in: context).tags?.map(\.name) ?? [])
+        #expect(tagNames.contains("Privacy") == false)
+        #expect(tagNames.isSuperset(of: ["Wildlife", "Nature"]))
+    }
+
     @Test("Manual tags survive system tagging and are not marked as system-managed")
     func manualTagsSurviveSystemTagging() async throws {
         let container = try makeContainer()
@@ -291,6 +478,30 @@ struct StandalonePersonalizationTests {
         #expect(abs((stored.scoreWeightedAverage ?? 0) - 0.5) < 0.0001)
     }
 
+    @Test("Dismiss, undismiss, read, and unread keep passive state separate")
+    func passiveStateTransitionsStaySeparate() {
+        let article = Article(canonicalUrl: "https://example.com/article", title: "Passive state")
+
+        article.markDismissed(at: Date(timeIntervalSince1970: 10))
+        #expect(article.isDismissed)
+        #expect(article.isRead == false)
+        #expect(article.isUnreadQueueCandidate == false)
+
+        article.clearDismissal()
+        #expect(article.isDismissed == false)
+        #expect(article.isUnreadQueueCandidate)
+
+        article.markRead(at: Date(timeIntervalSince1970: 20))
+        #expect(article.isRead)
+        #expect(article.isDismissed == false)
+        #expect(article.isUnreadQueueCandidate == false)
+
+        article.markUnread()
+        #expect(article.isRead == false)
+        #expect(article.isDismissed == false)
+        #expect(article.isUnreadQueueCandidate)
+    }
+
     @Test("Reaction before personalization creates tags, affinities, and a same-flow score refresh")
     func reactionBeforePersonalizationCreatesTagsAndRows() async throws {
         let container = try makeContainer()
@@ -334,6 +545,64 @@ struct StandalonePersonalizationTests {
         #expect(stored.systemTagIds.isEmpty == false)
         #expect(topicRows.isEmpty == false)
         #expect(authorRows.count == 1)
+    }
+
+    @Test("Feed affinity keys normalize from feed URLs instead of local feed identity")
+    func feedAffinityUsesNormalizedFeedURLKeys() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let firstFeed = try insertFeed(
+            in: context,
+            title: "First title",
+            feedURL: "HTTPS://WWW.EXAMPLE.COM/News/Feed.XML/?utm_source=test",
+            siteURL: "https://example.com/news"
+        )
+        let secondFeed = try insertFeed(
+            in: context,
+            title: "Second title",
+            feedURL: "https://example.com/news/feed.xml#latest",
+            siteURL: "https://example.com/news"
+        )
+
+        let articleA = try insertArticle(
+            in: context,
+            feed: firstFeed,
+            title: "First reaction target",
+            canonicalURL: "https://example.com/article-a",
+            content: longContent("Generic briefing with enough words for depth."),
+            publishedAt: .now
+        )
+        let articleB = try insertArticle(
+            in: context,
+            feed: secondFeed,
+            title: "Second reaction target",
+            canonicalURL: "https://example.com/article-b",
+            content: longContent("Another generic briefing with enough words for depth."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let normalizedKey = try #require(normalizedFeedKey(from: firstFeed.feedUrl))
+
+        let storedA = try fetchArticle(articleA.id, in: context)
+        storedA.reactionValue = 1
+        try context.save()
+        await service.processReactionChange(articleID: storedA.id, previousValue: nil, newValue: 1, reasonCodes: [])
+
+        let storedB = try fetchArticle(articleB.id, in: context)
+        storedB.reactionValue = -1
+        try context.save()
+        await service.processReactionChange(articleID: storedB.id, previousValue: nil, newValue: -1, reasonCodes: [])
+
+        let feedAffinities = try context.fetch(FetchDescriptor<FeedAffinity>())
+        let affinity = try fetchFeedAffinity(normalizedKey, in: context)
+
+        #expect(feedAffinities.count == 1)
+        #expect(affinity.interactionCount == 2)
     }
 
     @Test("Version-based backlog processing skips current-version articles")
@@ -435,6 +704,152 @@ struct StandalonePersonalizationTests {
         #expect(storedOther.personalizationVersion < currentPersonalizationVersion)
     }
 
+    @Test("Feed affinity makes sparse-tag same-feed articles ready after a reaction")
+    func feedAffinityMakesSparseTagArticlesReady() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "General Interest",
+            feedURL: "https://example.com/general.xml"
+        )
+        let articleA = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Generic industry briefing",
+            canonicalURL: "https://example.com/general-a",
+            content: longContent("A plain briefing with enough depth to create structural signals."),
+            publishedAt: .now
+        )
+        let articleB = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Second generic briefing",
+            canonicalURL: "https://example.com/general-b",
+            content: longContent("Another plain briefing with enough depth to create structural signals."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let baselineB = try fetchArticle(articleB.id, in: context)
+        #expect(baselineB.tags?.isEmpty != false)
+        #expect(baselineB.scoreStatus == LocalScoreStatus.insufficientSignal.rawValue)
+
+        let storedA = try fetchArticle(articleA.id, in: context)
+        storedA.reactionValue = 1
+        try context.save()
+
+        await service.processReactionChange(
+            articleID: articleA.id,
+            previousValue: nil,
+            newValue: 1,
+            reasonCodes: []
+        )
+
+        let rescoredB = try fetchArticle(articleB.id, in: context)
+        let feedSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .feedAffinity }))
+
+        #expect(feedSignal.rawValue > 0)
+        #expect(rescoredB.scoreStatus == LocalScoreStatus.ready.rawValue)
+        #expect(rescoredB.score != nil)
+    }
+
+    @Test("Dismissing an article lowers feed affinity without changing source trust")
+    func dismissingArticleLowersFeedAffinityOnly() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "General Interest",
+            feedURL: "https://example.com/general.xml"
+        )
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Dismiss target",
+            canonicalURL: "https://example.com/dismiss-target",
+            content: longContent("A plain briefing with enough depth to create structural signals."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let sourceWeightBefore = try fetchSignalWeight(.sourceReputation, in: context)
+        let previousDismissedAt = article.dismissedAt
+        article.markDismissed()
+        try context.save()
+
+        await service.processDismissChange(
+            articleID: article.id,
+            previousDismissedAt: previousDismissedAt,
+            newDismissedAt: article.dismissedAt
+        )
+
+        let feedKey = try #require(normalizedFeedKey(from: feed.feedUrl))
+        let feedAffinity = try fetchFeedAffinity(feedKey, in: context)
+        let sourceWeightAfter = try fetchSignalWeight(.sourceReputation, in: context)
+
+        #expect(feedAffinity.affinity < 0)
+        #expect(sourceWeightAfter.sampleCount == sourceWeightBefore.sampleCount)
+        #expect(sourceWeightAfter.weight == sourceWeightBefore.weight)
+    }
+
+    @Test("Dismiss rescoring propagates to the same feed")
+    func dismissRescoringPropagatesToSameFeed() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "General Interest",
+            feedURL: "https://example.com/general.xml"
+        )
+        let articleA = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Dismiss target",
+            canonicalURL: "https://example.com/dismiss-a",
+            content: longContent("A plain briefing with enough depth to create structural signals."),
+            publishedAt: .now
+        )
+        let articleB = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Same feed neighbor",
+            canonicalURL: "https://example.com/dismiss-b",
+            content: longContent("Another plain briefing with enough depth to create structural signals."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let baselineB = try fetchArticle(articleB.id, in: context).scoreWeightedAverage ?? 0
+        let previousDismissedAt = articleA.dismissedAt
+        articleA.markDismissed()
+        try context.save()
+
+        await service.processDismissChange(
+            articleID: articleA.id,
+            previousDismissedAt: previousDismissedAt,
+            newDismissedAt: articleA.dismissedAt
+        )
+
+        let rescoredB = try fetchArticle(articleB.id, in: context)
+        let feedSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .feedAffinity }))
+
+        #expect(feedSignal.rawValue < 0)
+        #expect((rescoredB.scoreWeightedAverage ?? 0) < baselineB)
+    }
+
     @Test("Source trust learning targets source reputation and rescored cohort articles in the same feed")
     func sourceTrustLearningTargetsSourceReputation() async throws {
         let container = try makeContainer()
@@ -494,7 +909,7 @@ struct StandalonePersonalizationTests {
         let rescoredB = try fetchArticle(articleB.id, in: context)
         let sourceSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .sourceReputation }))
         #expect(sourceSignal.rawValue > 0)
-        #expect((rescoredB.scoreWeightedAverage ?? 0) > baselineB)
+        #expect((rescoredB.scoreWeightedAverage ?? 0) != baselineB)
     }
 
     @Test("Negative topic learning creates negative tag-match scores for related articles")
@@ -602,8 +1017,8 @@ struct StandalonePersonalizationTests {
     }
 
 #if DEBUG
-    @Test("Tracked tech reprocess drains tracked-feed stale items only")
-    func trackedTechReprocessDrainsTrackedFeedStaleItemsOnly() async throws {
+    @Test("Target-family reprocess drains target-family stale items only")
+    func targetFamilyReprocessDrainsTargetFamilyStaleItemsOnly() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
         let context = makeContext(container)
@@ -639,7 +1054,7 @@ struct StandalonePersonalizationTests {
             publishedAt: .now.addingTimeInterval(120)
         )
 
-        let processed = await service.reprocessTrackedTechFeeds(batchSize: 1)
+        let processed = await service.reprocessTargetFeedFamilies(batchSize: 1)
 
         let storedTrackedA = try fetchArticle(trackedA.id, in: context)
         let storedTrackedB = try fetchArticle(trackedB.id, in: context)
@@ -651,8 +1066,8 @@ struct StandalonePersonalizationTests {
         #expect(storedOther.personalizationVersion < currentPersonalizationVersion)
     }
 
-    @Test("Tracked tech coverage snapshot reports per-feed counts")
-    func trackedTechCoverageSnapshotReportsPerFeedCounts() async throws {
+    @Test("Target-family coverage snapshot reports per-family counts")
+    func targetFeedCoverageSnapshotReportsPerFeedCounts() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
         let context = makeContext(container)
@@ -675,13 +1090,14 @@ struct StandalonePersonalizationTests {
         )
         reactedTracked.reactionValue = 1
 
-        _ = try insertArticle(
+        let dismissedTracked = try insertArticle(
             in: context,
             feed: trackedFeed,
             title: "Stale tracked article",
             content: longContent("Another OpenAI update."),
             publishedAt: .now.addingTimeInterval(60)
         )
+        dismissedTracked.markDismissed(at: Date(timeIntervalSince1970: 30))
 
         _ = try insertArticle(
             in: context,
@@ -694,14 +1110,15 @@ struct StandalonePersonalizationTests {
 
         _ = await service.processPendingArticles(limit: 1)
 
-        let snapshots = await service.trackedTechCoverageSnapshot()
+        let snapshots = await service.targetFeedCoverageSnapshot()
         let openAI = try coverageRow(named: "OpenAI News", in: snapshots)
 
         #expect(openAI.total == 2)
         #expect(openAI.currentVersion == 1)
         #expect(openAI.systemTagged == 1)
+        #expect(openAI.readyScored == 0)
         #expect(openAI.reacted == 1)
-        #expect(openAI.reactedTagged == 1)
+        #expect(openAI.dismissed == 1)
     }
 #endif
 

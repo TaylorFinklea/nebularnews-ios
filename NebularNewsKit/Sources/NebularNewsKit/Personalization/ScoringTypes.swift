@@ -2,6 +2,7 @@ import Foundation
 
 public enum SignalName: String, CaseIterable, Codable, Sendable {
     case topicAffinity = "topic_affinity"
+    case feedAffinity = "feed_affinity"
     case sourceReputation = "source_reputation"
     case contentFreshness = "content_freshness"
     case contentDepth = "content_depth"
@@ -11,6 +12,7 @@ public enum SignalName: String, CaseIterable, Codable, Sendable {
 
 public let preferenceBackedSignalNames: Set<SignalName> = [
     .topicAffinity,
+    .feedAffinity,
     .sourceReputation,
     .authorAffinity,
     .tagMatchRatio
@@ -85,6 +87,7 @@ public struct AlgorithmicScore: Sendable {
 
 public let defaultSignalWeights: [SignalName: Double] = [
     .topicAffinity: 1.0,
+    .feedAffinity: 1.0,
     .sourceReputation: 0.8,
     .contentFreshness: 0.6,
     .contentDepth: 0.5,
@@ -98,7 +101,7 @@ public let minDataBackedSignalsToPublish = 2
 public let minPreferenceBackedSignalsToPublish = 1
 public let sourceReputationVoteWeight = 1.5
 public let sourceReputationPriorWeight = 3.0
-public let currentPersonalizationVersion = 3
+public let currentPersonalizationVersion = 4
 
 private let scoreNeutralPriorWeight = 1.0
 private let scoreNeutralPriorValue = 0.5

@@ -5,6 +5,7 @@ private let targetedReasonSignalMultiplier = 1.5
 private let backgroundReasonSignalMultiplier = 0.25
 private let explicitAffinityMultiplier = 1.5
 private let implicitAffinityMultiplier = 1.0
+private let dismissAffinityMultiplier = 0.35
 private let impactedArticleRescoreLimit = 100
 
 public struct PersonalizationTagSnapshot: Sendable, Hashable {
@@ -20,6 +21,7 @@ struct PersonalizationArticleContext: Sendable {
     let authorNormalized: String?
     let publishedAt: Date?
     let feedID: String?
+    let feedKey: String?
     let feedTitle: String?
     let siteHostname: String?
     let contentText: String?
@@ -55,13 +57,14 @@ public struct PersonalizationDebugSnapshot: Sendable, Hashable {
 }
 
 #if DEBUG
-public struct TrackedTechCoverageSnapshot: Sendable, Hashable {
+public struct TargetFeedCoverageSnapshot: Sendable, Hashable {
     public let familyName: String
     public let total: Int
     public let currentVersion: Int
     public let systemTagged: Int
+    public let readyScored: Int
     public let reacted: Int
-    public let reactedTagged: Int
+    public let dismissed: Int
 }
 #endif
 
@@ -86,7 +89,7 @@ actor LocalPersonalizationRepository {
         try ensureDefaultSignalWeights()
     }
 
-    func listStaleArticleIDs(limit: Int = 25, trackedTechOnly: Bool = false) async -> [String] {
+    func listStaleArticleIDs(limit: Int = 25, targetFamiliesOnly: Bool = false) async -> [String] {
         let staleVersion = currentPersonalizationVersion
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { $0.personalizationVersion < staleVersion },
@@ -97,29 +100,29 @@ actor LocalPersonalizationRepository {
             return []
         }
 
-        var reactedTrackedTechArticleIDs: [String] = []
-        var trackedTechArticleIDs: [String] = []
+        var priorityTargetArticleIDs: [String] = []
+        var targetArticleIDs: [String] = []
         var otherArticleIDs: [String] = []
 
         for article in articles {
             let context = makeArticleContext(from: article)
-            let isTrackedTech = primaryTrackedTechFeedFamily(
+            let isTargetFamily = primaryPersonalizationTargetFeedFamily(
                 feedTitle: context.feedTitle,
                 siteHostname: context.siteHostname
             ) != nil
 
-            if isTrackedTech {
-                if article.reactionValue != nil {
-                    reactedTrackedTechArticleIDs.append(article.id)
+            if isTargetFamily {
+                if article.reactionValue != nil || article.isDismissed {
+                    priorityTargetArticleIDs.append(article.id)
                 } else {
-                    trackedTechArticleIDs.append(article.id)
+                    targetArticleIDs.append(article.id)
                 }
-            } else if !trackedTechOnly {
+            } else if !targetFamiliesOnly {
                 otherArticleIDs.append(article.id)
             }
         }
 
-        return Array((reactedTrackedTechArticleIDs + trackedTechArticleIDs + otherArticleIDs).prefix(limit))
+        return Array((priorityTargetArticleIDs + targetArticleIDs + otherArticleIDs).prefix(limit))
     }
 
     fileprivate func storedArticleSnapshot(for articleID: String) async -> StoredArticlePersonalizationSnapshot? {
@@ -146,22 +149,23 @@ actor LocalPersonalizationRepository {
     }
 
 #if DEBUG
-    func trackedTechCoverageSnapshot() async -> [TrackedTechCoverageSnapshot] {
+    func targetFeedCoverageSnapshot() async -> [TargetFeedCoverageSnapshot] {
         struct Counts {
             var total = 0
             var currentVersion = 0
             var systemTagged = 0
+            var readyScored = 0
             var reacted = 0
-            var reactedTagged = 0
+            var dismissed = 0
         }
 
         let descriptor = FetchDescriptor<Article>()
         let articles = (try? modelContext.fetch(descriptor)) ?? []
-        var countsByFamilyName = Dictionary(uniqueKeysWithValues: trackedTechFeedFamilies.map { ($0.name, Counts()) })
+        var countsByFamilyName = Dictionary(uniqueKeysWithValues: personalizationTargetFeedFamilies.map { ($0.name, Counts()) })
 
         for article in articles {
             let context = makeArticleContext(from: article)
-            guard let family = primaryTrackedTechFeedFamily(
+            guard let family = primaryPersonalizationTargetFeedFamily(
                 feedTitle: context.feedTitle,
                 siteHostname: context.siteHostname
             ) else {
@@ -176,24 +180,28 @@ actor LocalPersonalizationRepository {
             if !article.systemTagIds.isEmpty {
                 counts.systemTagged += 1
             }
+            if article.hasReadyScore {
+                counts.readyScored += 1
+            }
             if article.reactionValue != nil {
                 counts.reacted += 1
-                if !article.systemTagIds.isEmpty {
-                    counts.reactedTagged += 1
-                }
+            }
+            if article.isDismissed {
+                counts.dismissed += 1
             }
             countsByFamilyName[family.name] = counts
         }
 
-        return trackedTechFeedFamilies.map { family in
+        return personalizationTargetFeedFamilies.map { family in
             let counts = countsByFamilyName[family.name] ?? Counts()
-            return TrackedTechCoverageSnapshot(
+            return TargetFeedCoverageSnapshot(
                 familyName: family.name,
                 total: counts.total,
                 currentVersion: counts.currentVersion,
                 systemTagged: counts.systemTagged,
+                readyScored: counts.readyScored,
                 reacted: counts.reacted,
-                reactedTagged: counts.reactedTagged
+                dismissed: counts.dismissed
             )
         }
     }
@@ -210,7 +218,8 @@ actor LocalPersonalizationRepository {
         )
         let articles = (try? modelContext.fetch(descriptor)) ?? []
 
-        var impactedIDs: [String] = []
+        var sameFeedIDs: [String] = []
+        var otherImpactedIDs: [String] = []
         var seen: Set<String> = []
 
         for candidate in articles {
@@ -224,13 +233,32 @@ actor LocalPersonalizationRepository {
             guard matchesFeed || matchesAuthor || matchesTags else { continue }
             guard seen.insert(candidate.id).inserted else { continue }
 
-            impactedIDs.append(candidate.id)
-            if impactedIDs.count == limit {
-                break
+            if matchesFeed {
+                sameFeedIDs.append(candidate.id)
+            } else {
+                otherImpactedIDs.append(candidate.id)
             }
         }
 
-        return impactedIDs
+        return Array((sameFeedIDs + otherImpactedIDs).prefix(limit))
+    }
+
+    func sameFeedArticleIDs(for articleID: String, limit: Int) async -> [String] {
+        guard let article = try? fetchArticle(articleID),
+              let feedID = article.feed?.id
+        else {
+            return []
+        }
+
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.fetchedAt, order: .reverse)]
+        )
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+
+        return articles
+            .filter { $0.id != articleID && $0.feed?.id == feedID }
+            .prefix(limit)
+            .map(\.id)
     }
 
     func listCanonicalTagCandidates() async -> [DeterministicTagCandidate] {
@@ -348,11 +376,12 @@ actor LocalPersonalizationRepository {
 
         for article in feed.articles ?? [] {
             guard let reactionValue = article.reactionValue else { continue }
-            feedbackCount += 1
             let reasonCodes = article.reactionReasonCodes?
                 .split(separator: ",")
                 .map(String.init) ?? []
-            let voteWeight = hasSourceReason(reasonCodes) ? sourceReputationVoteWeight : 1.0
+            guard hasSourceReason(reasonCodes) else { continue }
+            feedbackCount += 1
+            let voteWeight = sourceReputationVoteWeight
             weightedFeedbackCount += voteWeight
             ratingSum += Double(reactionValue) * voteWeight
         }
@@ -382,6 +411,14 @@ actor LocalPersonalizationRepository {
         guard let authorNormalized, !authorNormalized.isEmpty else { return nil }
         let descriptor = FetchDescriptor<AuthorAffinity>(
             predicate: #Predicate<AuthorAffinity> { $0.authorNormalized == authorNormalized }
+        )
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    func feedAffinity(for feedKey: String?) async -> FeedAffinity? {
+        guard let feedKey, !feedKey.isEmpty else { return nil }
+        let descriptor = FetchDescriptor<FeedAffinity>(
+            predicate: #Predicate<FeedAffinity> { $0.feedKey == feedKey }
         )
         return try? modelContext.fetch(descriptor).first
     }
@@ -458,6 +495,19 @@ actor LocalPersonalizationRepository {
         multiplier: Double
     ) async throws {
         let row = try authorAffinityRow(for: authorNormalized)
+        let alpha = effectiveAlpha(learningRate: scoringLearningRate, sampleCount: row.interactionCount)
+        row.affinity += alpha * Double(direction) * multiplier
+        row.interactionCount += 1
+        row.updatedAt = Date()
+        try modelContext.save()
+    }
+
+    func updateFeedAffinity(
+        for feedKey: String,
+        direction: Int,
+        multiplier: Double
+    ) async throws {
+        let row = try feedAffinityRow(for: feedKey)
         let alpha = effectiveAlpha(learningRate: scoringLearningRate, sampleCount: row.interactionCount)
         row.affinity += alpha * Double(direction) * multiplier
         row.interactionCount += 1
@@ -553,6 +603,19 @@ actor LocalPersonalizationRepository {
         return row
     }
 
+    private func feedAffinityRow(for feedKey: String) throws -> FeedAffinity {
+        let descriptor = FetchDescriptor<FeedAffinity>(
+            predicate: #Predicate<FeedAffinity> { $0.feedKey == feedKey }
+        )
+        if let existing = try modelContext.fetch(descriptor).first {
+            return existing
+        }
+
+        let row = FeedAffinity(feedKey: feedKey, affinity: 0)
+        modelContext.insert(row)
+        return row
+    }
+
     private func fetchArticle(_ articleID: String) throws -> Article {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { $0.id == articleID }
@@ -602,6 +665,7 @@ actor LocalPersonalizationRepository {
             authorNormalized: normalizeAuthor(article.author),
             publishedAt: article.publishedAt,
             feedID: article.feed?.id,
+            feedKey: article.feed.flatMap { normalizedFeedKey(from: $0.feedUrl) },
             feedTitle: article.feed?.title,
             siteHostname: article.feed?.siteUrl.flatMap(hostname(from:)) ?? article.canonicalUrl.flatMap(hostname(from:)),
             contentText: contentText,
@@ -655,12 +719,12 @@ public actor LocalStandalonePersonalizationService {
     }
 
     @discardableResult
-    public func reprocessTrackedTechFeeds(batchSize: Int = 200) async -> Int {
+    public func reprocessTargetFeedFamilies(batchSize: Int = 200) async -> Int {
         await bootstrap()
         var totalProcessed = 0
 
         while true {
-            let articleIDs = await repository.listStaleArticleIDs(limit: batchSize, trackedTechOnly: true)
+            let articleIDs = await repository.listStaleArticleIDs(limit: batchSize, targetFamiliesOnly: true)
             totalProcessed += articleIDs.count
 
             for articleID in articleIDs {
@@ -675,9 +739,9 @@ public actor LocalStandalonePersonalizationService {
         return totalProcessed
     }
 
-    public func trackedTechCoverageSnapshot() async -> [TrackedTechCoverageSnapshot] {
+    public func targetFeedCoverageSnapshot() async -> [TargetFeedCoverageSnapshot] {
         await bootstrap()
-        return await repository.trackedTechCoverageSnapshot()
+        return await repository.targetFeedCoverageSnapshot()
     }
 #endif
 
@@ -721,11 +785,13 @@ public actor LocalStandalonePersonalizationService {
 
         let topicAffinityMap = await repository.topicAffinityMap(for: context.tags.map(\.normalizedName))
         let authorAffinity = await repository.authorAffinity(for: context.authorNormalized)
+        let feedAffinity = await repository.feedAffinity(for: context.feedKey)
         let feedReputation = await repository.feedReputation(feedID: context.feedID)
         let signalScores = extractSignals(
             context: context,
             topicAffinities: topicAffinityMap,
             authorAffinity: authorAffinity,
+            feedAffinity: feedAffinity,
             feedReputation: feedReputation
         )
         let weights = await repository.loadSignalWeights()
@@ -768,6 +834,15 @@ public actor LocalStandalonePersonalizationService {
             reasonCodes: reasonCodes
         )
 
+        let feedAffinityMultiplier = hasFeedAffinityReason(reasonCodes) ? explicitAffinityMultiplier : implicitAffinityMultiplier
+        if let feedKey = context.feedKey, !feedKey.isEmpty {
+            try? await repository.updateFeedAffinity(
+                for: feedKey,
+                direction: finalValue,
+                multiplier: feedAffinityMultiplier
+            )
+        }
+
         if reasonCodes.isEmpty || hasTopicReason(reasonCodes) {
             let multiplier = hasTopicReason(reasonCodes) ? explicitAffinityMultiplier : implicitAffinityMultiplier
             try? await repository.updateTopicAffinities(
@@ -790,6 +865,35 @@ public actor LocalStandalonePersonalizationService {
 
         try? await rescoreArticle(articleID: articleID)
         await rescoreRelatedArticles(for: articleID)
+    }
+
+    public func processDismissChange(
+        articleID: String,
+        previousDismissedAt: Date?,
+        newDismissedAt: Date?
+    ) async {
+        await bootstrap()
+        guard previousDismissedAt == nil,
+              newDismissedAt != nil
+        else {
+            return
+        }
+
+        guard let snapshot = await refreshSnapshot(articleID: articleID),
+              let feedKey = snapshot.context.feedKey,
+              !feedKey.isEmpty
+        else {
+            return
+        }
+
+        try? await repository.updateFeedAffinity(
+            for: feedKey,
+            direction: -1,
+            multiplier: dismissAffinityMultiplier
+        )
+
+        try? await rescoreArticle(articleID: articleID)
+        await rescoreSameFeedArticles(for: articleID)
     }
 
     private func refreshSnapshot(articleID: String) async -> StoredArticlePersonalizationSnapshot? {
@@ -824,6 +928,18 @@ public actor LocalStandalonePersonalizationService {
         }
     }
 
+    private func rescoreSameFeedArticles(for articleID: String) async {
+        let impactedIDs = await repository.sameFeedArticleIDs(for: articleID, limit: impactedArticleRescoreLimit)
+
+        for impactedID in impactedIDs {
+            if await repository.needsRetagging(articleID: impactedID) {
+                try? await retagAndScoreArticle(articleID: impactedID)
+            } else {
+                try? await rescoreArticle(articleID: impactedID)
+            }
+        }
+    }
+
     private func deterministicTagEvaluation(for context: PersonalizationArticleContext) async -> DeterministicTagEvaluation {
         let candidates = await repository.listCanonicalTagCandidates()
         let priors = await repository.feedTagPriors(feedID: context.feedID, excluding: context.id)
@@ -845,6 +961,7 @@ public actor LocalStandalonePersonalizationService {
         context: PersonalizationArticleContext,
         topicAffinities: [String: TopicAffinity],
         authorAffinity: AuthorAffinity?,
+        feedAffinity: FeedAffinity?,
         feedReputation: FeedReputation
     ) -> [StoredSignalScore] {
         var signals: [StoredSignalScore] = []
@@ -862,6 +979,17 @@ public actor LocalStandalonePersonalizationService {
                     )
                 )
             }
+        }
+
+        if let feedAffinity {
+            signals.append(
+                StoredSignalScore(
+                    signal: .feedAffinity,
+                    rawValue: feedAffinity.affinity,
+                    normalizedValue: sigmoid(feedAffinity.affinity, steepness: 2),
+                    isDataBacked: true
+                )
+            )
         }
 
         if feedReputation.feedbackCount > 0 {
@@ -950,6 +1078,34 @@ private func normalizeAuthor(_ value: String?) -> String? {
     let normalized = value
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
+
+    return normalized.isEmpty ? nil : normalized
+}
+
+func normalizedFeedKey(from value: String?) -> String? {
+    guard let rawValue = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !rawValue.isEmpty
+    else {
+        return nil
+    }
+
+    if let components = URLComponents(string: rawValue),
+       let host = components.host?.lowercased() {
+        let normalizedHost = host.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        let normalizedPath = components.path
+            .lowercased()
+            .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+
+        let key = normalizedHost + normalizedPath
+        return key.isEmpty ? nil : key
+    }
+
+    let normalized = rawValue
+        .lowercased()
+        .replacingOccurrences(of: "^https?://", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "[?#].*$", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
 
     return normalized.isEmpty ? nil : normalized
 }

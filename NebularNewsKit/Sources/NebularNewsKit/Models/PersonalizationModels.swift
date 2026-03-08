@@ -55,3 +55,23 @@ public final class AuthorAffinity: @unchecked Sendable {
         self.updatedAt = updatedAt
     }
 }
+
+@Model
+public final class FeedAffinity: @unchecked Sendable {
+    @Attribute(.unique) public var feedKey: String
+    public var affinity: Double
+    public var interactionCount: Int
+    public var updatedAt: Date
+
+    public init(
+        feedKey: String,
+        affinity: Double,
+        interactionCount: Int = 0,
+        updatedAt: Date = Date()
+    ) {
+        self.feedKey = feedKey
+        self.affinity = affinity
+        self.interactionCount = interactionCount
+        self.updatedAt = updatedAt
+    }
+}

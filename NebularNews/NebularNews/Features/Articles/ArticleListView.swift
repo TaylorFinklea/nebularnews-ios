@@ -39,7 +39,7 @@ struct ArticleListView: View {
 
         switch filterMode {
         case .all: break
-        case .unread: result = result.filter { !$0.isRead }
+        case .unread: result = result.filter(\.isUnreadQueueCandidate)
         case .read: result = result.filter { $0.isRead }
         case .scored: result = result.filter(\.hasReadyScore)
         case .learning: result = result.filter(\.isLearningScore)
@@ -92,14 +92,11 @@ struct ArticleListView: View {
                                     .listRowSeparator(.hidden)
                                     .swipeActions(edge: .leading) {
                                         Button {
-                                            toggleRead(article)
+                                            handleLeadingSwipe(for: article)
                                         } label: {
-                                            Label(
-                                                article.isRead ? "Unread" : "Read",
-                                                systemImage: article.isRead ? "envelope.badge" : "envelope.open"
-                                            )
+                                            swipeActionLabel(for: article)
                                         }
-                                        .tint(article.isRead ? .blue : .green)
+                                        .tint(swipeTint(for: article))
                                     }
                                 }
                             }
@@ -191,10 +188,60 @@ struct ArticleListView: View {
         }
     }
 
-    private func toggleRead(_ article: Article) {
-        article.isRead.toggle()
-        article.readAt = article.isRead ? Date() : nil
+    private func handleLeadingSwipe(for article: Article) {
+        if article.isRead {
+            article.markUnread()
+            try? modelContext.save()
+            return
+        }
+
+        if article.isDismissed {
+            article.clearDismissal()
+            try? modelContext.save()
+            return
+        }
+
+        let previousDismissedAt = article.dismissedAt
+        article.markDismissed()
+        let newDismissedAt = article.dismissedAt
         try? modelContext.save()
+
+        Task {
+            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            await service.processDismissChange(
+                articleID: article.id,
+                previousDismissedAt: previousDismissedAt,
+                newDismissedAt: newDismissedAt
+            )
+        }
+    }
+
+    private func swipeActionLabel(for article: Article) -> some View {
+        Label(
+            swipeActionTitle(for: article),
+            systemImage: swipeActionSystemImage(for: article)
+        )
+    }
+
+    private func swipeActionTitle(for article: Article) -> String {
+        if article.isRead {
+            return "Unread"
+        }
+        return article.isDismissed ? "Undismiss" : "Dismiss"
+    }
+
+    private func swipeActionSystemImage(for article: Article) -> String {
+        if article.isRead {
+            return "envelope.badge"
+        }
+        return article.isDismissed ? "arrow.uturn.backward.circle" : "eye.slash"
+    }
+
+    private func swipeTint(for article: Article) -> Color {
+        if article.isRead {
+            return .blue
+        }
+        return article.isDismissed ? .orange : .secondary
     }
 }
 
@@ -204,7 +251,7 @@ private struct ArticleRow: View {
     let article: Article
 
     var body: some View {
-        GlassCard(cornerRadius: 22, style: article.isRead ? .standard : .raised, tintColor: accentColor) {
+        GlassCard(cornerRadius: 22, style: (article.isRead || article.isDismissed) ? .standard : .raised, tintColor: accentColor) {
             HStack(alignment: .top, spacing: 12) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .fill(accentColor)
@@ -221,6 +268,10 @@ private struct ArticleRow: View {
 
                         Spacer()
 
+                        if article.isDismissed {
+                            DismissedBadge()
+                        }
+
                         if article.hasReadyScore, let score = article.score {
                             ScoreBadge(score: score)
                         } else if article.isLearningScore {
@@ -236,8 +287,8 @@ private struct ArticleRow: View {
 
                     Text(article.title ?? "Untitled")
                         .font(.headline)
-                        .fontWeight(article.isRead ? .regular : .semibold)
-                        .foregroundStyle(article.isRead ? .secondary : .primary)
+                        .fontWeight((article.isRead || article.isDismissed) ? .regular : .semibold)
+                        .foregroundStyle((article.isRead || article.isDismissed) ? .secondary : .primary)
                         .lineLimit(2)
 
                     if let summary = article.summaryText, !summary.isEmpty {
@@ -260,10 +311,13 @@ private struct ArticleRow: View {
                 }
             }
         }
-        .opacity(article.isRead ? 0.82 : 1)
+        .opacity((article.isRead || article.isDismissed) ? 0.78 : 1)
     }
 
     private var accentColor: Color {
+        if article.isDismissed {
+            return .secondary
+        }
         if article.hasReadyScore, let score = article.score {
             return Color.forScore(score)
         }
@@ -284,5 +338,17 @@ private struct LearningBadge: View {
             .background(.ultraThinMaterial, in: Capsule())
             .background(Color.purple.opacity(0.12), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.purple.opacity(0.18)))
+    }
+}
+
+private struct DismissedBadge: View {
+    var body: some View {
+        Text("Dismissed")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.secondary.opacity(0.18)))
     }
 }
