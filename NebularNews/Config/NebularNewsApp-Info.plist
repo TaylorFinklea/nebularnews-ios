@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
+	</array>
+	<key>BackgroundRefreshTaskIdentifier</key>
+	<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
@@ -18,12 +24,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
-	</array>
-	<key>BackgroundRefreshTaskIdentifier</key>
-	<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
 	<key>CloudKitContainerIdentifier</key>
 	<string>$(CLOUDKIT_CONTAINER_IDENTIFIER)</string>
 	<key>CloudKitEnabled</key>
@@ -40,13 +40,14 @@
 	<string>$(MOBILE_OAUTH_REDIRECT_URI)</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 		<string>remote-notification</string>
+		<string>processing</string>
 	</array>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
