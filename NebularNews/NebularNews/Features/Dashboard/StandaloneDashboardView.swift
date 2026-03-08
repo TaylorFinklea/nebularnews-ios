@@ -39,7 +39,7 @@ struct StandaloneDashboardView: View {
         return allArticles.count(where: {
             $0.isUnreadQueueCandidate &&
             $0.hasReadyScore &&
-            ($0.score ?? 0) >= 4 &&
+            ($0.displayedScore ?? 0) >= 4 &&
             ($0.publishedAt ?? .distantPast) > cutoff
         })
     }
@@ -55,12 +55,12 @@ struct StandaloneDashboardView: View {
     /// Top unread articles sorted by score (descending), limited to 10.
     private var topUnread: [Article] {
         allArticles
-            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.score != nil }
+            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.displayedScore != nil }
             .sorted {
-                if ($0.score ?? 0) == ($1.score ?? 0) {
+                if ($0.displayedScore ?? 0) == ($1.displayedScore ?? 0) {
                     return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
                 }
-                return ($0.score ?? 0) > ($1.score ?? 0)
+                return ($0.displayedScore ?? 0) > ($1.displayedScore ?? 0)
             }
             .prefix(10)
             .map { $0 }
@@ -197,9 +197,9 @@ struct StandaloneDashboardView: View {
 
             ForEach(topUnread, id: \.id) { article in
                 NavigationLink(value: article.id) {
-                    GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(article.score)) {
+                    GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(article.displayedScore)) {
                         HStack(spacing: 12) {
-                            ScoreBadge(score: article.score)
+                            ScoreBadge(score: article.displayedScore)
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(article.title ?? "Untitled")

@@ -28,7 +28,7 @@ struct TodayStats {
             highFit: articles.count(where: {
                 $0.isUnreadQueueCandidate &&
                 $0.hasReadyScore &&
-                ($0.score ?? 0) >= 4 &&
+                ($0.displayedScore ?? 0) >= 4 &&
                 ($0.publishedAt ?? .distantPast) > weekAgo
             }),
             scoredCount: articles.count(where: \.hasReadyScore),

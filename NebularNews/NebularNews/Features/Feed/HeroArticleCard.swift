@@ -13,7 +13,7 @@ struct HeroArticleCard: View {
     var body: some View {
         let palette = NebularPalette.forColorScheme(colorScheme)
 
-        GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.score)) {
+        GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.displayedScore)) {
             VStack(alignment: .leading, spacing: 0) {
                 ArticleImageView(article: article, size: .hero)
                     .frame(height: 220)
@@ -51,7 +51,7 @@ struct HeroArticleCard: View {
                                 .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
 
                             HStack(spacing: 8) {
-                                ScoreBadge(score: article.score)
+                                ScoreBadge(score: article.displayedScore)
 
                                 Spacer()
 

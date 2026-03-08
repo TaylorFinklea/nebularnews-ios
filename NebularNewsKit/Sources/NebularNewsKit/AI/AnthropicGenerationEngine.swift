@@ -1,0 +1,146 @@
+import Foundation
+
+public struct AnthropicGenerationEngine: ArticleGenerationEngine {
+    public let provider: AIGenerationProvider = .anthropic
+
+    private let client: AnthropicClient
+    private let modelIdentifier: String
+
+    public init(apiKey: String, modelIdentifier: String) {
+        self.client = AnthropicClient(apiKey: apiKey)
+        self.modelIdentifier = modelIdentifier
+    }
+
+    public func isAvailable() async -> Bool { true }
+
+    public func generateSummary(
+        snapshot: ArticleSnapshot,
+        summaryStyle: String
+    ) async throws -> SummaryGenerationOutput {
+        let prompt = """
+        Summarize the article and extract key points.
+
+        Title: \(snapshot.title ?? "Untitled")
+        URL: \(snapshot.canonicalUrl ?? "Unknown")
+        Feed: \(snapshot.feedTitle ?? "Unknown")
+
+        Requirements:
+        - Return JSON only.
+        - JSON keys:
+          - "summary": one plain-text paragraph, concise but complete.
+          - "key_points": exactly 4 short strings.
+        - Keep the summary style \(summaryStyle).
+        - Each key point must be <= 14 words.
+
+        Article:
+        \(snapshot.contentText)
+        """
+
+        let response = try await client.chat(
+            messages: [AIMessage(role: "user", content: prompt)],
+            system: "You are Nebular News. Return only compact JSON that follows the requested schema.",
+            model: modelIdentifier,
+            maxTokens: 700,
+            temperature: 0.2
+        )
+
+        return try parseSummaryOutput(
+            from: response.text,
+            provider: provider,
+            modelIdentifier: modelIdentifier
+        )
+    }
+
+    public func generateTagSuggestions(
+        input: TagSuggestionInput
+    ) async throws -> TagSuggestionOutput {
+        let candidateList = input.existingCandidates
+            .prefix(24)
+            .map { "- \($0.name)" }
+            .joined(separator: "\n")
+
+        let prompt = """
+        Suggest at most \(input.maxSuggestions) strongly recommended new taxonomy tags for this article.
+
+        Title: \(input.title ?? "Untitled")
+        URL: \(input.canonicalURL ?? "Unknown")
+        Feed: \(input.feedTitle ?? "Unknown")
+        Current attached tags: \(input.attachedTags.joined(separator: ", "))
+
+        Existing tag candidates:
+        \(candidateList.isEmpty ? "- None" : candidateList)
+
+        Rules:
+        - Return JSON only.
+        - JSON keys:
+          - "new_suggestions": array of objects with:
+            - "name": short title-case tag, 1-3 words
+            - "confidence": number from 0.0 to 1.0
+        - Prefer 0 suggestions.
+        - Only suggest a new tag if none of the existing candidates fit well enough.
+        - Never suggest a source name, person name, or generic label like News, Update, or Article.
+        - Maximum \(input.maxSuggestions) suggestions.
+
+        Article:
+        \(input.contentText ?? "")
+        """
+
+        let response = try await client.chat(
+            messages: [AIMessage(role: "user", content: prompt)],
+            system: "You classify articles into reusable taxonomy tags and prefer existing tags over creating new ones.",
+            model: modelIdentifier,
+            maxTokens: 500,
+            temperature: 0.1
+        )
+
+        return TagSuggestionOutput(
+            suggestions: try parseTagSuggestionCandidates(from: response.text, maxSuggestions: input.maxSuggestions),
+            provider: provider,
+            modelIdentifier: modelIdentifier
+        )
+    }
+
+    public func generateScoreAssist(
+        input: ScoreAssistInput
+    ) async throws -> ScoreAssistOutput {
+        let prompt = """
+        Review this algorithmic article score.
+
+        Title: \(input.title ?? "Untitled")
+        URL: \(input.canonicalURL ?? "Unknown")
+        Algorithmic score: \(input.algorithmicScore)/5
+        Algorithmic explanation:
+        \(input.algorithmicExplanation)
+
+        Signal summary:
+        \(input.signalSummary)
+
+        Requirements:
+        - Return JSON only.
+        - JSON keys:
+          - "explanation": one short paragraph
+          - "adjustment": integer in {-1, 0, 1}
+        - If mode is explain_only, "adjustment" must be 0.
+        - Be conservative. Only adjust when there is a strong reason.
+
+        Mode: \(input.scoreAssistMode.rawValue)
+
+        Article:
+        \(input.contentText ?? "")
+        """
+
+        let response = try await client.chat(
+            messages: [AIMessage(role: "user", content: prompt)],
+            system: "You help explain or cautiously adjust an existing article-fit score. Return only compact JSON.",
+            model: modelIdentifier,
+            maxTokens: 500,
+            temperature: 0.1
+        )
+
+        return try parseScoreAssistOutput(
+            from: response.text,
+            provider: provider,
+            modelIdentifier: modelIdentifier
+        )
+    }
+}

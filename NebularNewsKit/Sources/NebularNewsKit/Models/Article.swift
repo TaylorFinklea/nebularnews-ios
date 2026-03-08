@@ -25,6 +25,7 @@ public final class Article: @unchecked Sendable {
     // AI-generated enrichments
     public var summaryText: String?
     public var summaryProvider: String?
+    public var summaryModel: String?
     public var keyPointsJson: String?
     public var score: Int?
     public var scoreLabel: String?
@@ -36,6 +37,11 @@ public final class Article: @unchecked Sendable {
     public var signalScoresJson: String?
     public var aiProcessedAt: Date?
     public var personalizationVersion: Int = 0
+    public var scoreAssistExplanation: String?
+    public var scoreAssistProvider: String?
+    public var scoreAssistModel: String?
+    public var scoreAssistAdjustment: Int?
+    public var scoreAssistGeneratedAt: Date?
 
     // User state
     public var isRead: Bool = false
@@ -88,6 +94,19 @@ public final class Article: @unchecked Sendable {
         scoreStatusValue == .ready && score != nil
     }
 
+    public var displayedScore: Int? {
+        guard let score else { return nil }
+        guard let scoreAssistAdjustment else { return score }
+        return min(5, max(1, score + scoreAssistAdjustment))
+    }
+
+    public var displayedScoreExplanation: String? {
+        if let scoreAssistExplanation, !scoreAssistExplanation.isEmpty {
+            return scoreAssistExplanation
+        }
+        return scoreExplanation
+    }
+
     public var isLearningScore: Bool {
         scoreStatusValue == .insufficientSignal
     }
@@ -113,7 +132,7 @@ public final class Article: @unchecked Sendable {
         if isLearningScore {
             return "Learning your preferences"
         }
-        return score.map { "Score \($0)" } ?? "Unscored"
+        return displayedScore.map { "Score \($0)" } ?? "Unscored"
     }
 
     private func decodeJSONString<T: Decodable>(_ json: String?, as type: T.Type) -> T? {

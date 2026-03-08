@@ -11,7 +11,7 @@ struct TodayHeroCard: View {
         let palette = NebularPalette.forColorScheme(colorScheme)
 
         NavigationLink(value: article.id) {
-            GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.score)) {
+            GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.displayedScore)) {
                 VStack(alignment: .leading, spacing: 0) {
                     ArticleImageView(article: article, size: .hero)
                         .frame(height: 200)
@@ -40,7 +40,7 @@ struct TodayHeroCard: View {
                                         .tracking(-0.5)
 
                                     HStack(spacing: 8) {
-                                        ScoreBadge(score: article.score)
+                                        ScoreBadge(score: article.displayedScore)
                                         Spacer()
                                         if let date = article.publishedAt {
                                             Text(date.relativeDisplay)

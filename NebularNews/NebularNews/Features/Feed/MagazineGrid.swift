@@ -38,8 +38,8 @@ struct MagazineGrid: View {
     private var layoutGroups: [LayoutGroup] {
         var groups: [LayoutGroup] = []
 
-        let featured = articles.filter { ($0.score ?? 0) >= 4 }
-        let standard = articles.filter { ($0.score ?? 0) < 4 }
+        let featured = articles.filter { ($0.displayedScore ?? 0) >= 4 }
+        let standard = articles.filter { ($0.displayedScore ?? 0) < 4 }
 
         if !featured.isEmpty {
             groups.append(LayoutGroup(tier: .featured, articles: featured))

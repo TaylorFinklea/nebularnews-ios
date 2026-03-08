@@ -6,7 +6,7 @@ struct MediumArticleCard: View {
     let article: Article
 
     var body: some View {
-        GlassImageCard(cornerRadius: 20, style: .medium, tintColor: Color.forScore(article.score)) {
+        GlassImageCard(cornerRadius: 20, style: .medium, tintColor: Color.forScore(article.displayedScore)) {
             VStack(alignment: .leading, spacing: 0) {
                 ArticleImageView(article: article, size: .medium)
                     .frame(height: 130)
@@ -28,7 +28,7 @@ struct MediumArticleCard: View {
                         .lineLimit(2)
 
                     HStack(spacing: 6) {
-                        ScoreBadge(score: article.score)
+                        ScoreBadge(score: article.displayedScore)
 
                         Spacer()
 

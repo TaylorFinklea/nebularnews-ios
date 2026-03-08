@@ -35,7 +35,16 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func react(id: String, value: Int?, reasonCodes: [String]?) async throws
     func addTag(articleId: String, tag: Tag) async throws
     func removeTag(articleId: String, tagId: String) async throws
-    func updateAIFields(id: String, summary: String?, keyPoints: [String]?, score: Int?, scoreLabel: String?, scoreExplanation: String?) async throws
+    func updateAIFields(
+        id: String,
+        summary: String?,
+        keyPoints: [String]?,
+        score: Int?,
+        scoreLabel: String?,
+        scoreExplanation: String?,
+        summaryProvider: String?,
+        summaryModel: String?
+    ) async throws
     func deleteOlderThan(date: Date) async throws -> Int
 }
 
@@ -169,7 +178,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         keyPoints: [String]?,
         score: Int?,
         scoreLabel: String?,
-        scoreExplanation: String?
+        scoreExplanation: String?,
+        summaryProvider: String?,
+        summaryModel: String?
     ) async throws {
         guard let article = await get(id: id) else { return }
         if let summary { article.summaryText = summary }
@@ -179,6 +190,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         if let score { article.score = score }
         if let scoreLabel { article.scoreLabel = scoreLabel }
         if let scoreExplanation { article.scoreExplanation = scoreExplanation }
+        if let summaryProvider { article.summaryProvider = summaryProvider }
+        if let summaryModel { article.summaryModel = summaryModel }
         article.aiProcessedAt = Date()
         try modelContext.save()
     }

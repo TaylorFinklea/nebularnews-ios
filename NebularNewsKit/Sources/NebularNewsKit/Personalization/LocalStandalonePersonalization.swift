@@ -7,6 +7,11 @@ private let explicitAffinityMultiplier = 1.5
 private let implicitAffinityMultiplier = 1.0
 private let dismissAffinityMultiplier = 0.35
 private let impactedArticleRescoreLimit = 100
+private let tagSuggestionCandidateScanLimit = 400
+private let tagSuggestionCandidateLimit = 24
+private let maxGeneratedTagSuggestions = 2
+private let strongSuggestionConfidenceFloor = 0.88
+private let minimumAttachedTagsForSuggestionSkip = 3
 
 public struct PersonalizationTagSnapshot: Sendable, Hashable {
     public let id: String
@@ -282,6 +287,96 @@ actor LocalPersonalizationRepository {
         }
     }
 
+    func listAllTagCandidates() async -> [DeterministicTagCandidate] {
+        let descriptor = FetchDescriptor<Tag>(
+            sortBy: [SortDescriptor(\.name, comparator: .localizedStandard)]
+        )
+
+        guard let tags = try? modelContext.fetch(descriptor) else {
+            return []
+        }
+
+        return tags.map {
+            DeterministicTagCandidate(
+                id: $0.id,
+                name: $0.name,
+                normalizedName: $0.nameNormalized,
+                slug: $0.slug,
+                articleCount: $0.articles?.count ?? 0
+            )
+        }
+    }
+
+    func rankedExistingTagSuggestionCandidates(
+        title: String?,
+        contentText: String?,
+        limit: Int = tagSuggestionCandidateLimit
+    ) async -> [ExistingTagSuggestionCandidate] {
+        let scanLimit = max(limit, tagSuggestionCandidateScanLimit)
+        let allTags = await listAllTagCandidates()
+        let body = [title ?? "", String(contentText ?? "").truncated(to: 9_000)]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+        let articleTokens = Set(tokenizeTagSuggestionMatch(body))
+        let bodyLower = body.lowercased()
+        let sortedTags = allTags.sorted {
+            if $0.articleCount == $1.articleCount {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.articleCount > $1.articleCount
+        }
+        let candidateSlice = Array(sortedTags.prefix(scanLimit))
+        let ranked: [(candidate: DeterministicTagCandidate, overlap: Int, phraseHit: Int, matchScore: Double)] =
+            candidateSlice.map { candidate in
+                let candidateTokens = tokenizeTagSuggestionMatch(candidate.name)
+                let overlap = candidateTokens.reduce(0) { partial, token in
+                    partial + (articleTokens.contains(token) ? 1 : 0)
+                }
+                let phraseHit = candidate.name.count >= 3 && bodyLower.contains(candidate.name.lowercased()) ? 1 : 0
+                let matchScore = (Double(overlap) * 8) + (Double(phraseHit) * 5) + log1p(Double(candidate.articleCount))
+                return (candidate, overlap, phraseHit, matchScore)
+            }
+            .sorted {
+                if $0.matchScore == $1.matchScore {
+                    if $0.candidate.articleCount == $1.candidate.articleCount {
+                        return $0.candidate.name.localizedCaseInsensitiveCompare($1.candidate.name) == .orderedAscending
+                    }
+                    return $0.candidate.articleCount > $1.candidate.articleCount
+                }
+                return $0.matchScore > $1.matchScore
+            }
+
+        var selected: [ExistingTagSuggestionCandidate] = ranked
+            .filter { $0.overlap > 0 || $0.phraseHit > 0 }
+            .prefix(limit)
+            .map {
+                ExistingTagSuggestionCandidate(
+                    id: $0.candidate.id,
+                    name: $0.candidate.name,
+                    matchScore: $0.matchScore,
+                    articleCount: $0.candidate.articleCount
+                )
+            }
+
+        if selected.count < limit {
+            var used = Set(selected.map(\.id))
+            for entry in ranked {
+                guard selected.count < limit else { break }
+                guard used.insert(entry.candidate.id).inserted else { continue }
+                selected.append(
+                    ExistingTagSuggestionCandidate(
+                        id: entry.candidate.id,
+                        name: entry.candidate.name,
+                        matchScore: log1p(Double(entry.candidate.articleCount)),
+                        articleCount: entry.candidate.articleCount
+                    )
+                )
+            }
+        }
+
+        return selected
+    }
+
     func feedTagPriors(feedID: String?, excluding articleID: String) async -> [String: FeedTagPrior] {
         guard let feedID,
               let feed = try? fetchFeed(feedID)
@@ -311,6 +406,137 @@ actor LocalPersonalizationRepository {
                 ratio: Double(count) / Double(totalTaggedArticles)
             )
         }
+    }
+
+    func replaceTagSuggestions(
+        articleID: String,
+        suggestions: [SuggestedTagCandidate],
+        sourceProvider: String?,
+        sourceModel: String?
+    ) async throws {
+        let descriptor = FetchDescriptor<ArticleTagSuggestion>(
+            predicate: #Predicate<ArticleTagSuggestion> { $0.articleId == articleID }
+        )
+        let existingRows = (try? modelContext.fetch(descriptor)) ?? []
+        let existingByNormalized = Dictionary(uniqueKeysWithValues: existingRows.map { ($0.nameNormalized, $0) })
+        let now = Date()
+        let normalizedIncoming = Set(suggestions.map { ArticleTagSuggestion.normalizeName($0.name) })
+
+        for suggestion in suggestions {
+            let normalizedName = ArticleTagSuggestion.normalizeName(suggestion.name)
+            guard !normalizedName.isEmpty else { continue }
+
+            if let existing = existingByNormalized[normalizedName] {
+                existing.name = suggestion.name
+                existing.confidence = suggestion.confidence
+                existing.sourceProvider = sourceProvider
+                existing.sourceModel = sourceModel
+                existing.updatedAt = now
+            } else {
+                modelContext.insert(
+                    ArticleTagSuggestion(
+                        articleId: articleID,
+                        name: suggestion.name,
+                        confidence: suggestion.confidence,
+                        sourceProvider: sourceProvider,
+                        sourceModel: sourceModel,
+                        createdAt: now,
+                        updatedAt: now
+                    )
+                )
+            }
+        }
+
+        for row in existingRows {
+            guard row.dismissedAt == nil else { continue }
+            if !normalizedIncoming.contains(row.nameNormalized) {
+                modelContext.delete(row)
+            }
+        }
+
+        try modelContext.save()
+    }
+
+    func clearActiveTagSuggestions(articleID: String) async throws {
+        let descriptor = FetchDescriptor<ArticleTagSuggestion>(
+            predicate: #Predicate<ArticleTagSuggestion> { $0.articleId == articleID }
+        )
+        let rows = (try? modelContext.fetch(descriptor)) ?? []
+        for row in rows where row.dismissedAt == nil {
+            modelContext.delete(row)
+        }
+        try modelContext.save()
+    }
+
+    func dismissTagSuggestion(articleID: String, suggestionID: String) async throws {
+        let descriptor = FetchDescriptor<ArticleTagSuggestion>(
+            predicate: #Predicate<ArticleTagSuggestion> { $0.id == suggestionID && $0.articleId == articleID }
+        )
+        guard let suggestion = try modelContext.fetch(descriptor).first else {
+            return
+        }
+
+        suggestion.dismissedAt = Date()
+        suggestion.updatedAt = Date()
+        try modelContext.save()
+    }
+
+    func acceptTagSuggestion(articleID: String, suggestionID: String) async throws -> String? {
+        let suggestionDescriptor = FetchDescriptor<ArticleTagSuggestion>(
+            predicate: #Predicate<ArticleTagSuggestion> { $0.id == suggestionID && $0.articleId == articleID }
+        )
+        guard let suggestion = try modelContext.fetch(suggestionDescriptor).first else {
+            return nil
+        }
+
+        let article = try fetchArticle(articleID)
+        let normalizedName = Tag.normalizeName(suggestion.name)
+        let tagDescriptor = FetchDescriptor<Tag>(
+            predicate: #Predicate<Tag> { $0.nameNormalized == normalizedName }
+        )
+
+        let tag: Tag
+        if let existing = try modelContext.fetch(tagDescriptor).first {
+            tag = existing
+        } else {
+            tag = Tag(
+                name: suggestion.name,
+                slug: Tag.normalizeSlug(suggestion.name),
+                isCanonical: false
+            )
+            modelContext.insert(tag)
+        }
+
+        if article.tags == nil {
+            article.tags = []
+        }
+        if !(article.tags?.contains(where: { $0.id == tag.id }) ?? false) {
+            article.tags?.append(tag)
+        }
+
+        modelContext.delete(suggestion)
+        try modelContext.save()
+        return tag.id
+    }
+
+    func persistScoreAssist(articleID: String, output: ScoreAssistOutput?) async throws {
+        let article = try fetchArticle(articleID)
+
+        if let output {
+            article.scoreAssistExplanation = output.explanation
+            article.scoreAssistProvider = output.provider.rawValue
+            article.scoreAssistModel = output.modelIdentifier
+            article.scoreAssistAdjustment = output.adjustment
+            article.scoreAssistGeneratedAt = Date()
+        } else {
+            article.scoreAssistExplanation = nil
+            article.scoreAssistProvider = nil
+            article.scoreAssistModel = nil
+            article.scoreAssistAdjustment = nil
+            article.scoreAssistGeneratedAt = nil
+        }
+
+        try modelContext.save()
     }
 
     func applySystemTags(articleID: String, desiredTagIDs: [String]) async throws {
@@ -425,21 +651,11 @@ actor LocalPersonalizationRepository {
 
     func persistScore(articleID: String, algorithmicScore: AlgorithmicScore) async throws {
         let article = try fetchArticle(articleID)
-        let confidencePercent = Int((algorithmicScore.confidence * 100).rounded())
-        let signalSummary = algorithmicScore.signals
-            .map { signal in
-                "• \(signal.signal.rawValue): \(formatDecimal(signal.normalizedValue)) (raw: \(formatDecimal(signal.rawValue)))"
-            }
-            .joined(separator: "\n")
-        let explanation = """
-        Algorithmic (\(confidencePercent)% confidence)
-        Weighted average: \(formatDecimal(algorithmicScore.weightedAverage))
-        \(signalSummary.isEmpty ? "" : "\n\(signalSummary)")
-        """
+        let explanation = algorithmicScoreExplanation(algorithmicScore)
 
         article.score = algorithmicScore.status == .ready ? algorithmicScore.score : nil
         article.scoreLabel = algorithmicScore.status == .ready
-            ? "Algorithmic (\(confidencePercent)% confidence)"
+            ? algorithmicScoreLabel(algorithmicScore)
             : "Learning your preferences"
         article.scoreConfidence = algorithmicScore.confidence
         article.scorePreferenceConfidence = algorithmicScore.preferenceConfidence
@@ -680,10 +896,19 @@ actor LocalPersonalizationRepository {
 }
 
 public actor LocalStandalonePersonalizationService {
+    private let modelContainer: ModelContainer
     private let repository: LocalPersonalizationRepository
+    private let generationCoordinator: (any AIGenerationCoordinating)?
 
-    public init(modelContainer: ModelContainer) {
+    public init(
+        modelContainer: ModelContainer,
+        keychainService: String = "com.nebularnews.ios",
+        generationCoordinator: (any AIGenerationCoordinating)? = nil
+    ) {
+        self.modelContainer = modelContainer
         self.repository = LocalPersonalizationRepository(modelContainer: modelContainer)
+        self.generationCoordinator = generationCoordinator
+            ?? AIGenerationCoordinator(modelContainer: modelContainer, keychainService: keychainService)
     }
 
     public func bootstrap() async {
@@ -775,6 +1000,9 @@ public actor LocalStandalonePersonalizationService {
 
         let evaluation = await deterministicTagEvaluation(for: snapshot.context)
         try await repository.applySystemTags(articleID: articleID, desiredTagIDs: evaluation.decisions.map(\.tagId))
+        if let refreshedSnapshot = await repository.storedArticleSnapshot(for: articleID) {
+            try await refreshTagSuggestionsIfNeeded(snapshot: refreshedSnapshot)
+        }
         try await rescoreArticle(articleID: articleID)
     }
 
@@ -795,8 +1023,13 @@ public actor LocalStandalonePersonalizationService {
             feedReputation: feedReputation
         )
         let weights = await repository.loadSignalWeights()
-        let score = computeAlgorithmicScore(signals: signalScores, weights: weights)
-        try await repository.persistScore(articleID: articleID, algorithmicScore: score)
+        let algorithmicScore = computeAlgorithmicScore(signals: signalScores, weights: weights)
+        try await repository.persistScore(articleID: articleID, algorithmicScore: algorithmicScore)
+        let scoreAssist = try await generateScoreAssistIfNeeded(
+            context: context,
+            algorithmicScore: algorithmicScore
+        )
+        try await repository.persistScoreAssist(articleID: articleID, output: scoreAssist)
     }
 
     public func processReactionChange(
@@ -896,6 +1129,19 @@ public actor LocalStandalonePersonalizationService {
         await rescoreSameFeedArticles(for: articleID)
     }
 
+    public func acceptTagSuggestion(articleID: String, suggestionID: String) async {
+        await bootstrap()
+        guard (try? await repository.acceptTagSuggestion(articleID: articleID, suggestionID: suggestionID)) != nil else {
+            return
+        }
+        try? await rescoreArticle(articleID: articleID)
+    }
+
+    public func dismissTagSuggestion(articleID: String, suggestionID: String) async {
+        await bootstrap()
+        try? await repository.dismissTagSuggestion(articleID: articleID, suggestionID: suggestionID)
+    }
+
     private func refreshSnapshot(articleID: String) async -> StoredArticlePersonalizationSnapshot? {
         let needsRetagging = await repository.needsRetagging(articleID: articleID)
         if needsRetagging {
@@ -938,6 +1184,96 @@ public actor LocalStandalonePersonalizationService {
                 try? await rescoreArticle(articleID: impactedID)
             }
         }
+    }
+
+    private func refreshTagSuggestionsIfNeeded(snapshot: StoredArticlePersonalizationSnapshot) async throws {
+        guard let generationCoordinator else {
+            try await repository.clearActiveTagSuggestions(articleID: snapshot.context.id)
+            return
+        }
+
+        let context = snapshot.context
+        let attachedTagNames = context.tags.map(\.name)
+        guard shouldGenerateTagSuggestions(context: context, attachedTagNames: attachedTagNames) else {
+            try await repository.clearActiveTagSuggestions(articleID: context.id)
+            return
+        }
+
+        let existingCandidates = await repository.rankedExistingTagSuggestionCandidates(
+            title: context.title,
+            contentText: context.contentText,
+            limit: tagSuggestionCandidateLimit
+        )
+
+        let input = TagSuggestionInput(
+            articleID: context.id,
+            title: context.title,
+            canonicalURL: context.canonicalURL,
+            contentText: context.contentText,
+            feedTitle: context.feedTitle,
+            siteHostname: context.siteHostname,
+            attachedTags: attachedTagNames,
+            existingCandidates: existingCandidates,
+            maxSuggestions: maxGeneratedTagSuggestions
+        )
+
+        let allTags = await repository.listAllTagCandidates()
+        guard let generatedOutput = try await generationCoordinator.generateTagSuggestions(input: input) else {
+            return
+        }
+        let filteredSuggestions = filterGeneratedSuggestions(
+            generatedOutput.suggestions,
+            input: input,
+            allTagCandidates: allTags
+        )
+
+        try await repository.replaceTagSuggestions(
+            articleID: context.id,
+            suggestions: filteredSuggestions,
+            sourceProvider: generatedOutput.provider.rawValue,
+            sourceModel: generatedOutput.modelIdentifier
+        )
+    }
+
+    private func generateScoreAssistIfNeeded(
+        context: PersonalizationArticleContext,
+        algorithmicScore: AlgorithmicScore
+    ) async throws -> ScoreAssistOutput? {
+        guard let generationCoordinator,
+              algorithmicScore.status == .ready
+        else {
+            return nil
+        }
+
+        let settingsRepo = repositorySettingsRepository()
+        let settings = await settingsRepo.getOrCreate()
+        guard settings.scoreAssistMode != AIScoreAssistMode.algorithmicOnly else {
+            return nil
+        }
+
+        let explanation = algorithmicScoreExplanation(algorithmicScore)
+        let input = ScoreAssistInput(
+            title: context.title,
+            canonicalURL: context.canonicalURL,
+            contentText: context.contentText,
+            algorithmicScore: algorithmicScore.score,
+            algorithmicExplanation: explanation,
+            signalSummary: algorithmicSignalSummary(algorithmicScore.signals),
+            scoreAssistMode: settings.scoreAssistMode
+        )
+
+        let rawOutput = try await generationCoordinator.generateScoreAssist(input: input)
+        guard let rawOutput else { return nil }
+
+        let normalizedAdjustment = settings.scoreAssistMode == AIScoreAssistMode.hybridAdjust
+            ? rawOutput.adjustment
+            : 0
+        return ScoreAssistOutput(
+            explanation: rawOutput.explanation,
+            adjustment: normalizedAdjustment,
+            provider: rawOutput.provider,
+            modelIdentifier: rawOutput.modelIdentifier
+        )
     }
 
     private func deterministicTagEvaluation(for context: PersonalizationArticleContext) async -> DeterministicTagEvaluation {
@@ -1065,6 +1401,144 @@ public actor LocalStandalonePersonalizationService {
 
         return signals
     }
+
+    private func repositorySettingsRepository() -> LocalSettingsRepository {
+        LocalSettingsRepository(modelContainer: modelContainer)
+    }
+}
+
+private let tagSuggestionStopWords: Set<String> = [
+    "the", "and", "for", "with", "from", "that", "this", "into", "your", "about", "their", "will", "have", "has",
+    "are", "was", "were", "not", "you", "its", "new", "how", "why", "who", "what", "when", "where", "can",
+    "could", "should", "would", "over", "under", "more", "less"
+]
+
+private let genericSuggestionNames: Set<String> = [
+    "news", "update", "article", "articles", "story", "stories", "briefing", "report"
+]
+
+private func algorithmicScoreLabel(_ score: AlgorithmicScore) -> String {
+    let confidencePercent = Int((score.confidence * 100).rounded())
+    return "Algorithmic (\(confidencePercent)% confidence)"
+}
+
+private func algorithmicScoreExplanation(_ score: AlgorithmicScore) -> String {
+    """
+    \(algorithmicScoreLabel(score))
+    Weighted average: \(formatDecimal(score.weightedAverage))
+    \(algorithmicSignalSummary(score.signals).isEmpty ? "" : "\n\(algorithmicSignalSummary(score.signals))")
+    """
+}
+
+private func algorithmicSignalSummary(_ signals: [StoredSignalScore]) -> String {
+    signals
+        .map { signal in
+            "• \(signal.signal.rawValue): \(formatDecimal(signal.normalizedValue)) (raw: \(formatDecimal(signal.rawValue)))"
+        }
+        .joined(separator: "\n")
+}
+
+private func tokenizeTagSuggestionMatch(_ value: String) -> [String] {
+    Array(Set(
+        value
+            .lowercased()
+            .replacingOccurrences(of: "[^a-z0-9\\s-]", with: " ", options: .regularExpression)
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+            .filter { $0.count >= 3 && !tagSuggestionStopWords.contains($0) }
+    ))
+}
+
+private func tagSuggestionTokenSet(_ value: String?) -> Set<String> {
+    Set(tokenizeTagSuggestionMatch(value ?? ""))
+}
+
+private func shouldGenerateTagSuggestions(
+    context: PersonalizationArticleContext,
+    attachedTagNames: [String]
+) -> Bool {
+    guard let contentText = context.contentText,
+          !contentText.isEmpty
+    else {
+        return false
+    }
+
+    return attachedTagNames.count < minimumAttachedTagsForSuggestionSkip
+}
+
+private func filterGeneratedSuggestions(
+    _ suggestions: [SuggestedTagCandidate],
+    input: TagSuggestionInput,
+    allTagCandidates: [DeterministicTagCandidate]
+) -> [SuggestedTagCandidate] {
+    let attachedNames = Set(input.attachedTags.map(Tag.normalizeName))
+    let sourceTokenSets = [
+        tagSuggestionTokenSet(input.feedTitle),
+        tagSuggestionTokenSet(input.siteHostname),
+        tagSuggestionTokenSet(URL(string: input.canonicalURL ?? "")?.host?.components(separatedBy: ".").dropLast().joined(separator: " "))
+    ].filter { !$0.isEmpty }
+
+    var accepted: [SuggestedTagCandidate] = []
+    var acceptedTokenSets: [Set<String>] = []
+
+    for suggestion in suggestions {
+        let normalizedName = ArticleTagSuggestion.normalizeName(suggestion.name)
+        let wordCount = normalizedName.split(separator: " ").count
+        let tokens = tagSuggestionTokenSet(normalizedName)
+
+        guard suggestion.confidence >= strongSuggestionConfidenceFloor,
+              !normalizedName.isEmpty,
+              wordCount >= 1,
+              wordCount <= 3,
+              !genericSuggestionNames.contains(normalizedName),
+              !attachedNames.contains(normalizedName),
+              !tokens.isEmpty,
+              !matchesExistingSuggestionName(
+                normalizedName,
+                tokens: tokens,
+                existingCandidates: allTagCandidates
+              ),
+              !matchesSourceName(tokens: tokens, sourceTokenSets: sourceTokenSets),
+              !accepted.contains(where: { ArticleTagSuggestion.normalizeName($0.name) == normalizedName }),
+              !acceptedTokenSets.contains(where: { tokenOverlapRatio($0, tokens) >= 0.75 })
+        else {
+            continue
+        }
+
+        accepted.append(SuggestedTagCandidate(name: normalizedSuggestionName(suggestion.name), confidence: suggestion.confidence))
+        acceptedTokenSets.append(tokens)
+
+        if accepted.count >= maxGeneratedTagSuggestions {
+            break
+        }
+    }
+
+    return accepted
+}
+
+private func matchesExistingSuggestionName(
+    _ normalizedName: String,
+    tokens: Set<String>,
+    existingCandidates: [DeterministicTagCandidate]
+) -> Bool {
+    existingCandidates.contains { candidate in
+        if candidate.normalizedName == normalizedName || candidate.slug == Tag.normalizeSlug(normalizedName) {
+            return true
+        }
+
+        let candidateTokens = tagSuggestionTokenSet(candidate.name)
+        return tokenOverlapRatio(tokens, candidateTokens) >= 0.75
+    }
+}
+
+private func matchesSourceName(tokens: Set<String>, sourceTokenSets: [Set<String>]) -> Bool {
+    sourceTokenSets.contains { tokenOverlapRatio(tokens, $0) >= 0.75 }
+}
+
+private func tokenOverlapRatio(_ lhs: Set<String>, _ rhs: Set<String>) -> Double {
+    guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
+    let intersectionCount = lhs.intersection(rhs).count
+    return Double(intersectionCount) / Double(max(lhs.count, rhs.count))
 }
 
 private func hostname(from value: String) -> String? {

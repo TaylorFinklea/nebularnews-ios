@@ -134,7 +134,10 @@ struct ReactionSheet: View {
         try? modelContext.save()
 
         Task {
-            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
             await service.processReactionChange(
                 articleID: article.id,
                 previousValue: previousValue,
@@ -152,7 +155,10 @@ struct ReactionSheet: View {
         try? modelContext.save()
 
         Task {
-            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
             await service.processReactionChange(
                 articleID: article.id,
                 previousValue: previousValue,

@@ -45,9 +45,10 @@ enum BackgroundTaskManager {
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let personalization = LocalStandalonePersonalizationService(modelContainer: modelContainer)
-
-        let keychain = KeychainManager()
+        let personalization = LocalStandalonePersonalizationService(
+            modelContainer: modelContainer,
+            keychainService: AppConfiguration.shared.keychainService
+        )
 
         // Create a task that iOS can cancel if time runs out
         let pollTask = Task {
@@ -57,18 +58,16 @@ enum BackgroundTaskManager {
             _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
             _ = await personalization.processPendingArticles(limit: 50)
 
-            // Optional AI enrichment — only if Anthropic key is configured
-            guard !Task.isCancelled,
-                  let apiKey = keychain.get(forKey: KeychainManager.Key.anthropicApiKey)
-            else { return }
+            guard !Task.isCancelled else { return }
 
-            let client = AnthropicClient(apiKey: apiKey)
-            let enricher = AIEnrichmentService(client: client, articleRepo: articleRepo)
+            let enricher = AIEnrichmentService(
+                modelContainer: modelContainer,
+                keychainService: AppConfiguration.shared.keychainService
+            )
             let settings = await settingsRepo.get()
 
             _ = await enricher.enrichUnprocessedArticles(
                 limit: 3,  // Conservative for background tasks
-                summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
                 summaryStyle: settings?.summaryStyle ?? "concise"
             )
         }

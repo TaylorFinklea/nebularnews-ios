@@ -94,6 +94,22 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle("Use on-device summaries", isOn: onDeviceSummariesBinding)
+                    Toggle("Use on-device tag suggestions", isOn: onDeviceTagSuggestionsBinding)
+                    Toggle("Allow automatic external fallback", isOn: automaticFallbackBinding)
+
+                    Picker("Score assist", selection: scoreAssistModeBinding) {
+                        Text("Algorithmic only").tag(AIScoreAssistMode.algorithmicOnly)
+                        Text("Explain only").tag(AIScoreAssistMode.explainOnly)
+                        Text("Hybrid adjust").tag(AIScoreAssistMode.hybridAdjust)
+                    }
+                } header: {
+                    Label("AI Behavior", systemImage: "cpu")
+                } footer: {
+                    Text("On-device features use Foundation Models when supported by the current runtime. Automatic external fallback stays off by default to avoid surprise credit usage.")
+                }
+
+                Section {
                     Picker("Appearance", selection: Bindable(themeManager).mode) {
                         ForEach(ThemeManager.Mode.allCases) { mode in
                             Text(mode.rawValue).tag(mode)
@@ -171,6 +187,50 @@ struct SettingsView: View {
             get: { settings.defaultProvider },
             set: { newValue in
                 settings.defaultProvider = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var onDeviceSummariesBinding: Binding<Bool> {
+        Binding(
+            get: { settings.useOnDeviceSummaries },
+            set: { newValue in
+                settings.useOnDeviceSummaries = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var onDeviceTagSuggestionsBinding: Binding<Bool> {
+        Binding(
+            get: { settings.useOnDeviceTagSuggestions },
+            set: { newValue in
+                settings.useOnDeviceTagSuggestions = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var automaticFallbackBinding: Binding<Bool> {
+        Binding(
+            get: { settings.automaticExternalAIFallback },
+            set: { newValue in
+                settings.automaticExternalAIFallback = newValue
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private var scoreAssistModeBinding: Binding<AIScoreAssistMode> {
+        Binding(
+            get: { settings.scoreAssistMode },
+            set: { newValue in
+                settings.scoreAssistMode = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
             }

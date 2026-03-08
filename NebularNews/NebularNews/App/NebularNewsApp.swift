@@ -45,7 +45,10 @@ struct NebularNewsApp: App {
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .task(id: appState.mode) {
                 guard appState.isStandaloneMode else { return }
-                let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
+                let service = LocalStandalonePersonalizationService(
+                    modelContainer: modelContainer,
+                    keychainService: appState.configuration.keychainService
+                )
                 await service.bootstrap()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {

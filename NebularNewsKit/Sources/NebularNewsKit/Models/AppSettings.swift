@@ -1,6 +1,12 @@
 import Foundation
 import SwiftData
 
+public enum AIScoreAssistMode: String, Codable, CaseIterable, Sendable {
+    case algorithmicOnly = "algorithmic_only"
+    case explainOnly = "explain_only"
+    case hybridAdjust = "hybrid_adjust"
+}
+
 /// Singleton app configuration, synced across devices via iCloud.
 ///
 /// AI provider API keys are NOT stored here — they live in the per-device
@@ -15,6 +21,10 @@ public final class AppSettings: @unchecked Sendable {
     public var scoringModel: String = "claude-haiku-4-5-20251001"
     public var chatModel: String = "claude-sonnet-4-6"
     public var summaryStyle: String = "concise"
+    public var useOnDeviceSummaries: Bool = true
+    public var useOnDeviceTagSuggestions: Bool = true
+    public var automaticExternalAIFallback: Bool = false
+    public var scoreAssistModeRaw: String = AIScoreAssistMode.algorithmicOnly.rawValue
 
     // Feed polling
     public var pollIntervalMinutes: Int = 30
@@ -34,5 +44,10 @@ public final class AppSettings: @unchecked Sendable {
 
     public init() {
         self.id = "singleton"
+    }
+
+    public var scoreAssistMode: AIScoreAssistMode {
+        get { AIScoreAssistMode(rawValue: scoreAssistModeRaw) ?? .algorithmicOnly }
+        set { scoreAssistModeRaw = newValue.rawValue }
     }
 }

@@ -81,12 +81,12 @@ struct TodayView: View {
 
     private var topArticles: [Article] {
         allArticles
-            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.score != nil }
+            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.displayedScore != nil }
             .sorted {
-                if ($0.score ?? 0) == ($1.score ?? 0) {
+                if ($0.displayedScore ?? 0) == ($1.displayedScore ?? 0) {
                     return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
                 }
-                return ($0.score ?? 0) > ($1.score ?? 0)
+                return ($0.displayedScore ?? 0) > ($1.displayedScore ?? 0)
             }
             .prefix(10)
             .map { $0 }

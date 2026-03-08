@@ -10,6 +10,7 @@ public let allModelTypes: [any PersistentModel.Type] = [
     TopicAffinity.self,
     AuthorAffinity.self,
     FeedAffinity.self,
+    ArticleTagSuggestion.self,
     ChatThread.self,
     ChatMessage.self,
     AppSettings.self

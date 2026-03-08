@@ -11,6 +11,7 @@ struct ArticleDetailView: View {
     let articleId: String
 
     @Query private var articles: [Article]
+    @Query private var tagSuggestions: [ArticleTagSuggestion]
     @State private var isEnriching = false
     @State private var showTagPicker = false
     @State private var showReactionSheet = false
@@ -21,6 +22,12 @@ struct ArticleDetailView: View {
         _articles = Query(
             filter: #Predicate<Article> { $0.id == articleId },
             sort: [SortDescriptor(\Article.publishedAt)]
+        )
+        _tagSuggestions = Query(
+            filter: #Predicate<ArticleTagSuggestion> {
+                $0.articleId == articleId && $0.dismissedAt == nil
+            },
+            sort: [SortDescriptor(\ArticleTagSuggestion.createdAt)]
         )
     }
 
@@ -115,7 +122,7 @@ struct ArticleDetailView: View {
 
                     Spacer()
 
-                    if article.hasReadyScore, let score = article.score {
+                    if article.hasReadyScore, let score = article.displayedScore {
                         ScoreBadge(score: score)
                     }
                 }
@@ -151,7 +158,7 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func fitSection(_ article: Article) -> some View {
-        if article.hasReadyScore, let score = article.score {
+        if article.hasReadyScore, let score = article.displayedScore {
             GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(score)) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 8) {
@@ -161,7 +168,7 @@ struct ArticleDetailView: View {
                             .foregroundStyle(Color.forScore(score))
                     }
 
-                    if let explanation = article.scoreExplanation, !explanation.isEmpty {
+                    if let explanation = article.displayedScoreExplanation, !explanation.isEmpty {
                         DisclosureGroup("Why this score") {
                             Text(explanation)
                                 .font(.caption)
@@ -288,6 +295,42 @@ struct ArticleDetailView: View {
                     }
                 }
 
+                if !tagSuggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Suggested Tags", systemImage: "sparkles")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+
+                        ForEach(tagSuggestions, id: \.id) { suggestion in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(suggestion.name)
+                                        .font(.subheadline.weight(.semibold))
+                                    if let confidence = suggestion.confidence {
+                                        Text("\(Int((confidence * 100).rounded()))% confidence")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+
+                                Spacer(minLength: 8)
+
+                                Button("Accept") {
+                                    acceptTagSuggestion(suggestion)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+
+                                Button("Dismiss", role: .destructive) {
+                                    dismissTagSuggestion(suggestion)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            }
+                        }
+                    }
+                }
+
                 Button {
                     showTagPicker = true
                 } label: {
@@ -347,11 +390,33 @@ struct ArticleDetailView: View {
                 toggleReadState(for: article)
             }
 
-            if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
+            Button {
+                Task { await enrichArticle(article, target: .automatic) }
+            } label: {
+                Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
+            }
+            .disabled(isEnriching)
+
+            if appState.hasAnthropicKey {
                 Button {
-                    Task { await enrichArticle(article) }
+                    Task { await enrichArticle(article, target: .anthropic) }
                 } label: {
-                    Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
+                    Label(
+                        isEnriching ? "Regenerating…" : "Regenerate with Anthropic",
+                        systemImage: "brain"
+                    )
+                }
+                .disabled(isEnriching)
+            }
+
+            if appState.hasOpenAIKey {
+                Button {
+                    Task { await enrichArticle(article, target: .openAI) }
+                } label: {
+                    Label(
+                        isEnriching ? "Regenerating…" : "Regenerate with OpenAI",
+                        systemImage: "sparkles.rectangle.stack"
+                    )
                 }
                 .disabled(isEnriching)
             }
@@ -416,7 +481,7 @@ struct ArticleDetailView: View {
     }
 
     private func headerAccentColor(for article: Article) -> Color {
-        if article.hasReadyScore, let score = article.score {
+        if article.hasReadyScore, let score = article.displayedScore {
             return Color.forScore(score)
         }
         if article.isLearningScore { return .purple }
@@ -425,9 +490,7 @@ struct ArticleDetailView: View {
 
     // MARK: - On-Demand AI Enrichment
 
-    private func enrichArticle(_ article: Article) async {
-        guard let apiKey = appState.keychain.get(forKey: KeychainManager.Key.anthropicApiKey) else { return }
-
+    private func enrichArticle(_ article: Article, target: AIExplicitGenerationTarget) async {
         isEnriching = true
 
         let html = article.contentHtml ?? article.excerpt ?? ""
@@ -445,19 +508,40 @@ struct ArticleDetailView: View {
             feedTitle: article.feed?.title
         )
 
-        let client = AnthropicClient(apiKey: apiKey)
-        let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-        let enricher = AIEnrichmentService(client: client, articleRepo: articleRepo)
+        let enricher = AIEnrichmentService(
+            modelContainer: modelContext.container,
+            keychainService: appState.configuration.keychainService
+        )
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContext.container)
         let settings = await settingsRepo.get()
 
         _ = await enricher.enrichArticle(
             snapshot: snapshot,
-            summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
-            summaryStyle: settings?.summaryStyle ?? "concise"
+            summaryStyle: settings?.summaryStyle ?? "concise",
+            target: target
         )
 
         isEnriching = false
+    }
+
+    private func acceptTagSuggestion(_ suggestion: ArticleTagSuggestion) {
+        Task {
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: appState.configuration.keychainService
+            )
+            await service.acceptTagSuggestion(articleID: articleId, suggestionID: suggestion.id)
+        }
+    }
+
+    private func dismissTagSuggestion(_ suggestion: ArticleTagSuggestion) {
+        Task {
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: appState.configuration.keychainService
+            )
+            await service.dismissTagSuggestion(articleID: articleId, suggestionID: suggestion.id)
+        }
     }
 }
 

@@ -68,17 +68,15 @@ final class FeedListViewModel {
 
     /// Enrich unprocessed articles with optional AI summaries and key points.
     func enrichNewArticles() async {
-        let keychain = KeychainManager()
-        guard let apiKey = keychain.get(forKey: KeychainManager.Key.anthropicApiKey) else { return }
-
         isEnriching = true
-        let client = AnthropicClient(apiKey: apiKey)
-        let enricher = AIEnrichmentService(client: client, articleRepo: articleRepo)
+        let enricher = AIEnrichmentService(
+            modelContainer: modelContainer,
+            keychainService: AppConfiguration.shared.keychainService
+        )
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let settings = await settingsRepo.get()
         let results = await enricher.enrichUnprocessedArticles(
             limit: 5,
-            summaryModel: settings?.defaultModel ?? "claude-haiku-4-5-20251001",
             summaryStyle: settings?.summaryStyle ?? "concise"
         )
         isEnriching = false
@@ -90,7 +88,10 @@ final class FeedListViewModel {
     }
 
     private func processStandalonePersonalization() async -> Int {
-        let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
+        let service = LocalStandalonePersonalizationService(
+            modelContainer: modelContainer,
+            keychainService: AppConfiguration.shared.keychainService
+        )
         return await service.processPendingArticles(limit: 200)
     }
 

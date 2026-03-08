@@ -6,7 +6,7 @@ struct CompactArticleRow: View {
     let article: Article
 
     var body: some View {
-        GlassCard(cornerRadius: 16, style: .compact, tintColor: Color.forScore(article.score)) {
+        GlassCard(cornerRadius: 16, style: .compact, tintColor: Color.forScore(article.displayedScore)) {
             HStack(spacing: 12) {
                 ArticleImageView(article: article, size: .thumbnail)
                     .frame(width: 60, height: 60)
@@ -27,7 +27,7 @@ struct CompactArticleRow: View {
 
                         Spacer()
 
-                        ScoreBadge(score: article.score)
+                        ScoreBadge(score: article.displayedScore)
 
                         if let date = article.publishedAt {
                             Text(date.relativeDisplay)

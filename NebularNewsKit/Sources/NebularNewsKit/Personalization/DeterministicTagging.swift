@@ -13,7 +13,7 @@ private let feedPriorMinRatio = 0.2
 private let sourceProfileScore = 2.0
 
 public let defaultDeterministicTagAttachThreshold = 0.65
-public let defaultDeterministicMaxSystemTags = 4
+public let defaultDeterministicMaxSystemTags = 3
 
 public struct DeterministicTaggingContext: Sendable {
     public let title: String?

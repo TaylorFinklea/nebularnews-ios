@@ -207,7 +207,10 @@ struct ArticleListView: View {
         try? modelContext.save()
 
         Task {
-            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
             await service.processDismissChange(
                 articleID: article.id,
                 previousDismissedAt: previousDismissedAt,
@@ -272,7 +275,7 @@ private struct ArticleRow: View {
                             DismissedBadge()
                         }
 
-                        if article.hasReadyScore, let score = article.score {
+                        if article.hasReadyScore, let score = article.displayedScore {
                             ScoreBadge(score: score)
                         } else if article.isLearningScore {
                             LearningBadge()
@@ -318,7 +321,7 @@ private struct ArticleRow: View {
         if article.isDismissed {
             return .secondary
         }
-        if article.hasReadyScore, let score = article.score {
+        if article.hasReadyScore, let score = article.displayedScore {
             return Color.forScore(score)
         }
         if article.isLearningScore {

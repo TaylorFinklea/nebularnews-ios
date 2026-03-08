@@ -14,13 +14,62 @@ struct TagPickerSheet: View {
 
     @Query(sort: [SortDescriptor(\Tag.name)])
     private var allTags: [Tag]
+    @Query private var tagSuggestions: [ArticleTagSuggestion]
 
     @State private var showNewTagField = false
     @State private var newTagName = ""
 
+    init(article: Article) {
+        self.article = article
+        let articleID = article.id
+        _tagSuggestions = Query(
+            filter: #Predicate<ArticleTagSuggestion> {
+                $0.articleId == articleID && $0.dismissedAt == nil
+            },
+            sort: [SortDescriptor(\ArticleTagSuggestion.createdAt)]
+        )
+    }
+
     var body: some View {
         NavigationStack {
             List {
+                if !tagSuggestions.isEmpty {
+                    Section("Suggested") {
+                        ForEach(tagSuggestions, id: \.id) { suggestion in
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(suggestion.name)
+                                            .foregroundStyle(.primary)
+                                        if let confidence = suggestion.confidence {
+                                            Text("\(Int((confidence * 100).rounded()))% confidence")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+
+                                    Spacer()
+                                }
+
+                                HStack {
+                                    Button("Accept") {
+                                        acceptSuggestion(suggestion)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+
+                                    Button("Dismiss", role: .destructive) {
+                                        dismissSuggestion(suggestion)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
                 ForEach(allTags, id: \.id) { tag in
                     Button {
                         toggleTag(tag)
@@ -129,7 +178,10 @@ struct TagPickerSheet: View {
 
     private func rescoreArticle() {
         Task {
-            let service = LocalStandalonePersonalizationService(modelContainer: modelContext.container)
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
             try? await service.rescoreArticle(articleID: article.id)
         }
     }
@@ -146,5 +198,25 @@ struct TagPickerSheet: View {
         ]
         let hash = abs(name.hashValue)
         return palette[hash % palette.count]
+    }
+
+    private func acceptSuggestion(_ suggestion: ArticleTagSuggestion) {
+        Task {
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
+            await service.acceptTagSuggestion(articleID: article.id, suggestionID: suggestion.id)
+        }
+    }
+
+    private func dismissSuggestion(_ suggestion: ArticleTagSuggestion) {
+        Task {
+            let service = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: AppConfiguration.shared.keychainService
+            )
+            await service.dismissTagSuggestion(articleID: article.id, suggestionID: suggestion.id)
+        }
     }
 }
