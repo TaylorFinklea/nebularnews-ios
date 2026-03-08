@@ -13,13 +13,13 @@ struct CompactArticleRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(article.title ?? "Untitled")
+                    Text((article.title ?? "Untitled").strippedHTML)
                         .font(NebularTypography.compactTitle)
                         .lineLimit(2)
 
                     HStack(spacing: 6) {
                         if let feedTitle = article.feed?.title {
-                            Text(feedTitle)
+                            Text(feedTitle.strippedHTML)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)

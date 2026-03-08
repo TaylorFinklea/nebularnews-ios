@@ -1,24 +1,19 @@
 import SwiftUI
 import NebularNewsKit
 
-/// Score-driven magazine layout that maps article scores to card sizes.
+/// Score-driven magazine layout using full-width cards at two prominence levels.
 ///
-/// Score 5 articles get full-width hero cards, score 4 gets a 2-column
-/// grid of medium cards, and everything else gets compact rows. Within
-/// each tier, articles maintain chronological ordering.
+/// High-fit articles (score ≥ 4) appear as bold hero cards with large images,
+/// while everything else uses compact rows — mirroring Apple News' hierarchy
+/// through card height rather than column count.
 struct MagazineGrid: View {
     let articles: [Article]
-
-    private let twoColumns = [
-        GridItem(.flexible(), spacing: 12),
-        GridItem(.flexible(), spacing: 12)
-    ]
 
     var body: some View {
         LazyVStack(spacing: 16) {
             ForEach(layoutGroups) { group in
                 switch group.tier {
-                case .hero:
+                case .featured:
                     ForEach(group.articles, id: \.id) { article in
                         NavigationLink(value: article.id) {
                             HeroArticleCard(article: article)
@@ -26,17 +21,7 @@ struct MagazineGrid: View {
                         .buttonStyle(.plain)
                     }
 
-                case .medium:
-                    LazyVGrid(columns: twoColumns, spacing: 12) {
-                        ForEach(group.articles, id: \.id) { article in
-                            NavigationLink(value: article.id) {
-                                MediumArticleCard(article: article)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                case .compact:
+                case .standard:
                     ForEach(group.articles, id: \.id) { article in
                         NavigationLink(value: article.id) {
                             CompactArticleRow(article: article)
@@ -53,18 +38,14 @@ struct MagazineGrid: View {
     private var layoutGroups: [LayoutGroup] {
         var groups: [LayoutGroup] = []
 
-        let heroArticles = articles.filter { ($0.score ?? 0) >= 5 }
-        let mediumArticles = articles.filter { ($0.score ?? 0) == 4 }
-        let compactArticles = articles.filter { ($0.score ?? 0) < 4 }
+        let featured = articles.filter { ($0.score ?? 0) >= 4 }
+        let standard = articles.filter { ($0.score ?? 0) < 4 }
 
-        if !heroArticles.isEmpty {
-            groups.append(LayoutGroup(tier: .hero, articles: heroArticles))
+        if !featured.isEmpty {
+            groups.append(LayoutGroup(tier: .featured, articles: featured))
         }
-        if !mediumArticles.isEmpty {
-            groups.append(LayoutGroup(tier: .medium, articles: mediumArticles))
-        }
-        if !compactArticles.isEmpty {
-            groups.append(LayoutGroup(tier: .compact, articles: compactArticles))
+        if !standard.isEmpty {
+            groups.append(LayoutGroup(tier: .standard, articles: standard))
         }
 
         return groups
@@ -74,9 +55,8 @@ struct MagazineGrid: View {
 // MARK: - Supporting Types
 
 private enum CardTier {
-    case hero
-    case medium
-    case compact
+    case featured
+    case standard
 }
 
 private struct LayoutGroup: Identifiable {

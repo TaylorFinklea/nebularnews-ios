@@ -18,9 +18,43 @@ extension String {
             .replacingOccurrences(of: "&#39;", with: "'")
             .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&nbsp;", with: " ")
+            // Decode numeric HTML entities (&#8211; → –, &#160; → non-breaking space, etc.)
+            .decodingNumericHTMLEntities
             // Collapse runs of whitespace into a single space
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Decode numeric HTML entities like `&#8211;` and `&#x2014;` into their
+    /// corresponding Unicode characters.
+    private var decodingNumericHTMLEntities: String {
+        var result = self
+
+        // Decimal: &#NNN;
+        let decimalPattern = try? NSRegularExpression(pattern: "&#(\\d+);")
+        if let matches = decimalPattern?.matches(in: result, range: NSRange(result.startIndex..., in: result)) {
+            for match in matches.reversed() {
+                guard let fullRange = Range(match.range, in: result),
+                      let codeRange = Range(match.range(at: 1), in: result),
+                      let codePoint = UInt32(result[codeRange]),
+                      let scalar = Unicode.Scalar(codePoint) else { continue }
+                result.replaceSubrange(fullRange, with: String(Character(scalar)))
+            }
+        }
+
+        // Hexadecimal: &#xHHH;
+        let hexPattern = try? NSRegularExpression(pattern: "&#x([0-9A-Fa-f]+);")
+        if let matches = hexPattern?.matches(in: result, range: NSRange(result.startIndex..., in: result)) {
+            for match in matches.reversed() {
+                guard let fullRange = Range(match.range, in: result),
+                      let codeRange = Range(match.range(at: 1), in: result),
+                      let codePoint = UInt32(result[codeRange], radix: 16),
+                      let scalar = Unicode.Scalar(codePoint) else { continue }
+                result.replaceSubrange(fullRange, with: String(Character(scalar)))
+            }
+        }
+
+        return result
     }
 
     /// Truncate to a maximum character count, appending "…" if truncated.

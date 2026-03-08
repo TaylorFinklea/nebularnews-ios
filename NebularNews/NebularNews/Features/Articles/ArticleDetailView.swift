@@ -83,7 +83,6 @@ struct ArticleDetailView: View {
                         keyPointsSection(article)
                         contentSection(article)
                         tagSection(article)
-                        actionBar(article)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, -32)
@@ -301,74 +300,53 @@ struct ArticleDetailView: View {
         }
     }
 
-    // MARK: - Action Bar
-
-    @ViewBuilder
-    private func actionBar(_ article: Article) -> some View {
-        GlassCard(cornerRadius: 22, style: .raised, tintColor: palette.primary) {
-            HStack(spacing: 0) {
-                if let url = articleURL(for: article) {
-                    actionButton("Safari", systemImage: "safari") {
-                        openURL(url)
-                    }
-                    Spacer()
-                }
-
-                actionButton(
-                    "React",
-                    systemImage: reactionIcon(for: article.reactionValue),
-                    tint: reactionColor(for: article.reactionValue)
-                ) {
-                    showReactionSheet = true
-                }
-
-                if let url = articleURL(for: article) {
-                    Spacer()
-                    ShareLink(item: url) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.system(size: 18, weight: .medium))
-                            Text("Share")
-                                .font(.caption2)
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer()
-
-                actionButton(
-                    article.isRead ? "Unread" : "Read",
-                    systemImage: article.isRead ? "envelope.badge" : "envelope.open"
-                ) {
-                    toggleReadState(for: article)
-                }
-            }
-        }
-    }
-
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        tint: Color = .secondary,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .medium))
-                Text(title)
-                    .font(.caption2)
-            }
-            .foregroundStyle(tint)
-        }
-    }
-
-    // MARK: - Toolbar
+    // MARK: - Floating Bottom Toolbar
 
     @ToolbarContentBuilder
     private func articleToolbar(_ article: Article) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
+        ToolbarItemGroup(placement: .bottomBar) {
+            if let url = articleURL(for: article) {
+                Button {
+                    openURL(url)
+                } label: {
+                    toolbarLabel("Open in Browser", systemImage: "safari")
+                }
+                Spacer()
+            }
+
+            Button {
+                showReactionSheet = true
+            } label: {
+                toolbarLabel(
+                    "React",
+                    systemImage: reactionIcon(for: article.reactionValue),
+                    tint: reactionToolbarTint(for: article.reactionValue)
+                )
+            }
+            .accessibilityLabel("React")
+            .accessibilityValue(reactionAccessibilityValue(for: article.reactionValue))
+
+            if let url = articleURL(for: article) {
+                Spacer()
+                ShareLink(item: url) {
+                    toolbarLabel("Share", systemImage: "square.and.arrow.up")
+                }
+            }
+
+            Spacer()
+            overflowMenu(article)
+        }
+    }
+
+    private func overflowMenu(_ article: Article) -> some View {
+        Menu {
+            Button(
+                article.isRead ? "Mark Unread" : "Mark Read",
+                systemImage: article.isRead ? "envelope.badge" : "envelope.open"
+            ) {
+                toggleReadState(for: article)
+            }
+
             if appState.hasAnthropicKey && ((article.summaryText?.isEmpty != false) || article.keyPoints.isEmpty) {
                 Button {
                     Task { await enrichArticle(article) }
@@ -377,7 +355,19 @@ struct ArticleDetailView: View {
                 }
                 .disabled(isEnriching)
             }
+        } label: {
+            toolbarLabel("More", systemImage: "ellipsis")
         }
+    }
+
+    private func toolbarLabel(
+        _ title: LocalizedStringKey,
+        systemImage: String,
+        tint: Color = .secondary
+    ) -> some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.iconOnly)
+            .foregroundStyle(tint)
     }
 
     // MARK: - Helpers
@@ -395,6 +385,23 @@ struct ArticleDetailView: View {
         case 1: Color.forScore(5)
         case -1: palette.danger
         default: palette.primary
+        }
+    }
+
+    private func reactionToolbarTint(for value: Int?) -> Color {
+        switch value {
+        case 1, -1:
+            return reactionColor(for: value)
+        default:
+            return .secondary
+        }
+    }
+
+    private func reactionAccessibilityValue(for value: Int?) -> String {
+        switch value {
+        case 1: "Liked"
+        case -1: "Disliked"
+        default: "Not set"
         }
     }
 

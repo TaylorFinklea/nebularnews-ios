@@ -19,42 +19,51 @@ struct HeroArticleCard: View {
                     .frame(height: 220)
                     .frame(maxWidth: .infinity)
                     .clipped()
-                    .overlay(alignment: .bottomLeading) {
+                    .overlay {
+                        // Aggressive scrim gradient — ensures white text is
+                        // legible on any image, including those with embedded text.
                         LinearGradient(
-                            colors: [.clear, palette.cardImageOverlay],
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: .black.opacity(0.25), location: 0.3),
+                                .init(color: .black.opacity(0.6), location: 0.55),
+                                .init(color: .black.opacity(0.82), location: 1.0)
+                            ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .overlay(alignment: .bottomLeading) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                if let feedTitle = article.feed?.title {
-                                    Text(feedTitle)
-                                        .font(NebularTypography.feedSource)
-                                        .foregroundStyle(.white.opacity(0.8))
-                                        .textCase(.uppercase)
-                                        .tracking(0.7)
-                                }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let feedTitle = article.feed?.title {
+                                Text(feedTitle.strippedHTML)
+                                    .font(NebularTypography.feedSource)
+                                    .foregroundStyle(.white.opacity(0.9))
+                                    .textCase(.uppercase)
+                                    .tracking(0.7)
+                                    .lineLimit(1)
+                            }
 
-                                Text(article.title ?? "Untitled")
-                                    .font(NebularTypography.heroTitle)
-                                    .foregroundStyle(.white)
-                                    .lineLimit(3)
-                                    .tracking(-0.5)
+                            Text((article.title ?? "Untitled").strippedHTML)
+                                .font(NebularTypography.heroTitle)
+                                .foregroundStyle(.white)
+                                .lineLimit(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
 
-                                HStack(spacing: 8) {
-                                    ScoreBadge(score: article.score)
+                            HStack(spacing: 8) {
+                                ScoreBadge(score: article.score)
 
-                                    Spacer()
+                                Spacer()
 
-                                    if let date = article.publishedAt {
-                                        Text(date.relativeDisplay)
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.white.opacity(0.6))
-                                    }
+                                if let date = article.publishedAt {
+                                    Text(date.relativeDisplay)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.white.opacity(0.7))
                                 }
                             }
-                            .padding(16)
                         }
+                        .padding(20)
                     }
 
                 if let summary = article.summaryText, !summary.isEmpty {
