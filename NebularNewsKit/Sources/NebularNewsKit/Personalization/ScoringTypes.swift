@@ -97,35 +97,52 @@ public let scoringDampingFactor = 50.0
 public let minDataBackedSignalsToPublish = 2
 public let minPreferenceBackedSignalsToPublish = 1
 public let sourceReputationVoteWeight = 1.5
-public let sourceReputationPriorWeight = 5.0
+public let sourceReputationPriorWeight = 3.0
+public let currentPersonalizationVersion = 2
+
+private let scoreNeutralPriorWeight = 1.0
+private let scoreNeutralPriorValue = 0.5
+
+func scoreBand(for weightedAverage: Double) -> Int {
+    switch weightedAverage {
+    case ..<0.22:
+        return 1
+    case ..<0.40:
+        return 2
+    case ..<0.58:
+        return 3
+    case ..<0.76:
+        return 4
+    default:
+        return 5
+    }
+}
 
 public func computeAlgorithmicScore(
     signals: [StoredSignalScore],
     weights: [LocalSignalWeight]
 ) -> AlgorithmicScore {
     let weightBySignal = Dictionary(uniqueKeysWithValues: weights.map { ($0.signal, $0) })
+    let activeSignals = signals.filter(\.isDataBacked)
 
-    var weightedSum = 0.0
-    var totalWeight = 0.0
+    var weightedSum = scoreNeutralPriorValue * scoreNeutralPriorWeight
+    var totalWeight = scoreNeutralPriorWeight
     var dataBackedSignalCount = 0
     var preferenceBackedSignalCount = 0
 
-    for signal in signals {
+    for signal in activeSignals {
         let weight = weightBySignal[signal.signal]?.weight ?? defaultSignalWeights[signal.signal] ?? 1.0
         weightedSum += weight * signal.normalizedValue
         totalWeight += weight
-        if signal.isDataBacked {
-            dataBackedSignalCount += 1
-            if preferenceBackedSignalNames.contains(signal.signal) {
-                preferenceBackedSignalCount += 1
-            }
+        dataBackedSignalCount += 1
+        if preferenceBackedSignalNames.contains(signal.signal) {
+            preferenceBackedSignalCount += 1
         }
     }
 
-    let weightedAverage = totalWeight > 0 ? (weightedSum / totalWeight) : 0.5
-    let rawScore = 1 + (4 * weightedAverage)
-    let score = max(1, min(5, Int(rawScore.rounded())))
-    let confidence = signals.isEmpty ? 0 : Double(dataBackedSignalCount) / Double(signals.count)
+    let weightedAverage = weightedSum / totalWeight
+    let score = scoreBand(for: weightedAverage)
+    let confidence = activeSignals.isEmpty ? 0 : Double(dataBackedSignalCount) / Double(SignalName.allCases.count)
     let preferenceSignalCount = preferenceBackedSignalNames.count
     let preferenceConfidence = preferenceSignalCount == 0
         ? 0

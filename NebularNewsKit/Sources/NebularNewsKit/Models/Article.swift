@@ -34,6 +34,7 @@ public final class Article: @unchecked Sendable {
     public var scoreStatus: String?
     public var signalScoresJson: String?
     public var aiProcessedAt: Date?
+    public var personalizationVersion: Int = 0
 
     // User state
     public var isRead: Bool = false

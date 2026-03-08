@@ -2,6 +2,10 @@ import SwiftUI
 import SwiftData
 import NebularNewsKit
 
+#if DEBUG
+private let personalizationReprocessLaunchArgument = "-reprocess-personalization"
+#endif
+
 @main
 struct NebularNewsApp: App {
     let modelContainer: ModelContainer
@@ -43,6 +47,11 @@ struct NebularNewsApp: App {
                 guard appState.isStandaloneMode else { return }
                 let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
                 await service.bootstrap()
+#if DEBUG
+                if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {
+                    _ = await service.reprocessAllStaleArticles(batchSize: 200)
+                }
+#endif
             }
         }
         .modelContainer(modelContainer)

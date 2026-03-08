@@ -10,9 +10,10 @@ private let contentTokenCap = 0.4
 private let feedPriorBonus = 0.25
 private let feedPriorMinArticles = 3
 private let feedPriorMinRatio = 0.2
+private let sourceProfileScore = 2.0
 
 public let defaultDeterministicTagAttachThreshold = 0.65
-public let defaultDeterministicMaxSystemTags = 3
+public let defaultDeterministicMaxSystemTags = 4
 
 public struct DeterministicTaggingContext: Sendable {
     public let title: String?
@@ -66,6 +67,16 @@ public struct DeterministicTagDecision: Sendable, Hashable {
     }
 }
 
+public struct DeterministicTagEvaluation: Sendable, Hashable {
+    public let matchedSourceProfiles: [String]
+    public let decisions: [DeterministicTagDecision]
+
+    public init(matchedSourceProfiles: [String], decisions: [DeterministicTagDecision]) {
+        self.matchedSourceProfiles = matchedSourceProfiles
+        self.decisions = decisions
+    }
+}
+
 public struct FeedTagPrior: Sendable, Hashable {
     public let taggedArticleCount: Int
     public let ratio: Double
@@ -91,6 +102,22 @@ private func normalizeText(_ value: String?) -> String {
     return " \(normalized) "
 }
 
+private func normalizeSourceProfileText(_ value: String?) -> String {
+    (value ?? "")
+        .lowercased()
+        .replacingOccurrences(of: "&#?[a-z0-9]+;", with: " ", options: .regularExpression)
+        .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private func normalizeHost(_ value: String?) -> String {
+    (value ?? "")
+        .lowercased()
+        .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 private func tokenize(_ value: String?) -> [String] {
     Array(Set(
         normalizeText(value)
@@ -109,6 +136,40 @@ private func overlapCount(_ candidateTokens: [String], haystackTokens: Set<Strin
     candidateTokens.reduce(0) { partial, token in
         partial + (haystackTokens.contains(token) ? 1 : 0)
     }
+}
+
+private func hostMatches(actualHost: String, expectedHost: String) -> Bool {
+    let actual = normalizeHost(actualHost)
+    let expected = normalizeHost(expectedHost)
+    guard !actual.isEmpty, !expected.isEmpty else { return false }
+    return actual == expected || actual.hasSuffix(".\(expected)")
+}
+
+private func matchingSourceProfiles(for context: DeterministicTaggingContext) -> [DeterministicTagSourceProfile] {
+    let normalizedFeedTitle = normalizeSourceProfileText(context.feedTitle)
+    let normalizedHost = normalizeHost(context.siteHostname)
+
+    return deterministicTagSourceProfiles.filter { profile in
+        let matchesTitle = profile.feedTitles
+            .map(normalizeSourceProfileText)
+            .contains(normalizedFeedTitle)
+        let matchesHost = profile.siteHosts.contains { hostMatches(actualHost: normalizedHost, expectedHost: $0) }
+        return matchesTitle || matchesHost
+    }
+}
+
+private func mergeDecision(
+    existing: DeterministicTagDecision?,
+    incoming: DeterministicTagDecision
+) -> DeterministicTagDecision {
+    guard let existing else { return incoming }
+
+    return DeterministicTagDecision(
+        tagId: existing.tagId,
+        score: max(existing.score, incoming.score),
+        confidence: max(existing.confidence, incoming.confidence),
+        features: Array(Set(existing.features + incoming.features)).sorted()
+    )
 }
 
 public func scoreDeterministicTagCandidate(
@@ -186,6 +247,68 @@ public func scoreDeterministicTagCandidate(
     )
 }
 
+public func generateDeterministicTagEvaluation(
+    candidates: [DeterministicTagCandidate],
+    context: DeterministicTaggingContext,
+    feedPriorsByTagId: [String: FeedTagPrior],
+    attachThreshold: Double = defaultDeterministicTagAttachThreshold,
+    maxTags: Int = defaultDeterministicMaxSystemTags
+) -> DeterministicTagEvaluation {
+    let matchedProfiles = matchingSourceProfiles(for: context)
+    let candidatesBySlug = Dictionary(uniqueKeysWithValues: candidates.map { ($0.slug, $0) })
+
+    var decisionsByTagID: [String: DeterministicTagDecision] = [:]
+
+    for candidate in candidates {
+        let decision = scoreDeterministicTagCandidate(
+            candidate: candidate,
+            context: context,
+            feedPrior: feedPriorsByTagId[candidate.id]
+        )
+
+        if decision.score >= attachThreshold {
+            decisionsByTagID[candidate.id] = mergeDecision(
+                existing: decisionsByTagID[candidate.id],
+                incoming: decision
+            )
+        }
+    }
+
+    for profile in matchedProfiles {
+        for slug in profile.tagSlugs {
+            guard let candidate = candidatesBySlug[slug] else { continue }
+
+            let directDecision = DeterministicTagDecision(
+                tagId: candidate.id,
+                score: sourceProfileScore,
+                confidence: 1,
+                features: ["source_profile:\(profile.name)"]
+            )
+
+            decisionsByTagID[candidate.id] = mergeDecision(
+                existing: decisionsByTagID[candidate.id],
+                incoming: directDecision
+            )
+        }
+    }
+
+    let sourceProfileTagCount = Set(matchedProfiles.flatMap(\.tagSlugs)).count
+    let decisionLimit = max(1, max(maxTags, sourceProfileTagCount))
+    let decisions = decisionsByTagID.values
+        .sorted {
+            if $0.score != $1.score { return $0.score > $1.score }
+            if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }
+            return $0.tagId < $1.tagId
+        }
+        .prefix(decisionLimit)
+        .map { $0 }
+
+    return DeterministicTagEvaluation(
+        matchedSourceProfiles: matchedProfiles.map(\.name).sorted(),
+        decisions: decisions
+    )
+}
+
 public func generateDeterministicTagDecisions(
     candidates: [DeterministicTagCandidate],
     context: DeterministicTaggingContext,
@@ -193,20 +316,12 @@ public func generateDeterministicTagDecisions(
     attachThreshold: Double = defaultDeterministicTagAttachThreshold,
     maxTags: Int = defaultDeterministicMaxSystemTags
 ) -> [DeterministicTagDecision] {
-    candidates
-        .map { candidate in
-            scoreDeterministicTagCandidate(
-                candidate: candidate,
-                context: context,
-                feedPrior: feedPriorsByTagId[candidate.id]
-            )
-        }
-        .filter { $0.score >= attachThreshold }
-        .sorted {
-            if $0.score != $1.score { return $0.score > $1.score }
-            if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }
-            return $0.tagId < $1.tagId
-        }
-        .prefix(max(1, maxTags))
-        .map { $0 }
+    generateDeterministicTagEvaluation(
+        candidates: candidates,
+        context: context,
+        feedPriorsByTagId: feedPriorsByTagId,
+        attachThreshold: attachThreshold,
+        maxTags: maxTags
+    )
+    .decisions
 }

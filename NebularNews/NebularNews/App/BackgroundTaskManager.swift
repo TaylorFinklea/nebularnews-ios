@@ -53,7 +53,7 @@ enum BackgroundTaskManager {
             // Automatic poll respects backoff (not user-initiated)
             _ = await poller.pollAllFeeds(bypassBackoff: false)
             _ = await poller.cleanupOldArticles(retentionDays: 90)
-            _ = await personalization.processPendingArticles(limit: 25)
+            _ = await personalization.processPendingArticles(limit: 50)
 
             // Optional AI enrichment — only if Anthropic key is configured
             guard !Task.isCancelled,

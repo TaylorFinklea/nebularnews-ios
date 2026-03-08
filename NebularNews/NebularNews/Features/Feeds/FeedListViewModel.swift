@@ -90,7 +90,7 @@ final class FeedListViewModel {
 
     private func processStandalonePersonalization() async -> Int {
         let service = LocalStandalonePersonalizationService(modelContainer: modelContainer)
-        return await service.processPendingArticles(limit: 50)
+        return await service.processPendingArticles(limit: 200)
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).
