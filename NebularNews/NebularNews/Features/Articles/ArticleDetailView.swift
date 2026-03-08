@@ -50,6 +50,9 @@ struct ArticleDetailView: View {
                         if !article.isRead { article.markRead() }
                         if shouldSave { try? modelContext.save() }
                     }
+                    .task(id: article.id) {
+                        await ensureAutomaticEnrichment(for: article)
+                    }
             } else {
                 ContentUnavailableView(
                     "Article Not Found",
@@ -197,15 +200,32 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func summarySection(_ article: Article) -> some View {
-        if let summary = article.summaryText, !summary.isEmpty {
+        let summary = article.summaryText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isPending = shouldShowSummaryPlaceholder(for: article)
+
+        if (summary?.isEmpty == false) || isPending {
             GlassCard(cornerRadius: 22, style: .standard, tintColor: palette.primary) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Summary", systemImage: "text.alignleft")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    Text(summary)
-                        .font(.subheadline)
-                        .lineSpacing(3)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Label("Summary", systemImage: "text.alignleft")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+
+                        if isPending {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.secondary)
+                        }
+                    }
+
+                    if let summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.subheadline)
+                            .lineSpacing(3)
+                    } else {
+                        pendingSummaryPlaceholder
+                    }
                 }
             }
         }
@@ -216,19 +236,35 @@ struct ArticleDetailView: View {
     @ViewBuilder
     private func keyPointsSection(_ article: Article) -> some View {
         let points = article.keyPoints
-        if !points.isEmpty {
+        let isPending = shouldShowKeyPointsPlaceholder(for: article)
+
+        if !points.isEmpty || isPending {
             GlassCard(cornerRadius: 22, style: .standard, tintColor: Color.forScore(4)) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("Key Points", systemImage: "list.bullet")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                    ForEach(points, id: \.self) { point in
-                        HStack(alignment: .top, spacing: 6) {
-                            Text("•")
-                                .foregroundStyle(.secondary)
-                            Text(point)
-                                .font(.subheadline)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Label("Key Points", systemImage: "list.bullet")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+
+                        if isPending {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.secondary)
                         }
+                    }
+
+                    if !points.isEmpty {
+                        ForEach(points, id: \.self) { point in
+                            HStack(alignment: .top, spacing: 6) {
+                                Text("•")
+                                    .foregroundStyle(.secondary)
+                                Text(point)
+                                    .font(.subheadline)
+                            }
+                        }
+                    } else {
+                        pendingKeyPointsPlaceholder
                     }
                 }
             }
@@ -437,6 +473,43 @@ struct ArticleDetailView: View {
 
     // MARK: - Helpers
 
+    @ViewBuilder
+    private var pendingSummaryPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Generating automatically with on-device AI when available.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Placeholder summary sentence for the article content.")
+                Text("Additional placeholder detail appears once generation finishes.")
+                Text("This card will update in place without manual action.")
+            }
+            .font(.subheadline)
+            .lineSpacing(3)
+            .redacted(reason: .placeholder)
+        }
+    }
+
+    @ViewBuilder
+    private var pendingKeyPointsPlaceholder: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Key points are being generated automatically.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ForEach(0..<4, id: \.self) { _ in
+                HStack(alignment: .top, spacing: 6) {
+                    Text("•")
+                        .foregroundStyle(.secondary)
+                    Text("Placeholder key point for the generated summary.")
+                        .font(.subheadline)
+                }
+                .redacted(reason: .placeholder)
+            }
+        }
+    }
+
     private func reactionIcon(for value: Int?) -> String {
         switch value {
         case 1: "hand.thumbsup.fill"
@@ -488,26 +561,58 @@ struct ArticleDetailView: View {
         return palette.primary
     }
 
-    // MARK: - On-Demand AI Enrichment
+    private func shouldShowSummaryPlaceholder(for article: Article) -> Bool {
+        hasSummarizableContent(article) && ((article.summaryText?.isEmpty ?? true) || isEnriching)
+    }
 
-    private func enrichArticle(_ article: Article, target: AIExplicitGenerationTarget) async {
-        isEnriching = true
+    private func shouldShowKeyPointsPlaceholder(for article: Article) -> Bool {
+        hasSummarizableContent(article) && (article.keyPoints.isEmpty || isEnriching)
+    }
 
+    private func needsAutomaticEnrichment(for article: Article) -> Bool {
+        hasSummarizableContent(article) && ((article.summaryText?.isEmpty ?? true) || article.keyPoints.isEmpty)
+    }
+
+    private func hasSummarizableContent(_ article: Article) -> Bool {
         let html = article.contentHtml ?? article.excerpt ?? ""
-        let text = html.strippedHTML
-        guard !text.isEmpty else {
-            isEnriching = false
-            return
-        }
+        return !html.strippedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
-        let snapshot = ArticleSnapshot(
+    private func snapshotForEnrichment(_ article: Article) -> ArticleSnapshot? {
+        let html = article.contentHtml ?? article.excerpt ?? ""
+        let text = html.strippedHTML.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+
+        return ArticleSnapshot(
             id: article.id,
             title: article.title,
             contentText: text,
             canonicalUrl: article.canonicalUrl,
             feedTitle: article.feed?.title
         )
+    }
 
+    private func ensureAutomaticEnrichment(for article: Article) async {
+        guard needsAutomaticEnrichment(for: article),
+              !isEnriching
+        else {
+            return
+        }
+
+        await enrichArticle(article, target: .automatic)
+    }
+
+    // MARK: - AI Enrichment
+
+    private func enrichArticle(_ article: Article, target: AIExplicitGenerationTarget) async {
+        guard !isEnriching,
+              let snapshot = snapshotForEnrichment(article)
+        else {
+            return
+        }
+
+        isEnriching = true
+        defer { isEnriching = false }
         let enricher = AIEnrichmentService(
             modelContainer: modelContext.container,
             keychainService: appState.configuration.keychainService
@@ -520,8 +625,6 @@ struct ArticleDetailView: View {
             summaryStyle: settings?.summaryStyle ?? "concise",
             target: target
         )
-
-        isEnriching = false
     }
 
     private func acceptTagSuggestion(_ suggestion: ArticleTagSuggestion) {

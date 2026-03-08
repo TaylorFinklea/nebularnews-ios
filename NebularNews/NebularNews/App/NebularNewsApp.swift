@@ -55,6 +55,7 @@ struct NebularNewsApp: App {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
                 }
 #endif
+                await runAutomaticAIBackfill(limit: 8)
             }
         }
         .modelContainer(modelContainer)
@@ -71,5 +72,19 @@ struct NebularNewsApp: App {
                 break
             }
         }
+    }
+
+    private func runAutomaticAIBackfill(limit: Int) async {
+        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
+        let settings = await settingsRepo.get()
+        let enricher = AIEnrichmentService(
+            modelContainer: modelContainer,
+            keychainService: appState.configuration.keychainService
+        )
+
+        _ = await enricher.enrichUnprocessedArticles(
+            limit: limit,
+            summaryStyle: settings?.summaryStyle ?? "concise"
+        )
     }
 }
