@@ -81,6 +81,9 @@ public struct PersonalizationScoreHistogramEntry: Sendable, Hashable {
 }
 
 public struct PersonalizationAuditSnapshot: Sendable, Hashable {
+    public let totalArticles: Int
+    public let currentVersionArticles: Int
+    public let staleArticles: Int
     public let totalReadyScores: Int
     public let readyScoreHistogram: [PersonalizationScoreHistogramEntry]
     public let recentReadyScores: Int
@@ -251,6 +254,8 @@ actor LocalPersonalizationRepository {
 
         let readyArticles = articles.filter { $0.scoreStatusValue == .ready && $0.score != nil }
         let recentReadyArticles = readyArticles.filter { $0.fetchedAt >= recentCutoff }
+        let currentVersionArticles = articles.count(where: { $0.personalizationVersion == currentPersonalizationVersion })
+        let staleArticles = articles.count - currentVersionArticles
 
         func histogramEntries(for items: [Article]) -> [PersonalizationScoreHistogramEntry] {
             Dictionary(grouping: items.compactMap(\.score), by: { $0 })
@@ -270,6 +275,9 @@ actor LocalPersonalizationRepository {
         }
 
         return PersonalizationAuditSnapshot(
+            totalArticles: articles.count,
+            currentVersionArticles: currentVersionArticles,
+            staleArticles: staleArticles,
             totalReadyScores: readyArticles.count,
             readyScoreHistogram: histogramEntries(for: readyArticles),
             recentReadyScores: recentReadyArticles.count,

@@ -13,6 +13,13 @@ struct SettingsView: View {
 
     @Query private var settingsResults: [AppSettings]
 
+#if DEBUG
+    @State private var debugAuditSnapshot: PersonalizationAuditSnapshot?
+    @State private var pendingPreparationCount: Int?
+    @State private var isRefreshingDebug = false
+    @State private var isRebuildingDebug = false
+#endif
+
     private var settings: AppSettings {
         if let existing = settingsResults.first {
             return existing
@@ -133,11 +140,60 @@ struct SettingsView: View {
                 } header: {
                     Label("About", systemImage: "info.circle")
                 }
+
+#if DEBUG
+                Section {
+                    if let snapshot = debugAuditSnapshot {
+                        LabeledContent("Migration progress", value: "\(snapshot.currentVersionArticles) / \(snapshot.totalArticles)")
+                        LabeledContent("Still stale", value: "\(snapshot.staleArticles)")
+                        LabeledContent("Ready scores", value: "\(snapshot.totalReadyScores)")
+                        LabeledContent("Recent ready", value: "\(snapshot.recentReadyScores)")
+                        LabeledContent("Pending prep", value: pendingPreparationCount.map(String.init) ?? "Loading")
+                        LabeledContent("Feed affinity rows", value: "\(snapshot.feedAffinityRows)")
+                        LabeledContent("Topic affinity rows", value: "\(snapshot.topicAffinityRows)")
+                        LabeledContent("Author affinity rows", value: "\(snapshot.authorAffinityRows)")
+                        LabeledContent("Learned weights", value: "\(snapshot.signalWeightRows)")
+                        LabeledContent("Over-tagged", value: "\(snapshot.overTaggedArticles)")
+                    } else {
+                        HStack(spacing: 12) {
+                            if isRefreshingDebug || isRebuildingDebug {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                            Text("Loading personalization diagnostics…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button {
+                        refreshDebugMetrics()
+                    } label: {
+                        Label("Refresh Diagnostics", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isRefreshingDebug || isRebuildingDebug)
+
+                    Button {
+                        runDebugRebuild()
+                    } label: {
+                        Label("Force Rebuild History", systemImage: "hammer")
+                    }
+                    .disabled(isRefreshingDebug || isRebuildingDebug)
+                } header: {
+                    Label("Debug Personalization", systemImage: "ladybug")
+                } footer: {
+                    Text("Temporary on-device readout for V6 migration progress. Force rebuild replays historical reactions and dismissals for this device only.")
+                }
+#endif
             }
         }
         .scrollContentBackground(.hidden)
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
+        .task {
+#if DEBUG
+            refreshDebugMetrics()
+#endif
+        }
         .toolbar {
             if showsDismissButton {
                 ToolbarItem(placement: .confirmationAction) {
@@ -253,4 +309,60 @@ struct SettingsView: View {
             }
         }
     }
+
+#if DEBUG
+    private func refreshDebugMetrics() {
+        guard !isRefreshingDebug else { return }
+        isRefreshingDebug = true
+
+        Task {
+            let container = modelContext.container
+            let personalization = LocalStandalonePersonalizationService(
+                modelContainer: container,
+                keychainService: appState.configuration.keychainService
+            )
+            let preparation = ArticlePreparationService(
+                modelContainer: container,
+                keychainService: appState.configuration.keychainService
+            )
+
+            let snapshot = await personalization.auditSnapshot()
+            let pendingCount = await preparation.pendingPresentationCount()
+
+            await MainActor.run {
+                debugAuditSnapshot = snapshot
+                pendingPreparationCount = pendingCount
+                isRefreshingDebug = false
+            }
+        }
+    }
+
+    private func runDebugRebuild() {
+        guard !isRebuildingDebug else { return }
+        isRebuildingDebug = true
+
+        Task {
+            let container = modelContext.container
+            let personalization = LocalStandalonePersonalizationService(
+                modelContainer: container,
+                keychainService: appState.configuration.keychainService
+            )
+
+            _ = await personalization.rebuildPersonalizationFromHistory(batchSize: 200, force: true)
+            let snapshot = await personalization.auditSnapshot()
+            let preparation = ArticlePreparationService(
+                modelContainer: container,
+                keychainService: appState.configuration.keychainService
+            )
+            let pendingCount = await preparation.pendingPresentationCount()
+
+            await MainActor.run {
+                debugAuditSnapshot = snapshot
+                pendingPreparationCount = pendingCount
+                isRebuildingDebug = false
+                isRefreshingDebug = false
+            }
+        }
+    }
+#endif
 }
