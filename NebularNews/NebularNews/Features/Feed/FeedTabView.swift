@@ -31,10 +31,11 @@ struct FeedTabView: View {
                             onReact: presentReactionSheet
                         )
                     }
-                    .padding(.horizontal, 16)
                     .padding(.top, 8)
                     .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .contentMargins(.horizontal, 16, for: .scrollContent)
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
