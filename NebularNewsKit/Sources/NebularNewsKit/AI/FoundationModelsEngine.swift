@@ -42,8 +42,10 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
         Requirements:
         - Return JSON only.
         - JSON keys:
-          - "summary": one plain-text summary using the \(summaryStyle) style.
+          - "card_summary": exactly one sentence, plain text, concise enough for a feed card.
+          - "summary": one plain-text paragraph using the \(summaryStyle) style.
           - "key_points": exactly 4 short strings.
+        - The paragraph summary should be 3-5 sentences and feel complete, not just headline-like.
         - Each key point must be <= 14 words.
         - Keep the summary factual and compact.
 

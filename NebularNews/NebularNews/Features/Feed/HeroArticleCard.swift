@@ -62,7 +62,7 @@ struct HeroArticleCard: View {
                         .padding(24)
                     }
 
-                if let summary = article.summaryText, !summary.isEmpty {
+                if let summary = article.preferredCardSummaryText, !summary.isEmpty {
                     Text(summary)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)

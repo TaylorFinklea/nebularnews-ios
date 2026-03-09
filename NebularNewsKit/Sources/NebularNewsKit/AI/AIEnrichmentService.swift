@@ -87,6 +87,7 @@ public actor AIEnrichmentService {
         do {
             try await articleRepo.updateAIFields(
                 id: snapshot.id,
+                cardSummary: generated.cardSummary,
                 summary: generated.summary,
                 keyPoints: generated.keyPoints,
                 score: nil,

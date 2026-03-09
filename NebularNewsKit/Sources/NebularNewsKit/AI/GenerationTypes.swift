@@ -13,17 +13,20 @@ public enum AIExplicitGenerationTarget: Sendable {
 }
 
 public struct SummaryGenerationOutput: Sendable {
+    public let cardSummary: String
     public let summary: String
     public let keyPoints: [String]
     public let provider: AIGenerationProvider
     public let modelIdentifier: String?
 
     public init(
+        cardSummary: String,
         summary: String,
         keyPoints: [String],
         provider: AIGenerationProvider,
         modelIdentifier: String?
     ) {
+        self.cardSummary = cardSummary
         self.summary = summary
         self.keyPoints = keyPoints
         self.provider = provider

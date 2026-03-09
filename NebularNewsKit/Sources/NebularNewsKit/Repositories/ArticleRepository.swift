@@ -40,6 +40,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func removeTag(articleId: String, tagId: String) async throws
     func updateAIFields(
         id: String,
+        cardSummary: String?,
         summary: String?,
         keyPoints: [String]?,
         score: Int?,
@@ -220,6 +221,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func updateAIFields(
         id: String,
+        cardSummary: String?,
         summary: String?,
         keyPoints: [String]?,
         score: Int?,
@@ -229,6 +231,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         summaryModel: String?
     ) async throws {
         guard let article = await get(id: id) else { return }
+        if let cardSummary { article.cardSummaryText = cardSummary }
         if let summary { article.summaryText = summary }
         if let keyPoints {
             article.keyPointsJson = String(data: try JSONEncoder().encode(keyPoints), encoding: .utf8)
@@ -258,6 +261,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         // Recompute downstream outputs from the fuller article body.
         article.summaryText = nil
+        article.cardSummaryText = nil
         article.summaryProvider = nil
         article.summaryModel = nil
         article.keyPointsJson = nil
@@ -294,15 +298,19 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     /// Used by `AIEnrichmentService` to find articles needing scoring/summarization.
     /// Results are `Sendable` structs safe to pass across actor boundaries.
     public func listUnprocessedSnapshots(limit: Int = 10) async -> [ArticleSnapshot] {
-        var descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.aiProcessedAt == nil },
+        let descriptor = FetchDescriptor<Article>(
             sortBy: [SortDescriptor(\.fetchedAt, order: .reverse)]
         )
-        descriptor.fetchLimit = limit
 
         guard let articles = try? modelContext.fetch(descriptor) else { return [] }
 
         return articles.compactMap { article in
+            let needsAI = article.aiProcessedAt == nil ||
+                (article.cardSummaryText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
+                (article.summaryText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
+                article.keyPoints.isEmpty
+            guard needsAI else { return nil }
+
             let text = article.bestAvailableContentText
             guard !text.isEmpty else { return nil }
 
@@ -314,6 +322,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 feedTitle: article.feed?.title
             )
         }
+        .prefix(limit)
+        .map { $0 }
     }
 
     public func updateOGImageUrl(id: String, ogImageUrl: String) async throws {

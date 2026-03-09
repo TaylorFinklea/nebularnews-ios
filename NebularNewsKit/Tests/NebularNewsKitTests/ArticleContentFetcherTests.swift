@@ -57,6 +57,7 @@ struct ArticleContentFetcherTests {
 
         let insertedArticles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)
         let article = try #require(insertedArticles.first)
+        article.cardSummaryText = "Old card summary"
         article.summaryText = "Old summary"
         article.keyPointsJson = "[\"old\"]"
         article.score = 3
@@ -79,6 +80,7 @@ struct ArticleContentFetcherTests {
         #expect(refreshed.contentFetchedAt != nil)
         #expect(refreshed.contentHtml?.contains("<p>") == true)
         #expect(refreshed.bestAvailableContentLength >= 900)
+        #expect(refreshed.cardSummaryText == nil)
         #expect(refreshed.summaryText == nil)
         #expect(refreshed.keyPoints.isEmpty)
         #expect(refreshed.score == nil)

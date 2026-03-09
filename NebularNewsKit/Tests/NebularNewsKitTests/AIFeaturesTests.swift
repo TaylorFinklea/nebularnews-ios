@@ -252,7 +252,8 @@ struct AIFeaturesTests {
 
         let coordinator = MockGenerationCoordinator(
             summaryOutput: SummaryGenerationOutput(
-                summary: "A compact summary.",
+                cardSummary: "A one-sentence card summary.",
+                summary: "A compact but complete paragraph summary for the article.",
                 keyPoints: ["Point 1", "Point 2", "Point 3", "Point 4"],
                 provider: .foundationModels,
                 modelIdentifier: "system"
@@ -276,7 +277,8 @@ struct AIFeaturesTests {
 
         let stored = try fetchArticle(article.id, in: context)
         #expect(result.succeeded)
-        #expect(stored.summaryText == "A compact summary.")
+        #expect(stored.cardSummaryText == "A one-sentence card summary.")
+        #expect(stored.summaryText == "A compact but complete paragraph summary for the article.")
         #expect(stored.summaryProvider == AIGenerationProvider.foundationModels.rawValue)
         #expect(stored.summaryModel == "system")
         #expect(stored.keyPoints.count == 4)
@@ -613,7 +615,8 @@ private struct MockArticleGenerationEngine: ArticleGenerationEngine {
     ) async throws -> SummaryGenerationOutput {
         await recorder.recordSummaryCall()
         return SummaryGenerationOutput(
-            summary: "Mock summary",
+            cardSummary: "Mock card summary.",
+            summary: "Mock paragraph summary.",
             keyPoints: ["One", "Two", "Three", "Four"],
             provider: provider,
             modelIdentifier: modelIdentifier

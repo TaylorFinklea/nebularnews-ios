@@ -56,6 +56,8 @@ struct FeedTabView: View {
         if !searchText.isEmpty {
             result = result.filter { article in
                 article.title?.localizedCaseInsensitiveContains(searchText) == true ||
+                article.cardSummaryText?.localizedCaseInsensitiveContains(searchText) == true ||
+                article.summaryText?.localizedCaseInsensitiveContains(searchText) == true ||
                 article.excerpt?.localizedCaseInsensitiveContains(searchText) == true ||
                 article.author?.localizedCaseInsensitiveContains(searchText) == true ||
                 article.feed?.title.localizedCaseInsensitiveContains(searchText) == true

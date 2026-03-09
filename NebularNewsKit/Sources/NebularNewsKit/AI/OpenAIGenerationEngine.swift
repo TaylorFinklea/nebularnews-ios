@@ -43,8 +43,11 @@ public struct OpenAIGenerationEngine: ArticleGenerationEngine {
         Requirements:
         - Return JSON only.
         - JSON keys:
+          - "card_summary": exactly one plain-text sentence for a feed card.
           - "summary": one plain-text paragraph, concise but complete.
           - "key_points": exactly 4 short strings.
+        - The card summary must stand alone and stay under 24 words.
+        - The paragraph summary should be 3-5 sentences.
         - Keep the summary style \(summaryStyle).
         - Each key point must be <= 14 words.
 

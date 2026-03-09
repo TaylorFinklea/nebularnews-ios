@@ -27,6 +27,14 @@ struct MediumArticleCard: View {
                         .font(NebularTypography.mediumCardTitle)
                         .lineLimit(2)
 
+                    if let summary = article.preferredCardSummaryText, !summary.isEmpty {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     HStack(spacing: 6) {
                         ScoreBadge(score: article.displayedScore)
 

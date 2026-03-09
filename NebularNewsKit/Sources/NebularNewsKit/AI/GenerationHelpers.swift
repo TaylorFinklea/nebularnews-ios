@@ -56,16 +56,19 @@ func parseSummaryOutput(
     modelIdentifier: String?
 ) throws -> SummaryGenerationOutput {
     let object = try parseJSONObject(from: text)
+    let cardSummary = String(describing: object["card_summary"] ?? object["short_summary"] ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     let summary = String(describing: object["summary"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     let keyPoints = (object["key_points"] as? [Any] ?? [])
         .map { String(describing: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
 
-    guard !summary.isEmpty, !keyPoints.isEmpty else {
+    guard !cardSummary.isEmpty, !summary.isEmpty, !keyPoints.isEmpty else {
         throw GenerationParsingError.invalidResponse
     }
 
     return SummaryGenerationOutput(
+        cardSummary: cardSummary,
         summary: summary,
         keyPoints: Array(keyPoints.prefix(4)),
         provider: provider,

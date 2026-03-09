@@ -621,7 +621,9 @@ struct ArticleDetailView: View {
 
     private func needsAutomaticEnrichment(for article: Article) -> Bool {
         !article.bestAvailableContentText.isEmpty &&
-        ((article.summaryText?.isEmpty ?? true) || article.keyPoints.isEmpty)
+        ((article.cardSummaryText?.isEmpty ?? true) ||
+         (article.summaryText?.isEmpty ?? true) ||
+         article.keyPoints.isEmpty)
     }
 
     private func prepareArticleForReading(articleId: String) async {

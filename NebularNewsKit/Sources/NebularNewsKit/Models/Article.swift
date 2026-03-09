@@ -25,6 +25,7 @@ public final class Article: @unchecked Sendable {
     public var contentFetchedAt: Date?
 
     // AI-generated enrichments
+    public var cardSummaryText: String?
     public var summaryText: String?
     public var summaryProvider: String?
     public var summaryModel: String?
@@ -141,6 +142,16 @@ public final class Article: @unchecked Sendable {
         bestAvailableContentText.count
     }
 
+    public var preferredCardSummaryText: String? {
+        let candidates = [
+            normalizedSummary(cardSummaryText),
+            normalizedSummary(summaryText).flatMap { Self.firstSentence(in: $0) },
+            normalizedSummary(excerpt).flatMap { Self.firstSentence(in: $0) }
+        ]
+
+        return candidates.compactMap { $0 }.first
+    }
+
     /// Human-readable score label, falling back to a default.
     public var displayScoreLabel: String {
         if let scoreLabel, !scoreLabel.isEmpty {
@@ -220,5 +231,34 @@ public final class Article: @unchecked Sendable {
         }
 
         return now.timeIntervalSince(attemptedAt) >= retryAfter
+    }
+
+    private func normalizedSummary(_ value: String?) -> String? {
+        guard let rawValue = value else {
+            return nil
+        }
+
+        let cleaned = rawValue
+            .strippedHTML
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !cleaned.isEmpty
+        else {
+            return nil
+        }
+
+        return cleaned
+    }
+
+    private static func firstSentence(in text: String) -> String {
+        let sentencePattern = #"(?s)^.*?[.!?](?:["')\]]+)?(?=\s|$)"#
+        if let range = text.range(of: sentencePattern, options: .regularExpression) {
+            let sentence = text[range].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !sentence.isEmpty {
+                return sentence
+            }
+        }
+
+        return text.truncated(to: 140)
     }
 }

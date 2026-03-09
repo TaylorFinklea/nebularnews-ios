@@ -17,6 +17,13 @@ struct CompactArticleRow: View {
                         .font(NebularTypography.compactTitle)
                         .lineLimit(2)
 
+                    if let summary = article.preferredCardSummaryText, !summary.isEmpty {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+
                     HStack(spacing: 6) {
                         if let feedTitle = article.feed?.title {
                             Text(feedTitle.strippedHTML)
