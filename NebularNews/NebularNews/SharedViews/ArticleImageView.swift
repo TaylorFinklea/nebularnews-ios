@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 import NebularNewsKit
 
 /// Reusable article image with automatic fallback chain:
@@ -16,6 +17,10 @@ struct ArticleImageView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var ogFetchAttempted = false
     @State private var fallbackFetchAttempted = false
+    @State private var remoteImage: UIImage?
+    @State private var loadedURLString: String?
+    @State private var isLoadingRemoteImage = false
+    @State private var failedURLString: String?
 
     enum ImageSize {
         case hero       // full width, 220pt tall
@@ -26,36 +31,40 @@ struct ArticleImageView: View {
     var body: some View {
         let palette = NebularPalette.forColorScheme(colorScheme)
 
-        Group {
-            if let urlString = article.resolvedImageUrl, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure:
-                        SpacePlaceholder(seed: article.id)
-                    case .empty:
-                        Rectangle()
-                            .fill(palette.surfaceSoft)
-                            .overlay {
+        GeometryReader { proxy in
+            Group {
+                if let remoteImage {
+                    Image(uiImage: remoteImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else if article.resolvedImageUrl != nil {
+                    Rectangle()
+                        .fill(palette.surfaceSoft)
+                        .overlay {
+                            if isLoadingRemoteImage {
                                 ProgressView()
                                     .tint(palette.primary)
+                            } else {
+                                Image(systemName: "photo")
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary.opacity(0.7))
                             }
-                    @unknown default:
-                        SpacePlaceholder(seed: article.id)
-                    }
+                        }
+                } else {
+                    SpacePlaceholder(seed: article.id)
+                        .task {
+                            await fetchOGImageIfNeeded()
+                        }
+                        .task {
+                            await fetchFallbackImageIfNeeded()
+                        }
                 }
-            } else {
-                SpacePlaceholder(seed: article.id)
-                    .task {
-                        await fetchOGImageIfNeeded()
-                    }
-                    .task {
-                        await fetchFallbackImageIfNeeded()
-                    }
             }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .clipped()
+        }
+        .task(id: article.resolvedImageUrl) {
+            await loadRemoteImageIfNeeded()
         }
         .overlay {
             if dimmingOpacity > 0 {
@@ -96,5 +105,63 @@ struct ArticleImageView: View {
 
         let service = ArticleFallbackImageService(modelContainer: modelContext.container)
         _ = await service.ensureFallbackImage(articleID: article.id)
+    }
+
+    private func loadRemoteImageIfNeeded() async {
+        guard let urlString = article.resolvedImageUrl,
+              let url = URL(string: urlString)
+        else {
+            return
+        }
+
+        if loadedURLString == urlString, remoteImage != nil {
+            return
+        }
+
+        if failedURLString == urlString {
+            return
+        }
+
+        if let cachedImage = await ArticleRemoteImageCache.shared.image(for: urlString) {
+            remoteImage = cachedImage
+            loadedURLString = urlString
+            failedURLString = nil
+            isLoadingRemoteImage = false
+            return
+        }
+
+        isLoadingRemoteImage = true
+
+        do {
+            let (data, _) = try await URLSession.shared.data(from: url)
+            guard !Task.isCancelled, let image = UIImage(data: data) else {
+                isLoadingRemoteImage = false
+                failedURLString = urlString
+                return
+            }
+
+            await ArticleRemoteImageCache.shared.insert(image, for: urlString)
+            remoteImage = image
+            loadedURLString = urlString
+            failedURLString = nil
+            isLoadingRemoteImage = false
+        } catch {
+            isLoadingRemoteImage = false
+            failedURLString = urlString
+        }
+    }
+}
+
+private actor ArticleRemoteImageCache {
+    static let shared = ArticleRemoteImageCache()
+
+    private let cache = NSCache<NSString, UIImage>()
+
+    func image(for urlString: String) -> UIImage? {
+        cache.object(forKey: urlString as NSString)
+    }
+
+    func insert(_ image: UIImage, for urlString: String) {
+        cache.setObject(image, forKey: urlString as NSString)
     }
 }
