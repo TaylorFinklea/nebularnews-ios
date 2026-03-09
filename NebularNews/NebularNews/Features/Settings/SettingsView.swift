@@ -13,6 +13,10 @@ struct SettingsView: View {
 
     @Query private var settingsResults: [AppSettings]
 
+    @State private var anthropicModels: [AnthropicModelOption] = AnthropicModelCatalog.fallbackOptions
+    @State private var isLoadingAnthropicModels = false
+    @State private var anthropicModelsStatus: String?
+
 #if DEBUG
     @State private var debugAuditSnapshot: PersonalizationAuditSnapshot?
     @State private var pendingPreparationCount: Int?
@@ -78,42 +82,60 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Picker("Default provider", selection: providerBinding) {
-                        Text("Anthropic").tag("anthropic")
-                        Text("OpenAI").tag("openai")
+                    Picker("Automatic AI", selection: automaticAIModeBinding) {
+                        Text("Disabled").tag(AIAutomaticMode.disabled)
+                        Text("On Device").tag(AIAutomaticMode.onDevice)
+                        Text("LLM (Anthropic)").tag(AIAutomaticMode.anthropicLLM)
                     }
 
-                    apiKeyRow(
-                        label: "Anthropic API Key",
-                        hasKey: appState.hasAnthropicKey,
-                        provider: "anthropic"
-                    )
+                    if settings.automaticAIMode == .anthropicLLM {
+                        apiKeyRow(
+                            label: "Anthropic API Key",
+                            hasKey: appState.hasAnthropicKey
+                        )
 
-                    apiKeyRow(
-                        label: "OpenAI API Key",
-                        hasKey: appState.hasOpenAIKey,
-                        provider: "openai"
-                    )
-                } header: {
-                    Label("AI Provider", systemImage: "brain")
-                } footer: {
-                    Text("API keys are stored securely in your device Keychain and never synced to iCloud. In standalone mode, keys are only used for optional summaries and key points.")
-                }
+                        Picker("Anthropic model", selection: anthropicModelBinding) {
+                            ForEach(anthropicModels) { model in
+                                Text(model.displayName).tag(model.id)
+                            }
+                        }
 
-                Section {
-                    Toggle("Use on-device summaries", isOn: onDeviceSummariesBinding)
-                    Toggle("Use on-device tag suggestions", isOn: onDeviceTagSuggestionsBinding)
-                    Toggle("Allow automatic external fallback", isOn: automaticFallbackBinding)
+                        if isLoadingAnthropicModels {
+                            Label("Refreshing Anthropic models…", systemImage: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(.secondary)
+                        } else if let anthropicModelsStatus {
+                            Text(anthropicModelsStatus)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     Picker("Score assist", selection: scoreAssistModeBinding) {
                         Text("Algorithmic only").tag(AIScoreAssistMode.algorithmicOnly)
                         Text("Explain only").tag(AIScoreAssistMode.explainOnly)
                         Text("Hybrid adjust").tag(AIScoreAssistMode.hybridAdjust)
                     }
+                    .disabled(settings.automaticAIMode == .disabled)
                 } header: {
-                    Label("AI Behavior", systemImage: "cpu")
+                    Label("AI Features", systemImage: "brain")
                 } footer: {
-                    Text("On-device features use Foundation Models when supported by the current runtime. Automatic external fallback stays off by default to avoid surprise credit usage.")
+                    Text("Automatic AI controls summaries, key points, tag suggestions, and score assist. On Device uses Foundation Models only. LLM uses Anthropic only. Disabled turns automatic AI features off entirely.")
+                }
+
+                Section {
+                    apiKeyRow(
+                        label: "Anthropic API Key",
+                        hasKey: appState.hasAnthropicKey
+                    )
+
+                    apiKeyRow(
+                        label: "OpenAI API Key",
+                        hasKey: appState.hasOpenAIKey
+                    )
+                } header: {
+                    Label("External AI Keys", systemImage: "key")
+                } footer: {
+                    Text("API keys stay in your device Keychain. Anthropic powers automatic LLM mode. OpenAI remains available only for explicit regenerate actions from an article.")
                 }
 
                 Section {
@@ -190,9 +212,13 @@ struct SettingsView: View {
         .listStyle(.insetGrouped)
         .navigationTitle("Settings")
         .task {
+            await refreshAnthropicModelsIfNeeded()
 #if DEBUG
             refreshDebugMetrics()
 #endif
+        }
+        .task(id: anthropicModelLoadKey) {
+            await refreshAnthropicModelsIfNeeded()
         }
         .toolbar {
             if showsDismissButton {
@@ -238,44 +264,22 @@ struct SettingsView: View {
         )
     }
 
-    private var providerBinding: Binding<String> {
+    private var automaticAIModeBinding: Binding<AIAutomaticMode> {
         Binding(
-            get: { settings.defaultProvider },
+            get: { settings.automaticAIMode },
             set: { newValue in
-                settings.defaultProvider = newValue
+                settings.automaticAIMode = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
             }
         )
     }
 
-    private var onDeviceSummariesBinding: Binding<Bool> {
+    private var anthropicModelBinding: Binding<String> {
         Binding(
-            get: { settings.useOnDeviceSummaries },
+            get: { settings.anthropicModel },
             set: { newValue in
-                settings.useOnDeviceSummaries = newValue
-                settings.updatedAt = Date()
-                try? modelContext.save()
-            }
-        )
-    }
-
-    private var onDeviceTagSuggestionsBinding: Binding<Bool> {
-        Binding(
-            get: { settings.useOnDeviceTagSuggestions },
-            set: { newValue in
-                settings.useOnDeviceTagSuggestions = newValue
-                settings.updatedAt = Date()
-                try? modelContext.save()
-            }
-        )
-    }
-
-    private var automaticFallbackBinding: Binding<Bool> {
-        Binding(
-            get: { settings.automaticExternalAIFallback },
-            set: { newValue in
-                settings.automaticExternalAIFallback = newValue
+                settings.anthropicModel = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
             }
@@ -296,7 +300,7 @@ struct SettingsView: View {
     // MARK: - API Key Row
 
     @ViewBuilder
-    private func apiKeyRow(label: String, hasKey: Bool, provider: String) -> some View {
+    private func apiKeyRow(label: String, hasKey: Bool) -> some View {
         HStack {
             Text(label)
             Spacer()
@@ -306,6 +310,65 @@ struct SettingsView: View {
             } else {
                 Text("Not set")
                     .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var anthropicModelLoadKey: String {
+        "\(settings.automaticAIMode.rawValue)-\(appState.hasAnthropicKey)-\(settings.anthropicModel)"
+    }
+
+    private func refreshAnthropicModelsIfNeeded() async {
+        guard settings.automaticAIMode == .anthropicLLM else {
+            await MainActor.run {
+                anthropicModels = AnthropicModelCatalog.mergedOptions(
+                    fetched: [],
+                    including: settings.anthropicModel
+                )
+                anthropicModelsStatus = nil
+                isLoadingAnthropicModels = false
+            }
+            return
+        }
+
+        guard let apiKey = appState.keychain.get(forKey: KeychainManager.Key.anthropicApiKey) else {
+            await MainActor.run {
+                anthropicModels = AnthropicModelCatalog.mergedOptions(
+                    fetched: [],
+                    including: settings.anthropicModel
+                )
+                anthropicModelsStatus = "Using the built-in Anthropic model list until an API key is available."
+                isLoadingAnthropicModels = false
+            }
+            return
+        }
+
+        await MainActor.run {
+            isLoadingAnthropicModels = true
+            anthropicModelsStatus = nil
+        }
+
+        let client = AnthropicClient(apiKey: apiKey)
+
+        do {
+            let fetched = try await client.listModels()
+            let merged = AnthropicModelCatalog.mergedOptions(
+                fetched: fetched,
+                including: settings.anthropicModel
+            )
+            await MainActor.run {
+                anthropicModels = merged
+                anthropicModelsStatus = fetched.isEmpty ? "Anthropic returned no models, so the built-in list is shown." : "Live list loaded from Anthropic."
+                isLoadingAnthropicModels = false
+            }
+        } catch {
+            await MainActor.run {
+                anthropicModels = AnthropicModelCatalog.mergedOptions(
+                    fetched: [],
+                    including: settings.anthropicModel
+                )
+                anthropicModelsStatus = "Using the built-in Anthropic model list. \(error.localizedDescription)"
+                isLoadingAnthropicModels = false
             }
         }
     }

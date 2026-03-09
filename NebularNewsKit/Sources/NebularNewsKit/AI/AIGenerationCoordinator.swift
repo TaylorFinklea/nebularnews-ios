@@ -54,25 +54,11 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
 
         switch target {
         case .automatic:
-            if settings.useOnDeviceSummaries,
-               await foundationModelsEngine.isAvailable() {
-                return try await foundationModelsEngine.generateSummary(
-                    snapshot: snapshot,
-                    summaryStyle: summaryStyle
-                )
-            }
-
-            guard settings.automaticExternalAIFallback,
-                  let engine = makeDefaultExternalEngine(
-                    provider: externalDefaultProvider(from: settings),
-                    purpose: .summary,
-                    settings: settings
-                  )
-            else {
-                return nil
-            }
-
-            return try await engine.generateSummary(snapshot: snapshot, summaryStyle: summaryStyle)
+            return try await generateAutomaticSummary(
+                snapshot: snapshot,
+                summaryStyle: summaryStyle,
+                settings: settings
+            )
 
         case .anthropic:
             guard let engine = makeExternalEngine(provider: .anthropic, purpose: .summary, settings: settings) else {
@@ -93,22 +79,22 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
     ) async throws -> TagSuggestionOutput? {
         let settings = await settingsRepo.getOrCreate()
 
-        if settings.useOnDeviceTagSuggestions,
-           await foundationModelsEngine.isAvailable() {
-            return try await foundationModelsEngine.generateTagSuggestions(input: input)
-        }
-
-        guard settings.automaticExternalAIFallback,
-              let engine = makeDefaultExternalEngine(
-                provider: externalDefaultProvider(from: settings),
-                purpose: .tagSuggestion,
-                settings: settings
-              )
-        else {
+        switch settings.automaticAIMode {
+        case .disabled:
             return nil
-        }
 
-        return try await engine.generateTagSuggestions(input: input)
+        case .onDevice:
+            guard await foundationModelsEngine.isAvailable() else {
+                return nil
+            }
+            return try await foundationModelsEngine.generateTagSuggestions(input: input)
+
+        case .anthropicLLM:
+            guard let engine = makeExternalEngine(provider: .anthropic, purpose: .tagSuggestion, settings: settings) else {
+                return nil
+            }
+            return try await engine.generateTagSuggestions(input: input)
+        }
     }
 
     public func generateScoreAssist(
@@ -119,21 +105,48 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
             return nil
         }
 
-        if await foundationModelsEngine.isAvailable() {
-            return try await foundationModelsEngine.generateScoreAssist(input: input)
-        }
-
-        guard settings.automaticExternalAIFallback,
-              let engine = makeDefaultExternalEngine(
-                provider: externalDefaultProvider(from: settings),
-                purpose: .scoreAssist,
-                settings: settings
-              )
-        else {
+        switch settings.automaticAIMode {
+        case .disabled:
             return nil
-        }
 
-        return try await engine.generateScoreAssist(input: input)
+        case .onDevice:
+            guard await foundationModelsEngine.isAvailable() else {
+                return nil
+            }
+            return try await foundationModelsEngine.generateScoreAssist(input: input)
+
+        case .anthropicLLM:
+            guard let engine = makeExternalEngine(provider: .anthropic, purpose: .scoreAssist, settings: settings) else {
+                return nil
+            }
+            return try await engine.generateScoreAssist(input: input)
+        }
+    }
+
+    private func generateAutomaticSummary(
+        snapshot: ArticleSnapshot,
+        summaryStyle: String,
+        settings: AppSettings
+    ) async throws -> SummaryGenerationOutput? {
+        switch settings.automaticAIMode {
+        case .disabled:
+            return nil
+
+        case .onDevice:
+            guard await foundationModelsEngine.isAvailable() else {
+                return nil
+            }
+            return try await foundationModelsEngine.generateSummary(
+                snapshot: snapshot,
+                summaryStyle: summaryStyle
+            )
+
+        case .anthropicLLM:
+            guard let engine = makeExternalEngine(provider: .anthropic, purpose: .summary, settings: settings) else {
+                return nil
+            }
+            return try await engine.generateSummary(snapshot: snapshot, summaryStyle: summaryStyle)
+        }
     }
 
     private func makeDefaultExternalEngine(
@@ -167,10 +180,6 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
         }
     }
 
-    private func externalDefaultProvider(from settings: AppSettings) -> AIGenerationProvider {
-        settings.defaultProvider == AIGenerationProvider.openAI.rawValue ? .openAI : .anthropic
-    }
-
     private func modelIdentifier(
         for provider: AIGenerationProvider,
         purpose: ExternalGenerationPurpose,
@@ -195,12 +204,7 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
     }
 
     private func resolvedAnthropicModel(preferred: String?) -> String {
-        guard let preferred,
-              modelLooksAnthropic(preferred)
-        else {
-            return "claude-haiku-4-5-20251001"
-        }
-        return preferred
+        AnthropicModelCatalog.resolve(preferred: preferred)
     }
 
     private func resolvedOpenAIModel(preferred: String?) -> String {

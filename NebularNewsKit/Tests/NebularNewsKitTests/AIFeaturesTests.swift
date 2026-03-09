@@ -105,7 +105,9 @@ struct AIFeaturesTests {
     func automaticSummariesPreferFoundationModels() async throws {
         let container = try makeContainer()
         let context = makeContext(container)
-        _ = try insertSettings(in: context) { _ in }
+        _ = try insertSettings(in: context) { settings in
+            settings.automaticAIMode = .onDevice
+        }
 
         let foundationRecorder = EngineRecorder()
         let anthropicRecorder = EngineRecorder()
@@ -150,13 +152,12 @@ struct AIFeaturesTests {
         #expect(await openAIRecorder.summaryCallCount() == 0)
     }
 
-    @Test("Automatic summaries do not spend credits when fallback is disabled")
+    @Test("Automatic summaries stay disabled when automatic AI is off")
     func automaticSummariesDoNotFallbackWhenDisabled() async throws {
         let container = try makeContainer()
         let context = makeContext(container)
         _ = try insertSettings(in: context) { settings in
-            settings.useOnDeviceSummaries = false
-            settings.automaticExternalAIFallback = false
+            settings.automaticAIMode = .disabled
         }
 
         let coordinator = AIGenerationCoordinator(
@@ -179,21 +180,19 @@ struct AIFeaturesTests {
         #expect(output == nil)
     }
 
-    @Test("Automatic summaries fall back to the configured external provider when enabled")
-    func automaticSummariesFallbackToConfiguredProvider() async throws {
+    @Test("Automatic summaries use Anthropic when LLM mode is selected")
+    func automaticSummariesUseAnthropicWhenConfigured() async throws {
         let container = try makeContainer()
         let context = makeContext(container)
         _ = try insertSettings(in: context) { settings in
-            settings.useOnDeviceSummaries = false
-            settings.automaticExternalAIFallback = true
-            settings.defaultProvider = AIGenerationProvider.openAI.rawValue
-            settings.defaultModel = "gpt-4o-mini"
+            settings.automaticAIMode = .anthropicLLM
+            settings.defaultModel = "claude-haiku-4-5-20251001"
         }
 
         let keychainService = "tests.\(UUID().uuidString)"
         let keychain = KeychainManager(service: keychainService)
-        try keychain.set("openai-test-key", forKey: KeychainManager.Key.openaiApiKey)
-        defer { keychain.delete(forKey: KeychainManager.Key.openaiApiKey) }
+        try keychain.set("anthropic-test-key", forKey: KeychainManager.Key.anthropicApiKey)
+        defer { keychain.delete(forKey: KeychainManager.Key.anthropicApiKey) }
 
         let anthropicRecorder = EngineRecorder()
         let openAIRecorder = EngineRecorder()
@@ -231,9 +230,9 @@ struct AIFeaturesTests {
             target: .automatic
         )
 
-        #expect(output?.provider == .openAI)
-        #expect(await openAIRecorder.summaryCallCount() == 1)
-        #expect(await anthropicRecorder.summaryCallCount() == 0)
+        #expect(output?.provider == .anthropic)
+        #expect(await anthropicRecorder.summaryCallCount() == 1)
+        #expect(await openAIRecorder.summaryCallCount() == 0)
     }
 
     @Test("On-device enrichment stores summary provenance metadata")

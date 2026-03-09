@@ -20,6 +20,18 @@ public struct AIResponse: Sendable {
     public let outputTokens: Int
 }
 
+public struct AnthropicModelDescriptor: Sendable, Hashable {
+    public let id: String
+    public let displayName: String?
+    public let createdAt: Date?
+
+    public init(id: String, displayName: String?, createdAt: Date?) {
+        self.id = id
+        self.displayName = displayName
+        self.createdAt = createdAt
+    }
+}
+
 /// Errors specific to the Anthropic Messages API.
 public enum AnthropicError: LocalizedError, Sendable {
     case unauthorized
@@ -60,7 +72,8 @@ public enum AnthropicError: LocalizedError, Sendable {
 public struct AnthropicClient: Sendable {
     private let apiKey: String
     private let session: URLSession
-    private let baseURL = "https://api.anthropic.com/v1/messages"
+    private let messagesURL = "https://api.anthropic.com/v1/messages"
+    private let modelsURL = "https://api.anthropic.com/v1/models"
     private let apiVersion = "2023-06-01"
 
     public init(apiKey: String, session: URLSession = .shared) {
@@ -98,7 +111,7 @@ public struct AnthropicClient: Sendable {
         let jsonData = try JSONSerialization.data(withJSONObject: body)
 
         // Build HTTP request
-        var request = URLRequest(url: URL(string: baseURL)!)
+        var request = URLRequest(url: URL(string: messagesURL)!)
         request.httpMethod = "POST"
         request.httpBody = jsonData
         request.timeoutInterval = 60
@@ -152,5 +165,73 @@ public struct AnthropicClient: Sendable {
         let outputTokens = usage?["output_tokens"] as? Int ?? 0
 
         return AIResponse(text: text, inputTokens: inputTokens, outputTokens: outputTokens)
+    }
+
+    public func listModels() async throws -> [AnthropicModelDescriptor] {
+        var request = URLRequest(url: URL(string: modelsURL)!)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(apiVersion, forHTTPHeaderField: "anthropic-version")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw AnthropicError.networkError(underlying: error.localizedDescription)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AnthropicError.networkError(underlying: "Invalid response type")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw AnthropicError.unauthorized
+        case 429:
+            let retryAfter = httpResponse.value(forHTTPHeaderField: "retry-after")
+                .flatMap(Int.init)
+            throw AnthropicError.rateLimited(retryAfterSeconds: retryAfter)
+        default:
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            throw AnthropicError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let payload: AnthropicModelListResponse
+        do {
+            payload = try decoder.decode(AnthropicModelListResponse.self, from: data)
+        } catch {
+            throw AnthropicError.parseError(detail: error.localizedDescription)
+        }
+
+        return payload.data.map {
+            AnthropicModelDescriptor(
+                id: $0.id,
+                displayName: $0.displayName,
+                createdAt: $0.createdAt
+            )
+        }
+    }
+}
+
+private struct AnthropicModelListResponse: Decodable {
+    let data: [AnthropicModelRecord]
+}
+
+private struct AnthropicModelRecord: Decodable {
+    let id: String
+    let displayName: String?
+    let createdAt: Date?
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+        case createdAt = "created_at"
     }
 }

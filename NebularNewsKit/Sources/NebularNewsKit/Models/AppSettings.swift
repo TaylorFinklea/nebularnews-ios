@@ -7,6 +7,12 @@ public enum AIScoreAssistMode: String, Codable, CaseIterable, Sendable {
     case hybridAdjust = "hybrid_adjust"
 }
 
+public enum AIAutomaticMode: String, Codable, CaseIterable, Sendable {
+    case disabled = "disabled"
+    case onDevice = "on_device"
+    case anthropicLLM = "anthropic_llm"
+}
+
 /// Singleton app configuration, synced across devices via iCloud.
 ///
 /// AI provider API keys are NOT stored here — they live in the per-device
@@ -16,6 +22,7 @@ public final class AppSettings: @unchecked Sendable {
     public var id: String = "singleton"
 
     // AI configuration
+    public var automaticAIModeRaw: String = ""
     public var defaultProvider: String = "anthropic"
     public var defaultModel: String = "claude-haiku-4-5-20251001"
     public var scoringModel: String = "claude-haiku-4-5-20251001"
@@ -53,4 +60,60 @@ public final class AppSettings: @unchecked Sendable {
         get { AIScoreAssistMode(rawValue: scoreAssistModeRaw) ?? .algorithmicOnly }
         set { scoreAssistModeRaw = newValue.rawValue }
     }
+
+    public var automaticAIMode: AIAutomaticMode {
+        get {
+            if let explicit = AIAutomaticMode(rawValue: automaticAIModeRaw), !automaticAIModeRaw.isEmpty {
+                return explicit
+            }
+
+            if useOnDeviceSummaries || useOnDeviceTagSuggestions {
+                return .onDevice
+            }
+
+            if automaticExternalAIFallback, defaultProvider == AIGenerationProvider.anthropic.rawValue {
+                return .anthropicLLM
+            }
+
+            return .disabled
+        }
+        set {
+            automaticAIModeRaw = newValue.rawValue
+
+            switch newValue {
+            case .disabled:
+                useOnDeviceSummaries = false
+                useOnDeviceTagSuggestions = false
+                automaticExternalAIFallback = false
+
+            case .onDevice:
+                useOnDeviceSummaries = true
+                useOnDeviceTagSuggestions = true
+                automaticExternalAIFallback = false
+
+            case .anthropicLLM:
+                defaultProvider = AIGenerationProvider.anthropic.rawValue
+                useOnDeviceSummaries = false
+                useOnDeviceTagSuggestions = false
+                automaticExternalAIFallback = true
+            }
+        }
+    }
+
+    public var anthropicModel: String {
+        get {
+            AnthropicModelCatalog.resolve(preferred: modelLooksAnthropic(defaultModel) ? defaultModel : nil)
+        }
+        set {
+            let resolved = AnthropicModelCatalog.resolve(preferred: newValue)
+            defaultProvider = AIGenerationProvider.anthropic.rawValue
+            defaultModel = resolved
+            scoringModel = resolved
+        }
+    }
+}
+
+private func modelLooksAnthropic(_ value: String?) -> Bool {
+    guard let value else { return false }
+    return value.lowercased().contains("claude")
 }
