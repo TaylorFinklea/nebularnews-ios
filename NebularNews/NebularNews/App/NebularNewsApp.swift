@@ -45,6 +45,8 @@ struct NebularNewsApp: App {
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .task(id: appState.mode) {
                 guard appState.isStandaloneMode else { return }
+                let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
+                let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
                 let service = LocalStandalonePersonalizationService(
                     modelContainer: modelContainer,
                     keychainService: appState.configuration.keychainService
@@ -55,6 +57,8 @@ struct NebularNewsApp: App {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
                 }
 #endif
+                let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
+                _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)
                 await runAutomaticArticlePreparation(limit: 8)
             }
         }

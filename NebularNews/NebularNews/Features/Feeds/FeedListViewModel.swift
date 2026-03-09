@@ -47,12 +47,14 @@ final class FeedListViewModel {
         let poller = getPoller()
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let retentionDays = await settingsRepo.retentionDays()
+        let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
         let result = await poller.pollAllFeeds(bypassBackoff: true)
 
         let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
+        let trimmed = await trimExcessArticlesPerFeed(maxArticlesPerFeed)
         let prepared = await preparePendingArticles()
 
-        lastPollMessage = formatPollResult(result, deleted: deleted)
+        lastPollMessage = formatPollResult(result, deleted: deleted, trimmed: trimmed)
         if prepared > 0 {
             lastPollMessage = (lastPollMessage ?? "") + " · \(prepared) prepared"
         }
@@ -71,6 +73,10 @@ final class FeedListViewModel {
             keychainService: AppConfiguration.shared.keychainService
         )
         return await service.processPendingArticles(batchSize: 10)
+    }
+
+    private func trimExcessArticlesPerFeed(_ maxArticlesPerFeed: Int) async -> Int {
+        (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).
@@ -150,7 +156,7 @@ final class FeedListViewModel {
 
     // TODO: User contribution opportunity — customize how poll results are displayed.
     // Consider: toast vs. subtitle, level of detail, auto-dismiss timing.
-    private func formatPollResult(_ result: PollCycleResult, deleted: Int) -> String {
+    private func formatPollResult(_ result: PollCycleResult, deleted: Int, trimmed: Int) -> String {
         var parts: [String] = []
 
         if result.newArticles > 0 {
@@ -164,6 +170,9 @@ final class FeedListViewModel {
         }
         if deleted > 0 {
             parts.append("\(deleted) old removed")
+        }
+        if trimmed > 0 {
+            parts.append("\(trimmed) over limit removed")
         }
 
         if parts.isEmpty {

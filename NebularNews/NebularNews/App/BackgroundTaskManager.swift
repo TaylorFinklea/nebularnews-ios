@@ -54,8 +54,10 @@ enum BackgroundTaskManager {
         let pollTask = Task {
             // Automatic poll respects backoff (not user-initiated)
             let retentionDays = await settingsRepo.retentionDays()
+            let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
             _ = await poller.pollAllFeeds(bypassBackoff: false)
             _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
+            _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)
             _ = await preparation.processPendingArticles(batchSize: 5)
         }
 

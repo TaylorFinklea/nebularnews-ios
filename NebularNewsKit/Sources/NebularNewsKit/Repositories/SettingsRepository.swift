@@ -30,6 +30,10 @@ public actor LocalSettingsRepository {
         max(await getOrCreate().retentionDays, 1)
     }
 
+    public func maxArticlesPerFeed() async -> Int {
+        max(await getOrCreate().maxArticlesPerFeed, 1)
+    }
+
     public func personalizationRebuildVersion() async -> Int {
         await getOrCreate().personalizationRebuildVersion
     }

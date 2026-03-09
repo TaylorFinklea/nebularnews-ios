@@ -69,6 +69,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
         image: ArticlePreparationStageStatus?,
         enrichment: ArticlePreparationStageStatus?
     ) async throws
+    func trimExcessArticlesPerFeed(maxPerFeed: Int) async throws -> Int
     func deleteOlderThan(date: Date) async throws -> Int
 }
 
@@ -477,6 +478,51 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+    }
+
+    public func trimExcessArticlesPerFeed(maxPerFeed: Int) async throws -> Int {
+        let limit = max(maxPerFeed, 1)
+        let descriptor = FetchDescriptor<Article>()
+        let allArticles = try modelContext.fetch(descriptor)
+
+        let groupedByFeed = Dictionary(grouping: allArticles) { article in
+            article.feed?.id
+        }
+
+        var deleted = 0
+
+        for (feedID, articles) in groupedByFeed {
+            guard feedID != nil else { continue }
+
+            let sorted = articles.sorted { lhs, rhs in
+                if lhs.retentionReferenceDate != rhs.retentionReferenceDate {
+                    return lhs.retentionReferenceDate > rhs.retentionReferenceDate
+                }
+                return lhs.fetchedAt > rhs.fetchedAt
+            }
+
+            var keptUnsaved = 0
+
+            for article in sorted {
+                if article.isInReadingList {
+                    continue
+                }
+
+                if keptUnsaved < limit {
+                    keptUnsaved += 1
+                    continue
+                }
+
+                modelContext.delete(article)
+                deleted += 1
+            }
+        }
+
+        if deleted > 0 {
+            try modelContext.save()
+        }
+
+        return deleted
     }
 
     public func deleteOlderThan(date: Date) async throws -> Int {

@@ -310,4 +310,39 @@ struct FeedPollerTests {
         #expect(remaining.count == 1)
         #expect(remaining.first?.isInReadingList == true)
     }
+
+    @Test("Per-feed trimming keeps the newest unsaved articles and preserves saved ones")
+    func trimExcessArticlesPerFeedKeepsNewestAndSaved() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        for index in 0..<5 {
+            let article = ParsedArticle(
+                url: "https://example.com/article-\(index)",
+                title: "Article \(index)",
+                publishedAt: Date(timeIntervalSinceNow: -Double(index) * 86400),
+                contentHash: "hash-\(index)"
+            )
+            try await articleRepo.insertForFeed(feedId: feed.id, article: article)
+        }
+
+        let allArticles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        let savedArticle = try #require(allArticles.first(where: { $0.title == "Article 4" }))
+        savedArticle.addToReadingList(at: Date())
+
+        let deleted = try await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: 2)
+        #expect(deleted == 2)
+
+        var filter = ArticleFilter()
+        filter.feedId = feed.id
+        let remaining = await articleRepo.list(filter: filter, sort: .newest, limit: 100, offset: 0)
+        let titles = Set(remaining.compactMap(\.title))
+
+        #expect(remaining.count == 3)
+        #expect(titles == ["Article 0", "Article 1", "Article 4"])
+        #expect(remaining.contains(where: { $0.title == "Article 4" && $0.isInReadingList }))
+    }
 }

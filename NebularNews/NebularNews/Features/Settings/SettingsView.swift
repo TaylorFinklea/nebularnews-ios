@@ -249,6 +249,13 @@ struct SettingsView: View {
                 settings.maxArticlesPerFeed = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                Task {
+                    let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+                    _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: newValue)
+#if DEBUG
+                    refreshDebugMetrics()
+#endif
+                }
             }
         )
     }
