@@ -9,10 +9,9 @@ struct TodayStats {
     let highFit: Int
     let scoredCount: Int
     let learningCount: Int
-    let feedCount: Int
     let totalArticles: Int
 
-    static func compute(articles: [Article], feedCount: Int) -> TodayStats {
+    static func compute(articles: [Article]) -> TodayStats {
         let now = Date()
         let dayAgo = now.addingTimeInterval(-86_400)
         let weekAgo = now.addingTimeInterval(-604_800)
@@ -33,7 +32,6 @@ struct TodayStats {
             }),
             scoredCount: articles.count(where: \.hasReadyScore),
             learningCount: articles.count(where: \.isLearningScore),
-            feedCount: feedCount,
             totalArticles: articles.count
         )
     }

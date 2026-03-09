@@ -11,7 +11,6 @@ struct TodayQuickStats: View {
                 QuickStatPill(label: "Unread", value: "\(stats.unreadCount)", icon: "envelope.badge", accent: .cyan)
                 QuickStatPill(label: "New Today", value: "\(stats.newToday)", icon: "clock", accent: .orange)
                 QuickStatPill(label: "High Fit", value: "\(stats.highFit)", icon: "star.fill", accent: Color.forScore(5))
-                QuickStatPill(label: "Feeds", value: "\(stats.feedCount)", icon: "antenna.radiowaves.left.and.right", accent: .purple)
             }
         }
     }

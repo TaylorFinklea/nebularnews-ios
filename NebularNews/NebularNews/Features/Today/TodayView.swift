@@ -11,8 +11,6 @@ import NebularNewsKit
 struct TodayView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @Query private var feeds: [Feed]
-
     @State private var showSettings = false
     @State private var viewModel = TodayViewModel()
 
@@ -77,18 +75,12 @@ struct TodayView: View {
             .navigationDestination(for: String.self) { articleId in
                 ArticleDetailView(articleId: articleId)
             }
-            .task(id: feeds.count) {
-                await viewModel.reload(
-                    container: modelContext.container,
-                    feedCount: feeds.count
-                )
+            .task {
+                await viewModel.reload(container: modelContext.container)
             }
             .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
                 Task {
-                    await viewModel.reload(
-                        container: modelContext.container,
-                        feedCount: feeds.count
-                    )
+                    await viewModel.reload(container: modelContext.container)
                 }
             }
         }
@@ -182,14 +174,13 @@ private final class TodayViewModel {
         highFit: 0,
         scoredCount: 0,
         learningCount: 0,
-        feedCount: 0,
         totalArticles: 0
     )
     var topArticles: [Article] = []
     var pendingPreparationCount = 0
     var isLoading = false
 
-    func reload(container: ModelContainer, feedCount: Int) async {
+    func reload(container: ModelContainer) async {
         let articleRepo = repository(for: container)
         requestToken += 1
         let token = requestToken
@@ -273,7 +264,6 @@ private final class TodayViewModel {
             highFit: highFit,
             scoredCount: scored,
             learningCount: max(total - scored, 0),
-            feedCount: feedCount,
             totalArticles: total
         )
         self.topArticles = loadedTopArticles.sorted {
