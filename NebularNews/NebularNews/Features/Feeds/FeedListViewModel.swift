@@ -14,7 +14,7 @@ final class FeedListViewModel {
     var feeds: [Feed] = []
     var isLoading = false
     var isPolling = false
-    var isEnriching = false
+    var isPreparing = false
     var showAddSheet = false
     var errorMessage: String?
     var lastPollMessage: String?
@@ -50,59 +50,27 @@ final class FeedListViewModel {
         let result = await poller.pollAllFeeds(bypassBackoff: true)
 
         let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
-        let fetchedContent = await fetchMissingArticleContent()
-
-        let processed = await processStandalonePersonalization()
+        let prepared = await preparePendingArticles()
 
         lastPollMessage = formatPollResult(result, deleted: deleted)
-        if fetchedContent > 0 {
-            lastPollMessage = (lastPollMessage ?? "") + " · \(fetchedContent) full-text"
-        }
-        if processed > 0 {
-            lastPollMessage = (lastPollMessage ?? "") + " · \(processed) scored"
+        if prepared > 0 {
+            lastPollMessage = (lastPollMessage ?? "") + " · \(prepared) prepared"
         }
         isPolling = false
 
         // Reload feed list to show updated article counts + poll timestamps
         await loadFeeds()
-
-        // Trigger optional AI enrichment for summary + key points.
-        await enrichNewArticles()
     }
 
-    /// Enrich unprocessed articles with optional AI summaries and key points.
-    func enrichNewArticles() async {
-        isEnriching = true
-        let enricher = AIEnrichmentService(
+    private func preparePendingArticles() async -> Int {
+        isPreparing = true
+        defer { isPreparing = false }
+
+        let service = ArticlePreparationService(
             modelContainer: modelContainer,
             keychainService: AppConfiguration.shared.keychainService
         )
-        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
-        let settings = await settingsRepo.get()
-        let results = await enricher.enrichUnprocessedArticles(
-            limit: 5,
-            summaryStyle: settings?.summaryStyle ?? "concise"
-        )
-        isEnriching = false
-
-        let enriched = results.filter { $0.succeeded }.count
-        if enriched > 0 {
-            lastPollMessage = (lastPollMessage ?? "") + " · \(enriched) AI-enriched"
-        }
-    }
-
-    private func fetchMissingArticleContent() async -> Int {
-        let fetcher = ArticleContentFetcher(modelContainer: modelContainer)
-        let results = await fetcher.fetchMissingContentBatch(limit: 5, recentOnly: true)
-        return results.filter { $0.status == .fetched }.count
-    }
-
-    private func processStandalonePersonalization() async -> Int {
-        let service = LocalStandalonePersonalizationService(
-            modelContainer: modelContainer,
-            keychainService: AppConfiguration.shared.keychainService
-        )
-        return await service.processPendingArticles(limit: 200)
+        return await service.processPendingArticles(batchSize: 10)
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).

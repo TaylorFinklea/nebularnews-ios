@@ -1,30 +1,15 @@
 import SwiftUI
 import SwiftData
+import Observation
 import NebularNewsKit
 
 struct ReadingListView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
-    @Query(
-        filter: #Predicate<Article> { $0.readingListAddedAt != nil },
-        sort: [
-            SortDescriptor(\Article.readingListAddedAt, order: .reverse),
-            SortDescriptor(\Article.publishedAt, order: .reverse)
-        ]
-    )
-    private var savedArticles: [Article]
-
     @State private var searchText = ""
     @State private var filterMode: ReadingListFilterMode = .all
-
-    private var filteredArticles: [Article] {
-        ReadingListContent.filteredArticles(
-            from: savedArticles,
-            searchText: searchText,
-            filterMode: filterMode
-        )
-    }
+    @State private var viewModel = ReadingListBrowseViewModel()
 
     private var palette: NebularPalette {
         NebularPalette.forColorScheme(colorScheme)
@@ -34,13 +19,15 @@ struct ReadingListView: View {
         NavigationStack {
             NebularScreen(emphasis: .reading) {
                 Group {
-                    if savedArticles.isEmpty {
+                    if viewModel.isLoading && viewModel.savedArticles.isEmpty && viewModel.pendingSavedCount == 0 {
+                        ReadingListSkeletonView()
+                    } else if viewModel.totalSavedCount == 0 {
                         ContentUnavailableView(
                             "Reading List Empty",
                             systemImage: "bookmark",
                             description: Text("Save articles from the article toolbar to keep them here for later.")
                         )
-                    } else if filteredArticles.isEmpty {
+                    } else if viewModel.savedArticles.isEmpty && viewModel.pendingSavedCount == 0 {
                         if searchText.isEmpty {
                             ContentUnavailableView(
                                 emptyStateTitle,
@@ -59,8 +46,21 @@ struct ReadingListView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
 
+                            if viewModel.pendingSavedCount > 0 {
+                                Section {
+                                    ForEach(0..<min(3, viewModel.pendingSavedCount), id: \.self) { _ in
+                                        ReadingListSkeletonRow()
+                                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                            .listRowBackground(Color.clear)
+                                            .listRowSeparator(.hidden)
+                                    }
+                                } header: {
+                                    Text("Preparing \(viewModel.pendingSavedCount) saved article\(viewModel.pendingSavedCount == 1 ? "" : "s")")
+                                }
+                            }
+
                             Section {
-                                ForEach(filteredArticles, id: \.id) { article in
+                                ForEach(viewModel.savedArticles, id: \.id) { article in
                                     NavigationLink(value: article.id) {
                                         StandaloneArticleRow(article: article)
                                     }
@@ -85,7 +85,27 @@ struct ReadingListView: View {
                 ArticleDetailView(articleId: articleId)
             }
             .searchable(text: $searchText, prompt: "Search saved articles")
+            .task(id: reloadKey) {
+                await viewModel.reload(
+                    container: modelContext.container,
+                    searchText: searchText,
+                    filterMode: filterMode
+                )
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+                Task {
+                    await viewModel.reload(
+                        container: modelContext.container,
+                        searchText: searchText,
+                        filterMode: filterMode
+                    )
+                }
+            }
         }
+    }
+
+    private var reloadKey: String {
+        "\(filterMode.rawValue)|\(searchText)"
     }
 
     private var readingListHeader: some View {
@@ -102,7 +122,7 @@ struct ReadingListView: View {
 
                     Spacer()
 
-                    Text("\(filteredArticles.count)")
+                    Text("\(viewModel.savedArticles.count)")
                         .font(.headline.bold())
                         .monospacedDigit()
                         .padding(.horizontal, 12)
@@ -179,7 +199,120 @@ struct ReadingListView: View {
     }
 
     private func removeFromReadingList(_ article: Article) {
-        article.removeFromReadingList()
-        try? modelContext.save()
+        Task {
+            await viewModel.removeFromReadingList(
+                articleID: article.id,
+                container: modelContext.container
+            )
+        }
+    }
+}
+
+private struct ReadingListSkeletonView: View {
+    var body: some View {
+        List {
+            ForEach(0..<4, id: \.self) { _ in
+                ReadingListSkeletonRow()
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+}
+
+private struct ReadingListSkeletonRow: View {
+    var body: some View {
+        GlassCard(cornerRadius: 22, style: .raised) {
+            VStack(alignment: .leading, spacing: 10) {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.white.opacity(0.18))
+                    .frame(width: 160, height: 12)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.white.opacity(0.26))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 20)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.white.opacity(0.16))
+                    .frame(width: 220, height: 16)
+            }
+            .redacted(reason: .placeholder)
+        }
+    }
+}
+
+@Observable
+@MainActor
+private final class ReadingListBrowseViewModel {
+    private var articleRepo: LocalArticleRepository?
+    private var requestToken = 0
+
+    var savedArticles: [Article] = []
+    var pendingSavedCount = 0
+    var totalSavedCount = 0
+    var isLoading = false
+
+    func reload(
+        container: ModelContainer,
+        searchText: String,
+        filterMode: ReadingListFilterMode
+    ) async {
+        let articleRepo = repository(for: container)
+        requestToken += 1
+        let token = requestToken
+        isLoading = true
+
+        let savedFilter: ArticleFilter = {
+            var filter = ArticleFilter()
+            filter.readingListOnly = true
+            return filter
+        }()
+
+        let pendingSavedFilter: ArticleFilter = {
+            var filter = savedFilter
+            filter.presentationFilter = .pendingOnly
+            return filter
+        }()
+
+        async let savedArticles = articleRepo.listVisibleArticles(
+            filter: savedFilter,
+            sort: .newest,
+            limit: 500,
+            offset: 0
+        )
+        async let totalSavedCount = articleRepo.count(filter: savedFilter)
+        async let pendingSavedCount = articleRepo.count(filter: pendingSavedFilter)
+
+        let visibleSavedArticles = await savedArticles
+        let totalCount = await totalSavedCount
+        let pendingCount = await pendingSavedCount
+
+        guard token == requestToken else { return }
+
+        self.savedArticles = ReadingListContent.filteredArticles(
+            from: visibleSavedArticles,
+            searchText: searchText,
+            filterMode: filterMode
+        )
+        self.totalSavedCount = totalCount
+        self.pendingSavedCount = pendingCount
+        isLoading = false
+    }
+
+    func removeFromReadingList(articleID: String, container: ModelContainer) async {
+        let articleRepo = repository(for: container)
+        try? await articleRepo.setReadingList(id: articleID, isSaved: false)
+    }
+
+    private func repository(for container: ModelContainer) -> LocalArticleRepository {
+        if let articleRepo {
+            return articleRepo
+        }
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        self.articleRepo = articleRepo
+        return articleRepo
     }
 }

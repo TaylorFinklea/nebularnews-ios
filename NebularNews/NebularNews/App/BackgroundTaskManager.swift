@@ -45,8 +45,7 @@ enum BackgroundTaskManager {
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let contentFetcher = ArticleContentFetcher(modelContainer: modelContainer)
-        let personalization = LocalStandalonePersonalizationService(
+        let preparation = ArticlePreparationService(
             modelContainer: modelContainer,
             keychainService: AppConfiguration.shared.keychainService
         )
@@ -57,21 +56,7 @@ enum BackgroundTaskManager {
             let retentionDays = await settingsRepo.retentionDays()
             _ = await poller.pollAllFeeds(bypassBackoff: false)
             _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
-            _ = await contentFetcher.fetchMissingContentBatch(limit: 3, recentOnly: true)
-            _ = await personalization.processPendingArticles(limit: 50)
-
-            guard !Task.isCancelled else { return }
-
-            let enricher = AIEnrichmentService(
-                modelContainer: modelContainer,
-                keychainService: AppConfiguration.shared.keychainService
-            )
-            let settings = await settingsRepo.get()
-
-            _ = await enricher.enrichUnprocessedArticles(
-                limit: 3,  // Conservative for background tasks
-                summaryStyle: settings?.summaryStyle ?? "concise"
-            )
+            _ = await preparation.processPendingArticles(batchSize: 5)
         }
 
         // If iOS needs to terminate this task early

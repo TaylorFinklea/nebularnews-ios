@@ -3,14 +3,21 @@ import SwiftData
 
 // MARK: - Enrichment Result
 
+public enum AIEnrichmentAttemptStatus: Sendable {
+    case generated
+    case skipped
+    case failed
+}
+
 /// Result of AI enrichment for a single article.
 public struct EnrichmentResult: Sendable {
     public let articleId: String
     public let summary: String?
     public let keyPoints: [String]?
+    public let status: AIEnrichmentAttemptStatus
     public let error: String?
 
-    public var succeeded: Bool { error == nil }
+    public var succeeded: Bool { status == .generated && error == nil }
 }
 
 // MARK: - Service
@@ -71,6 +78,7 @@ public actor AIEnrichmentService {
                     articleId: snapshot.id,
                     summary: nil,
                     keyPoints: nil,
+                    status: .skipped,
                     error: "No generation provider available"
                 )
             }
@@ -80,6 +88,7 @@ public actor AIEnrichmentService {
                 articleId: snapshot.id,
                 summary: nil,
                 keyPoints: nil,
+                status: .failed,
                 error: error.localizedDescription
             )
         }
@@ -101,6 +110,7 @@ public actor AIEnrichmentService {
                 articleId: snapshot.id,
                 summary: generated.summary,
                 keyPoints: generated.keyPoints,
+                status: .failed,
                 error: "Failed to save: \(error.localizedDescription)"
             )
         }
@@ -109,6 +119,7 @@ public actor AIEnrichmentService {
             articleId: snapshot.id,
             summary: generated.summary,
             keyPoints: generated.keyPoints,
+            status: .generated,
             error: nil
         )
     }

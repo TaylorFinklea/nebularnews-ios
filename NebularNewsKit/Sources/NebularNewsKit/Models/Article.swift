@@ -1,6 +1,14 @@
 import Foundation
 import SwiftData
 
+public enum ArticlePreparationStageStatus: String, Codable, Sendable {
+    case pending
+    case succeeded
+    case failed
+    case blocked
+    case skipped
+}
+
 /// A single article fetched from an RSS feed.
 ///
 /// Articles hold both the raw content (HTML) and AI-generated enrichments
@@ -27,6 +35,10 @@ public final class Article: @unchecked Sendable {
     public var contentHash: String?
     public var contentFetchAttemptedAt: Date?
     public var contentFetchedAt: Date?
+    public var contentPreparationStatusRaw: String?
+    public var imagePreparationStatusRaw: String?
+    public var enrichmentPreparationStatusRaw: String?
+    public var presentationReadyAt: Date?
 
     // AI-generated enrichments
     public var cardSummaryText: String?
@@ -96,6 +108,41 @@ public final class Article: @unchecked Sendable {
     public var scoreStatusValue: LocalScoreStatus? {
         guard let scoreStatus else { return nil }
         return LocalScoreStatus(rawValue: scoreStatus)
+    }
+
+    public var contentPreparationStatusValue: ArticlePreparationStageStatus {
+        stageStatus(
+            rawValue: contentPreparationStatusRaw,
+            inferred: inferredContentPreparationStatus
+        )
+    }
+
+    public var imagePreparationStatusValue: ArticlePreparationStageStatus {
+        stageStatus(
+            rawValue: imagePreparationStatusRaw,
+            inferred: inferredImagePreparationStatus
+        )
+    }
+
+    public var enrichmentPreparationStatusValue: ArticlePreparationStageStatus {
+        stageStatus(
+            rawValue: enrichmentPreparationStatusRaw,
+            inferred: inferredEnrichmentPreparationStatus
+        )
+    }
+
+    public var hasAttemptedPresentationPreparation: Bool {
+        contentPreparationStatusValue != .pending &&
+        imagePreparationStatusValue != .pending &&
+        enrichmentPreparationStatusValue != .pending
+    }
+
+    public var isPreparationPending: Bool {
+        !hasAttemptedPresentationPreparation
+    }
+
+    public var isPresentationReady: Bool {
+        presentationReadyAt != nil || hasAttemptedPresentationPreparation
     }
 
     public var hasReadyScore: Bool {
@@ -264,5 +311,74 @@ public final class Article: @unchecked Sendable {
         }
 
         return text.truncated(to: 140)
+    }
+
+    private func stageStatus(
+        rawValue: String?,
+        inferred: ArticlePreparationStageStatus
+    ) -> ArticlePreparationStageStatus {
+        guard let rawValue,
+              let status = ArticlePreparationStageStatus(rawValue: rawValue)
+        else {
+            return inferred
+        }
+
+        return status
+    }
+
+    private var inferredContentPreparationStatus: ArticlePreparationStageStatus {
+        if contentFetchedAt != nil {
+            return .succeeded
+        }
+
+        if bestAvailableContentLength >= 1_200 {
+            return .skipped
+        }
+
+        guard let canonicalUrl,
+              URL(string: canonicalUrl) != nil
+        else {
+            return .skipped
+        }
+
+        if contentFetchAttemptedAt != nil {
+            return .failed
+        }
+
+        return .pending
+    }
+
+    private var inferredImagePreparationStatus: ArticlePreparationStageStatus {
+        if resolvedImageUrl != nil {
+            return .succeeded
+        }
+
+        if hasLegacyPreparationEvidence {
+            return .failed
+        }
+
+        return .pending
+    }
+
+    private var inferredEnrichmentPreparationStatus: ArticlePreparationStageStatus {
+        if aiProcessedAt != nil || !(summaryText?.isEmpty ?? true) || !keyPoints.isEmpty {
+            return .succeeded
+        }
+
+        if hasLegacyPreparationEvidence && !bestAvailableContentText.isEmpty {
+            return .skipped
+        }
+
+        return .pending
+    }
+
+    private var hasLegacyPreparationEvidence: Bool {
+        contentFetchAttemptedAt != nil ||
+        contentFetchedAt != nil ||
+        aiProcessedAt != nil ||
+        personalizationVersion > 0 ||
+        readAt != nil ||
+        reactionValue != nil ||
+        dismissedAt != nil
     }
 }

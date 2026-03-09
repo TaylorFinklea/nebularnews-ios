@@ -1,12 +1,9 @@
 import SwiftUI
-import SwiftData
 import UIKit
 import NebularNewsKit
 
 /// Reusable article image with automatic fallback chain:
-/// RSS imageUrl -> cached OG image -> persisted Unsplash fallback -> placeholder.
-///
-/// Triggers OG image fetching and fallback-image selection lazily when no image is available.
+/// RSS imageUrl -> cached OG image -> persisted fallback -> placeholder.
 struct ArticleImageView: View {
     let article: Article
     var size: ImageSize = .hero
@@ -14,9 +11,6 @@ struct ArticleImageView: View {
     var dimmingOpacity: Double = 0
 
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.modelContext) private var modelContext
-    @State private var ogFetchAttempted = false
-    @State private var fallbackFetchAttempted = false
     @State private var remoteImage: UIImage?
     @State private var loadedURLString: String?
     @State private var isLoadingRemoteImage = false
@@ -52,12 +46,6 @@ struct ArticleImageView: View {
                         }
                 } else {
                     SpacePlaceholder(seed: article.id)
-                        .task {
-                            await fetchOGImageIfNeeded()
-                        }
-                        .task {
-                            await fetchFallbackImageIfNeeded()
-                        }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -80,31 +68,6 @@ struct ArticleImageView: View {
                 )
             }
         }
-    }
-
-    // MARK: - OG Image Fetching
-
-    private func fetchOGImageIfNeeded() async {
-        guard !ogFetchAttempted,
-              article.resolvedImageUrl == nil,
-              let canonicalUrl = article.canonicalUrl
-        else { return }
-
-        ogFetchAttempted = true
-
-        let fetcher = OGImageFetcher(modelContainer: modelContext.container)
-        _ = await fetcher.fetchOGImage(articleId: article.id, canonicalUrl: canonicalUrl)
-    }
-
-    private func fetchFallbackImageIfNeeded() async {
-        guard !fallbackFetchAttempted,
-              article.resolvedImageUrl == nil
-        else { return }
-
-        fallbackFetchAttempted = true
-
-        let service = ArticleFallbackImageService(modelContainer: modelContext.container)
-        _ = await service.ensureFallbackImage(articleID: article.id)
     }
 
     private func loadRemoteImageIfNeeded() async {

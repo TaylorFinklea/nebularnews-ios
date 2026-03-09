@@ -11,17 +11,20 @@ struct MagazineGrid: View {
     let onOpenArticle: ((Article) -> Void)?
     let onToggleRead: ((Article) -> Void)?
     let onReact: ((Article) -> Void)?
+    let onArticleVisible: ((Article) -> Void)?
 
     init(
         articles: [Article],
         onOpenArticle: ((Article) -> Void)? = nil,
         onToggleRead: ((Article) -> Void)? = nil,
-        onReact: ((Article) -> Void)? = nil
+        onReact: ((Article) -> Void)? = nil,
+        onArticleVisible: ((Article) -> Void)? = nil
     ) {
         self.articles = articles
         self.onOpenArticle = onOpenArticle
         self.onToggleRead = onToggleRead
         self.onReact = onReact
+        self.onArticleVisible = onArticleVisible
     }
 
     var body: some View {
@@ -135,12 +138,18 @@ struct MagazineGrid: View {
                 content()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                onArticleVisible?(article)
+            }
         } else {
             NavigationLink(value: article.id) {
                 content()
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onAppear {
+                onArticleVisible?(article)
+            }
         }
     }
 }

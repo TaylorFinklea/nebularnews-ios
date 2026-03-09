@@ -10,15 +10,22 @@ struct ReactionSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    let article: Article
+    let articleID: String
     let allowsDismiss: Bool
+
+    @Query private var articles: [Article]
 
     @State private var selectedSelection: ReactionSelection? = nil
     @State private var selectedCodes: Set<String> = []
 
     init(article: Article, allowsDismiss: Bool = false) {
-        self.article = article
+        let articleID = article.id
+        self.articleID = articleID
         self.allowsDismiss = allowsDismiss
+        _articles = Query(
+            filter: #Predicate<Article> { $0.id == articleID },
+            sort: [SortDescriptor(\Article.publishedAt)]
+        )
         _selectedSelection = State(initialValue: ReactionSelection(article: article, allowsDismiss: allowsDismiss))
         _selectedCodes = State(
             initialValue: Set(
@@ -27,6 +34,10 @@ struct ReactionSheet: View {
                     .map(String.init) ?? []
             )
         )
+    }
+
+    private var article: Article? {
+        articles.first
     }
 
     private var currentOptions: [ReactionReasonOption] {
@@ -39,7 +50,7 @@ struct ReactionSheet: View {
     }
 
     private var hasPersistedFeedback: Bool {
-        article.reactionValue != nil || article.isDismissed
+        article?.reactionValue != nil || article?.isDismissed == true
     }
 
     var body: some View {
@@ -166,6 +177,11 @@ struct ReactionSheet: View {
     // MARK: - Actions
 
     private func save() {
+        guard let article else {
+            dismiss()
+            return
+        }
+
         let previousValue = article.reactionValue
         let previousDismissedAt = article.dismissedAt
         let newValue = selectedValue
@@ -217,6 +233,11 @@ struct ReactionSheet: View {
     }
 
     private func clearReaction() {
+        guard let article else {
+            dismiss()
+            return
+        }
+
         let previousValue = article.reactionValue
         let previousDismissedAt = article.dismissedAt
         selectedSelection = nil

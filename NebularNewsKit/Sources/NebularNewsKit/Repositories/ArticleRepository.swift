@@ -7,14 +7,23 @@ public enum ArticleReadFilter: Sendable {
     case all, read, unread
 }
 
+public enum ArticlePresentationFilter: Sendable {
+    case all
+    case readyOnly
+    case pendingOnly
+}
+
 public enum ArticleSort: String, Sendable, CaseIterable {
     case newest, oldest, scoreDesc, scoreAsc, unreadFirst
 }
 
 public struct ArticleFilter: Sendable {
+    public var presentationFilter: ArticlePresentationFilter = .all
     public var readFilter: ArticleReadFilter = .all
+    public var readingListOnly = false
     public var minScore: Int?
     public var maxScore: Int?
+    public var publishedAfter: Date?
     public var feedId: String?
     public var tagIds: [String] = []
     public var searchText: String?
@@ -26,7 +35,9 @@ public struct ArticleFilter: Sendable {
 
 public protocol ArticleRepositoryProtocol: Sendable {
     func list(filter: ArticleFilter, sort: ArticleSort, limit: Int, offset: Int) async -> [Article]
+    func listVisibleArticles(filter: ArticleFilter, sort: ArticleSort, limit: Int, offset: Int) async -> [Article]
     func count(filter: ArticleFilter) async -> Int
+    func countVisibleArticles(filter: ArticleFilter) async -> Int
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
@@ -35,6 +46,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func insert(_ article: Article) async throws
     func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
+    func setReadingList(id: String, isSaved: Bool) async throws
     func react(id: String, value: Int?, reasonCodes: [String]?) async throws
     func addTag(articleId: String, tag: Tag) async throws
     func removeTag(articleId: String, tagId: String) async throws
@@ -51,6 +63,12 @@ public protocol ArticleRepositoryProtocol: Sendable {
     ) async throws
     func updateFetchedContent(id: String, contentHtml: String, excerpt: String?) async throws
     func recordContentFetchAttempt(id: String) async throws
+    func setPreparationState(
+        id: String,
+        content: ArticlePreparationStageStatus?,
+        image: ArticlePreparationStageStatus?,
+        enrichment: ArticlePreparationStageStatus?
+    ) async throws
     func deleteOlderThan(date: Date) async throws -> Int
 }
 
@@ -93,14 +111,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         limit: Int,
         offset: Int
     ) async -> [Article] {
-        var descriptor = FetchDescriptor<Article>(
-            sortBy: sortDescriptors(for: sort)
-        )
-        descriptor.fetchLimit = limit
-        descriptor.fetchOffset = offset
+        var descriptor = FetchDescriptor<Article>(sortBy: sortDescriptors(for: sort))
 
-        // SwiftData #Predicate is limited — we apply simple predicates at the
-        // query level and do in-memory filtering for complex conditions.
         if let feedId = filter.feedId {
             descriptor.predicate = #Predicate<Article> { article in
                 article.feed?.id == feedId
@@ -122,7 +134,20 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             }
         }
 
-        return articles
+        let start = min(offset, articles.count)
+        let end = min(start + limit, articles.count)
+        return Array(articles[start..<end])
+    }
+
+    public func listVisibleArticles(
+        filter: ArticleFilter,
+        sort: ArticleSort,
+        limit: Int,
+        offset: Int
+    ) async -> [Article] {
+        var visibleFilter = filter
+        visibleFilter.presentationFilter = .readyOnly
+        return await list(filter: visibleFilter, sort: sort, limit: limit, offset: offset)
     }
 
     public func count(filter: ArticleFilter) async -> Int {
@@ -130,6 +155,12 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let descriptor = FetchDescriptor<Article>()
         let all = (try? modelContext.fetch(descriptor)) ?? []
         return applyInMemoryFilters(all, filter: filter).count
+    }
+
+    public func countVisibleArticles(filter: ArticleFilter) async -> Int {
+        var visibleFilter = filter
+        visibleFilter.presentationFilter = .readyOnly
+        return await count(filter: visibleFilter)
     }
 
     public func get(id: String) async -> Article? {
@@ -209,6 +240,15 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func insert(_ article: Article) async throws {
+        if article.contentPreparationStatusRaw == nil {
+            article.contentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        }
+        if article.imagePreparationStatusRaw == nil {
+            article.imagePreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        }
+        if article.enrichmentPreparationStatusRaw == nil {
+            article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        }
         modelContext.insert(article)
         try modelContext.save()
     }
@@ -229,6 +269,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         newArticle.imageUrl = article.imageUrl
         newArticle.contentHash = article.contentHash
         newArticle.feed = feed
+        newArticle.contentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        newArticle.imagePreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        newArticle.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        newArticle.presentationReadyAt = nil
 
         modelContext.insert(newArticle)
         try modelContext.save()
@@ -240,6 +284,16 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             article.markRead()
         } else {
             article.markUnread()
+        }
+        try modelContext.save()
+    }
+
+    public func setReadingList(id: String, isSaved: Bool) async throws {
+        guard let article = await get(id: id) else { return }
+        if isSaved {
+            article.addToReadingList()
+        } else {
+            article.removeFromReadingList()
         }
         try modelContext.save()
     }
@@ -289,6 +343,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         if let summaryProvider { article.summaryProvider = summaryProvider }
         if let summaryModel { article.summaryModel = summaryModel }
         article.aiProcessedAt = Date()
+        article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
     }
 
@@ -305,6 +361,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let now = Date()
         article.contentFetchAttemptedAt = now
         article.contentFetchedAt = now
+        article.contentPreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
 
         // Recompute downstream outputs from the fuller article body.
         article.summaryText = nil
@@ -313,6 +370,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.summaryModel = nil
         article.keyPointsJson = nil
         article.aiProcessedAt = nil
+        article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
 
         article.score = nil
         article.scoreLabel = nil
@@ -331,6 +389,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         article.personalizationVersion = 0
 
+        applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
     }
 
@@ -353,6 +412,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.fallbackImageProvider = provider
         article.fallbackImageTheme = themeKey
         article.fallbackImageGeneratedAt = Date()
+        article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
     }
 
@@ -392,6 +453,30 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func updateOGImageUrl(id: String, ogImageUrl: String) async throws {
         guard let article = await get(id: id) else { return }
         article.ogImageUrl = ogImageUrl
+        article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        applyPresentationReadyIfNeeded(to: article)
+        try modelContext.save()
+    }
+
+    public func setPreparationState(
+        id: String,
+        content: ArticlePreparationStageStatus? = nil,
+        image: ArticlePreparationStageStatus? = nil,
+        enrichment: ArticlePreparationStageStatus? = nil
+    ) async throws {
+        guard let article = await get(id: id) else { return }
+
+        if let content {
+            article.contentPreparationStatusRaw = content.rawValue
+        }
+        if let image {
+            article.imagePreparationStatusRaw = image.rawValue
+        }
+        if let enrichment {
+            article.enrichmentPreparationStatusRaw = enrichment.rawValue
+        }
+
+        applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
     }
 
@@ -450,10 +535,23 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     private func applyInMemoryFilters(_ articles: [Article], filter: ArticleFilter) -> [Article] {
         var result = articles
 
+        switch filter.presentationFilter {
+        case .all:
+            break
+        case .readyOnly:
+            result = result.filter(\.isPresentationReady)
+        case .pendingOnly:
+            result = result.filter(\.isPreparationPending)
+        }
+
         switch filter.readFilter {
         case .all: break
         case .read: result = result.filter { $0.isRead }
         case .unread: result = result.filter(\.isUnreadQueueCandidate)
+        }
+
+        if filter.readingListOnly {
+            result = result.filter(\.isInReadingList)
         }
 
         if let min = filter.minScore {
@@ -461,6 +559,12 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         }
         if let max = filter.maxScore {
             result = result.filter { ($0.score ?? 0) <= max }
+        }
+
+        if let publishedAfter = filter.publishedAfter {
+            result = result.filter {
+                ($0.publishedAt ?? $0.fetchedAt) >= publishedAfter
+            }
         }
 
         if !filter.tagIds.isEmpty {
@@ -474,11 +578,22 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             result = result.filter { article in
                 article.title?.localizedCaseInsensitiveContains(search) == true ||
                 article.excerpt?.localizedCaseInsensitiveContains(search) == true ||
+                article.cardSummaryText?.localizedCaseInsensitiveContains(search) == true ||
                 article.summaryText?.localizedCaseInsensitiveContains(search) == true ||
                 article.author?.localizedCaseInsensitiveContains(search) == true
             }
         }
 
         return result
+    }
+
+    private func applyPresentationReadyIfNeeded(to article: Article) {
+        guard article.presentationReadyAt == nil else {
+            return
+        }
+
+        if article.hasAttemptedPresentationPreparation {
+            article.presentationReadyAt = Date()
+        }
     }
 }
