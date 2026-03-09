@@ -50,10 +50,14 @@ final class FeedListViewModel {
         let result = await poller.pollAllFeeds(bypassBackoff: true)
 
         let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
+        let fetchedContent = await fetchMissingArticleContent()
 
         let processed = await processStandalonePersonalization()
 
         lastPollMessage = formatPollResult(result, deleted: deleted)
+        if fetchedContent > 0 {
+            lastPollMessage = (lastPollMessage ?? "") + " · \(fetchedContent) full-text"
+        }
         if processed > 0 {
             lastPollMessage = (lastPollMessage ?? "") + " · \(processed) scored"
         }
@@ -85,6 +89,12 @@ final class FeedListViewModel {
         if enriched > 0 {
             lastPollMessage = (lastPollMessage ?? "") + " · \(enriched) AI-enriched"
         }
+    }
+
+    private func fetchMissingArticleContent() async -> Int {
+        let fetcher = ArticleContentFetcher(modelContainer: modelContainer)
+        let results = await fetcher.fetchMissingContentBatch(limit: 5, recentOnly: true)
+        return results.filter { $0.status == .fetched }.count
     }
 
     private func processStandalonePersonalization() async -> Int {

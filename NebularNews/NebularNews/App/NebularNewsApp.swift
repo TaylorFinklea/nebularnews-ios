@@ -75,6 +75,15 @@ struct NebularNewsApp: App {
     }
 
     private func runAutomaticAIBackfill(limit: Int) async {
+        let contentFetcher = ArticleContentFetcher(modelContainer: modelContainer)
+        _ = await contentFetcher.fetchMissingContentBatch(limit: limit, recentOnly: true)
+
+        let personalization = LocalStandalonePersonalizationService(
+            modelContainer: modelContainer,
+            keychainService: appState.configuration.keychainService
+        )
+        _ = await personalization.processPendingArticles(limit: limit * 4)
+
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let settings = await settingsRepo.get()
         let enricher = AIEnrichmentService(

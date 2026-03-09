@@ -13,6 +13,7 @@ struct ArticleDetailView: View {
     @Query private var articles: [Article]
     @Query private var tagSuggestions: [ArticleTagSuggestion]
     @State private var isEnriching = false
+    @State private var isFetchingFullText = false
     @State private var showTagPicker = false
     @State private var showReactionSheet = false
     @State private var scrollOffset: CGFloat = 0
@@ -51,7 +52,7 @@ struct ArticleDetailView: View {
                         if shouldSave { try? modelContext.save() }
                     }
                     .task(id: article.id) {
-                        await ensureAutomaticEnrichment(for: article)
+                        await prepareArticleForReading(articleId: article.id)
                     }
             } else {
                 ContentUnavailableView(
@@ -277,9 +278,18 @@ struct ArticleDetailView: View {
     private func contentSection(_ article: Article) -> some View {
         GlassCard(cornerRadius: 22, style: .standard, tintColor: palette.primary) {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Article text", systemImage: "doc.text")
-                    .font(.caption.bold())
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    Label("Article text", systemImage: "doc.text")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+
+                    if isFetchingFullText {
+                        Spacer()
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.secondary)
+                    }
+                }
                 articleContent(article)
             }
         }
@@ -288,21 +298,45 @@ struct ArticleDetailView: View {
     @ViewBuilder
     private func articleContent(_ article: Article) -> some View {
         if let html = article.contentHtml, !html.isEmpty {
-            HTMLTextView(html: html)
+            VStack(alignment: .leading, spacing: 12) {
+                if isFetchingFullText && article.contentFetchedAt == nil {
+                    Text("Pulling the full article text now.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                HTMLTextView(html: html)
+            }
         } else if let excerpt = article.excerpt, !excerpt.isEmpty {
-            Text(excerpt)
-                .font(.body)
-                .lineSpacing(4)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 12) {
+                if isFetchingFullText {
+                    Text("Pulling the full article text now.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(excerpt)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .textSelection(.enabled)
+            }
         } else {
             VStack(spacing: 12) {
-                Image(systemName: "doc.text.magnifyingglass")
-                    .font(.largeTitle)
-                    .foregroundStyle(.tertiary)
-                Text("No content available. Open in browser to read the full article.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                if isFetchingFullText {
+                    ProgressView()
+                        .controlSize(.regular)
+                    Text("Fetching the full article text.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                    Text("No content available. Open in browser to read the full article.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 28)
@@ -438,7 +472,7 @@ struct ArticleDetailView: View {
             }
 
             Button {
-                Task { await enrichArticle(article, target: .automatic) }
+                Task { await enrichArticle(articleId: article.id, target: .automatic) }
             } label: {
                 Label(isEnriching ? "Summarizing…" : "Summarize", systemImage: "text.alignleft")
             }
@@ -446,7 +480,7 @@ struct ArticleDetailView: View {
 
             if appState.hasAnthropicKey {
                 Button {
-                    Task { await enrichArticle(article, target: .anthropic) }
+                    Task { await enrichArticle(articleId: article.id, target: .anthropic) }
                 } label: {
                     Label(
                         isEnriching ? "Regenerating…" : "Regenerate with Anthropic",
@@ -458,7 +492,7 @@ struct ArticleDetailView: View {
 
             if appState.hasOpenAIKey {
                 Button {
-                    Task { await enrichArticle(article, target: .openAI) }
+                    Task { await enrichArticle(articleId: article.id, target: .openAI) }
                 } label: {
                     Label(
                         isEnriching ? "Regenerating…" : "Regenerate with OpenAI",
@@ -578,52 +612,66 @@ struct ArticleDetailView: View {
     }
 
     private func shouldShowSummaryPlaceholder(for article: Article) -> Bool {
-        hasSummarizableContent(article) && ((article.summaryText?.isEmpty ?? true) || isEnriching)
+        !article.bestAvailableContentText.isEmpty && ((article.summaryText?.isEmpty ?? true) || isEnriching)
     }
 
     private func shouldShowKeyPointsPlaceholder(for article: Article) -> Bool {
-        hasSummarizableContent(article) && (article.keyPoints.isEmpty || isEnriching)
+        !article.bestAvailableContentText.isEmpty && (article.keyPoints.isEmpty || isEnriching)
     }
 
     private func needsAutomaticEnrichment(for article: Article) -> Bool {
-        hasSummarizableContent(article) && ((article.summaryText?.isEmpty ?? true) || article.keyPoints.isEmpty)
+        !article.bestAvailableContentText.isEmpty &&
+        ((article.summaryText?.isEmpty ?? true) || article.keyPoints.isEmpty)
     }
 
-    private func hasSummarizableContent(_ article: Article) -> Bool {
-        let html = article.contentHtml ?? article.excerpt ?? ""
-        return !html.strippedHTML.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    private func prepareArticleForReading(articleId: String) async {
+        let contentResult = await fetchFullTextIfNeeded(articleId: articleId)
+        if contentResult.status == .fetched {
+            let personalization = LocalStandalonePersonalizationService(
+                modelContainer: modelContext.container,
+                keychainService: appState.configuration.keychainService
+            )
+            try? await personalization.retagAndScoreArticle(articleID: articleId)
+        }
 
-    private func snapshotForEnrichment(_ article: Article) -> ArticleSnapshot? {
-        let html = article.contentHtml ?? article.excerpt ?? ""
-        let text = html.strippedHTML.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return nil }
-
-        return ArticleSnapshot(
-            id: article.id,
-            title: article.title,
-            contentText: text,
-            canonicalUrl: article.canonicalUrl,
-            feedTitle: article.feed?.title
-        )
-    }
-
-    private func ensureAutomaticEnrichment(for article: Article) async {
-        guard needsAutomaticEnrichment(for: article),
-              !isEnriching
+        let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+        guard let refreshed = await articleRepo.get(id: articleId),
+              needsAutomaticEnrichment(for: refreshed)
         else {
             return
         }
 
-        await enrichArticle(article, target: .automatic)
+        await enrichArticle(articleId: articleId, target: .automatic)
+    }
+
+    private func fetchFullTextIfNeeded(articleId: String) async -> ArticleContentFetchResult {
+        guard !isFetchingFullText else {
+            return ArticleContentFetchResult(articleId: articleId, status: .skipped)
+        }
+
+        let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+        guard await articleRepo.contentFetchCandidate(id: articleId) != nil else {
+            return ArticleContentFetchResult(articleId: articleId, status: .skipped)
+        }
+
+        isFetchingFullText = true
+        defer { isFetchingFullText = false }
+
+        let fetcher = ArticleContentFetcher(modelContainer: modelContext.container)
+        return await fetcher.fetchMissingContent(articleId: articleId)
     }
 
     // MARK: - AI Enrichment
 
-    private func enrichArticle(_ article: Article, target: AIExplicitGenerationTarget) async {
-        guard !isEnriching,
-              let snapshot = snapshotForEnrichment(article)
-        else {
+    private func enrichArticle(articleId: String, target: AIExplicitGenerationTarget) async {
+        guard !isEnriching else {
+            return
+        }
+
+        _ = await fetchFullTextIfNeeded(articleId: articleId)
+
+        let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+        guard let snapshot = await articleRepo.enrichmentSnapshot(id: articleId) else {
             return
         }
 

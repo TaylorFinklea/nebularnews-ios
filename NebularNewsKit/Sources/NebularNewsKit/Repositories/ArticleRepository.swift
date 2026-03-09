@@ -29,6 +29,9 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func count(filter: ArticleFilter) async -> Int
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
+    func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
+    func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate?
+    func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
     func insert(_ article: Article) async throws
     func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
@@ -45,6 +48,8 @@ public protocol ArticleRepositoryProtocol: Sendable {
         summaryProvider: String?,
         summaryModel: String?
     ) async throws
+    func updateFetchedContent(id: String, contentHtml: String, excerpt: String?) async throws
+    func recordContentFetchAttempt(id: String) async throws
     func deleteOlderThan(date: Date) async throws -> Int
 }
 
@@ -112,6 +117,47 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         )
         descriptor.fetchLimit = 1
         return try? modelContext.fetch(descriptor).first
+    }
+
+    public func enrichmentSnapshot(id: String) async -> ArticleSnapshot? {
+        guard let article = await get(id: id) else { return nil }
+        let text = article.bestAvailableContentText
+        guard !text.isEmpty else { return nil }
+
+        return ArticleSnapshot(
+            id: article.id,
+            title: article.title,
+            contentText: text,
+            canonicalUrl: article.canonicalUrl,
+            feedTitle: article.feed?.title
+        )
+    }
+
+    public func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate? {
+        guard let article = await get(id: id) else { return nil }
+        return articleContentFetchCandidate(from: article)
+    }
+
+    public func listContentFetchCandidates(limit: Int = 10, recentOnly: Bool = true) async -> [ArticleContentFetchCandidate] {
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.publishedAt, order: .reverse), SortDescriptor(\.fetchedAt, order: .reverse)]
+        )
+
+        guard let articles = try? modelContext.fetch(descriptor) else {
+            return []
+        }
+
+        let recentCutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
+
+        return articles
+            .filter { article in
+                !recentOnly || article.retentionReferenceDate >= recentCutoff
+            }
+            .compactMap { article in
+                articleContentFetchCandidate(from: article)
+            }
+            .prefix(limit)
+            .map { $0 }
     }
 
     public func insert(_ article: Article) async throws {
@@ -196,6 +242,53 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         try modelContext.save()
     }
 
+    public func updateFetchedContent(id: String, contentHtml: String, excerpt: String?) async throws {
+        guard let article = await get(id: id) else { return }
+
+        article.contentHtml = contentHtml
+        if (article.excerpt?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+           let excerpt,
+           !excerpt.isEmpty {
+            article.excerpt = excerpt
+        }
+
+        let now = Date()
+        article.contentFetchAttemptedAt = now
+        article.contentFetchedAt = now
+
+        // Recompute downstream outputs from the fuller article body.
+        article.summaryText = nil
+        article.summaryProvider = nil
+        article.summaryModel = nil
+        article.keyPointsJson = nil
+        article.aiProcessedAt = nil
+
+        article.score = nil
+        article.scoreLabel = nil
+        article.scoreConfidence = nil
+        article.scorePreferenceConfidence = nil
+        article.scoreWeightedAverage = nil
+        article.scoreExplanation = nil
+        article.scoreStatus = nil
+        article.signalScoresJson = nil
+
+        article.scoreAssistExplanation = nil
+        article.scoreAssistProvider = nil
+        article.scoreAssistModel = nil
+        article.scoreAssistAdjustment = nil
+        article.scoreAssistGeneratedAt = nil
+
+        article.personalizationVersion = 0
+
+        try modelContext.save()
+    }
+
+    public func recordContentFetchAttempt(id: String) async throws {
+        guard let article = await get(id: id) else { return }
+        article.contentFetchAttemptedAt = Date()
+        try modelContext.save()
+    }
+
     /// Returns snapshots of articles that haven't been AI-processed yet and have content.
     ///
     /// Used by `AIEnrichmentService` to find articles needing scoring/summarization.
@@ -210,9 +303,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         guard let articles = try? modelContext.fetch(descriptor) else { return [] }
 
         return articles.compactMap { article in
-            // Need content to send to the LLM
-            let html = article.contentHtml ?? article.excerpt ?? ""
-            let text = html.strippedHTML
+            let text = article.bestAvailableContentText
             guard !text.isEmpty else { return nil }
 
             return ArticleSnapshot(
@@ -263,6 +354,24 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         case .unreadFirst:
             return [SortDescriptor(\.publishedAt, order: .reverse)]
         }
+    }
+
+    private func articleContentFetchCandidate(from article: Article) -> ArticleContentFetchCandidate? {
+        guard article.needsContentFetch() else {
+            return nil
+        }
+
+        guard let canonicalUrl = article.canonicalUrl else {
+            return nil
+        }
+
+        return ArticleContentFetchCandidate(
+            id: article.id,
+            canonicalUrl: canonicalUrl,
+            title: article.title,
+            currentTextLength: article.bestAvailableContentLength,
+            sortDate: article.publishedAt ?? article.fetchedAt
+        )
     }
 
     private func applyInMemoryFilters(_ articles: [Article], filter: ArticleFilter) -> [Article] {

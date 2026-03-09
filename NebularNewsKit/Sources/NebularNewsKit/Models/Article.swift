@@ -21,6 +21,8 @@ public final class Article: @unchecked Sendable {
     public var imageUrl: String?
     public var ogImageUrl: String?
     public var contentHash: String?
+    public var contentFetchAttemptedAt: Date?
+    public var contentFetchedAt: Date?
 
     // AI-generated enrichments
     public var summaryText: String?
@@ -129,6 +131,16 @@ public final class Article: @unchecked Sendable {
         publishedAt ?? fetchedAt
     }
 
+    public var bestAvailableContentText: String {
+        (contentHtml ?? excerpt ?? "")
+            .strippedHTML
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var bestAvailableContentLength: Int {
+        bestAvailableContentText.count
+    }
+
     /// Human-readable score label, falling back to a default.
     public var displayScoreLabel: String {
         if let scoreLabel, !scoreLabel.isEmpty {
@@ -182,5 +194,31 @@ public final class Article: @unchecked Sendable {
         } else {
             addToReadingList(at: date)
         }
+    }
+
+    public func needsContentFetch(
+        minimumTextLength: Int = 1_200,
+        retryAfter: TimeInterval = 3 * 86_400,
+        now: Date = Date()
+    ) -> Bool {
+        guard let canonicalUrl,
+              URL(string: canonicalUrl) != nil
+        else {
+            return false
+        }
+
+        if contentFetchedAt != nil {
+            return false
+        }
+
+        if bestAvailableContentLength >= minimumTextLength {
+            return false
+        }
+
+        guard let attemptedAt = contentFetchAttemptedAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(attemptedAt) >= retryAfter
     }
 }

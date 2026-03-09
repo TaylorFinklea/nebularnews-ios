@@ -45,6 +45,7 @@ enum BackgroundTaskManager {
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+        let contentFetcher = ArticleContentFetcher(modelContainer: modelContainer)
         let personalization = LocalStandalonePersonalizationService(
             modelContainer: modelContainer,
             keychainService: AppConfiguration.shared.keychainService
@@ -56,6 +57,7 @@ enum BackgroundTaskManager {
             let retentionDays = await settingsRepo.retentionDays()
             _ = await poller.pollAllFeeds(bypassBackoff: false)
             _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
+            _ = await contentFetcher.fetchMissingContentBatch(limit: 3, recentOnly: true)
             _ = await personalization.processPendingArticles(limit: 50)
 
             guard !Task.isCancelled else { return }
