@@ -11,6 +11,7 @@ struct FeedSwipeContainer<Content: View>: View {
     private let cornerRadius: CGFloat
     private let leadingAction: FeedSwipeActionDescriptor
     private let trailingAction: FeedSwipeActionDescriptor
+    private let isScrollInteractionActive: Bool
     private let onTap: (() -> Void)?
     private let content: Content
 
@@ -26,12 +27,14 @@ struct FeedSwipeContainer<Content: View>: View {
         cornerRadius: CGFloat,
         leadingAction: FeedSwipeActionDescriptor,
         trailingAction: FeedSwipeActionDescriptor,
+        isScrollInteractionActive: Bool = false,
         onTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.cornerRadius = cornerRadius
         self.leadingAction = leadingAction
         self.trailingAction = trailingAction
+        self.isScrollInteractionActive = isScrollInteractionActive
         self.onTap = onTap
         self.content = content()
     }
@@ -53,7 +56,7 @@ struct FeedSwipeContainer<Content: View>: View {
         .simultaneousGesture(tapGesture)
         .accessibilityAddTraits(onTap == nil ? [] : .isButton)
         .accessibilityAction(named: Text("Open Article")) {
-            guard onTap != nil, !suppressTap, dragOffset == 0 else { return }
+            guard onTap != nil, !suppressTap, !isScrollInteractionActive, dragOffset == 0 else { return }
             onTap?()
         }
         .accessibilityAction(named: Text(leadingAction.title)) {
@@ -73,7 +76,7 @@ struct FeedSwipeContainer<Content: View>: View {
     private var tapGesture: some Gesture {
         TapGesture()
             .onEnded {
-                guard onTap != nil, !suppressTap, dragOffset == 0 else { return }
+                guard onTap != nil, !suppressTap, !isScrollInteractionActive, dragOffset == 0 else { return }
                 onTap?()
             }
     }

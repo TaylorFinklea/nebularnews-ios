@@ -8,6 +8,7 @@ import NebularNewsKit
 /// through card height rather than column count.
 struct MagazineGrid: View {
     let articles: [Article]
+    let isScrollInteractionActive: Bool
     let onOpenArticle: ((Article) -> Void)?
     let onToggleRead: ((Article) -> Void)?
     let onReact: ((Article) -> Void)?
@@ -15,12 +16,14 @@ struct MagazineGrid: View {
 
     init(
         articles: [Article],
+        isScrollInteractionActive: Bool = false,
         onOpenArticle: ((Article) -> Void)? = nil,
         onToggleRead: ((Article) -> Void)? = nil,
         onReact: ((Article) -> Void)? = nil,
         onArticleVisible: ((Article) -> Void)? = nil
     ) {
         self.articles = articles
+        self.isScrollInteractionActive = isScrollInteractionActive
         self.onOpenArticle = onOpenArticle
         self.onToggleRead = onToggleRead
         self.onReact = onReact
@@ -131,6 +134,7 @@ struct MagazineGrid: View {
                 cornerRadius: cornerRadius,
                 leadingAction: readAction(for: article),
                 trailingAction: reactionAction(for: article),
+                isScrollInteractionActive: isScrollInteractionActive,
                 onTap: {
                     onOpenArticle(article)
                 }

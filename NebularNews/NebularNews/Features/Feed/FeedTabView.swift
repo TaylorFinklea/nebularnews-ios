@@ -15,6 +15,7 @@ struct FeedTabView: View {
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
     @State private var reactionSheetArticleID: String?
+    @State private var isScrollInteractionActive = false
     @State private var viewModel = FeedBrowseViewModel()
 
     var body: some View {
@@ -35,6 +36,7 @@ struct FeedTabView: View {
                         } else {
                             MagazineGrid(
                                 articles: viewModel.articles,
+                                isScrollInteractionActive: isScrollInteractionActive,
                                 onOpenArticle: openArticle,
                                 onToggleRead: handleReadToggle,
                                 onReact: presentReactionSheet,
@@ -51,6 +53,7 @@ struct FeedTabView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentMargins(.horizontal, 16, for: .scrollContent)
+                .simultaneousGesture(scrollMonitorGesture)
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
@@ -132,6 +135,26 @@ struct FeedTabView: View {
 
     private func liveArticle(for articleID: String) -> Article? {
         viewModel.articles.first(where: { $0.id == articleID })
+    }
+
+    private var scrollMonitorGesture: some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .local)
+            .onChanged { value in
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                if !isScrollInteractionActive {
+                    isScrollInteractionActive = true
+                }
+            }
+            .onEnded { _ in
+                releaseScrollInteraction()
+            }
+    }
+
+    private func releaseScrollInteraction() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            isScrollInteractionActive = false
+        }
     }
 }
 
