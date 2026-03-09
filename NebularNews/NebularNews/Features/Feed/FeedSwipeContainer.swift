@@ -20,6 +20,7 @@ struct FeedSwipeContainer<Content: View>: View {
 
     private let maxReveal: CGFloat = 108
     private let triggerThreshold: CGFloat = 72
+    private let tapSuppressionThreshold: CGFloat = 6
 
     init(
         cornerRadius: CGFloat,
@@ -62,7 +63,7 @@ struct FeedSwipeContainer<Content: View>: View {
     private var tappableContent: some View {
         if let onTap {
             Button {
-                guard !suppressTap else { return }
+                guard !suppressTap, dragOffset == 0 else { return }
                 onTap()
             } label: {
                 content
@@ -74,21 +75,26 @@ struct FeedSwipeContainer<Content: View>: View {
     }
 
     private var dragGesture: some Gesture {
-        DragGesture(minimumDistance: 14, coordinateSpace: .local)
+        DragGesture(minimumDistance: tapSuppressionThreshold, coordinateSpace: .local)
             .onChanged { value in
+                if shouldSuppressTap(for: value.translation) {
+                    suppressTap = true
+                }
+
                 guard shouldTrackSwipe(for: value.translation) else { return }
 
                 isHorizontalSwipe = true
-                suppressTap = true
                 dragOffset = min(max(value.translation.width, -maxReveal), maxReveal)
             }
             .onEnded { value in
-                defer {
-                    isHorizontalSwipe = false
-                }
+                let endedHorizontalSwipe = isHorizontalSwipe
+                defer { isHorizontalSwipe = false }
 
-                guard isHorizontalSwipe else {
+                guard endedHorizontalSwipe else {
                     resetDrag()
+                    if suppressTap {
+                        releaseTapSuppression()
+                    }
                     return
                 }
 
@@ -116,6 +122,10 @@ struct FeedSwipeContainer<Content: View>: View {
         }
 
         return abs(translation.width) > abs(translation.height)
+    }
+
+    private func shouldSuppressTap(for translation: CGSize) -> Bool {
+        max(abs(translation.width), abs(translation.height)) >= tapSuppressionThreshold
     }
 
     private func actionBackground(
