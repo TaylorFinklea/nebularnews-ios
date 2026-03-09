@@ -33,6 +33,9 @@ public final class AppSettings: @unchecked Sendable {
     // Data retention
     public var retentionDays: Int = 90
 
+    // Personalization migrations
+    public var personalizationRebuildVersion: Int = 0
+
     // User interest profile (used for AI scoring)
     public var userProfilePrompt: String?
 

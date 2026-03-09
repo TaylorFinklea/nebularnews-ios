@@ -68,6 +68,7 @@ public final class Article: @unchecked Sendable {
     public var dismissedAt: Date?
     public var readingListAddedAt: Date?
     public var reactionValue: Int?
+    public var reactionUpdatedAt: Date?
     public var reactionReasonCodes: String?
     public var feedbackRating: Int?
     public var systemTagIdsJson: String?
@@ -256,6 +257,16 @@ public final class Article: @unchecked Sendable {
         } else {
             addToReadingList(at: date)
         }
+    }
+
+    public func setReaction(
+        value: Int?,
+        reasonCodes: [String]? = nil,
+        at date: Date = Date()
+    ) {
+        reactionValue = value
+        reactionReasonCodes = reasonCodes?.isEmpty == false ? reasonCodes?.joined(separator: ",") : nil
+        reactionUpdatedAt = value == nil ? nil : date
     }
 
     public func needsContentFetch(

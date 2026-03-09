@@ -300,8 +300,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func react(id: String, value: Int?, reasonCodes: [String]?) async throws {
         guard let article = await get(id: id) else { return }
-        article.reactionValue = value
-        article.reactionReasonCodes = reasonCodes?.joined(separator: ",")
+        article.setReaction(value: value, reasonCodes: reasonCodes)
         try modelContext.save()
     }
 

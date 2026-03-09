@@ -29,4 +29,15 @@ public actor LocalSettingsRepository {
     public func retentionDays() async -> Int {
         max(await getOrCreate().retentionDays, 1)
     }
+
+    public func personalizationRebuildVersion() async -> Int {
+        await getOrCreate().personalizationRebuildVersion
+    }
+
+    public func setPersonalizationRebuildVersion(_ version: Int) async {
+        let settings = await getOrCreate()
+        settings.personalizationRebuildVersion = version
+        settings.updatedAt = Date()
+        try? modelContext.save()
+    }
 }

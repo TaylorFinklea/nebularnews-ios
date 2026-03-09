@@ -45,6 +45,19 @@ fileprivate struct StoredArticlePersonalizationSnapshot: Sendable {
     let preferenceConfidence: Double?
 }
 
+fileprivate enum HistoricalLearningEventKind: Sendable {
+    case reaction
+    case dismiss
+}
+
+fileprivate struct HistoricalLearningEvent: Sendable {
+    let articleID: String
+    let kind: HistoricalLearningEventKind
+    let timestamp: Date
+    let reactionValue: Int?
+    let reasonCodes: [ArticleReactionReasonCode]
+}
+
 public struct PersonalizationDebugSnapshot: Sendable, Hashable {
     public let articleID: String
     public let personalizationVersion: Int
@@ -62,6 +75,26 @@ public struct PersonalizationDebugSnapshot: Sendable, Hashable {
 }
 
 #if DEBUG
+public struct PersonalizationScoreHistogramEntry: Sendable, Hashable {
+    public let score: Int
+    public let count: Int
+}
+
+public struct PersonalizationAuditSnapshot: Sendable, Hashable {
+    public let totalReadyScores: Int
+    public let readyScoreHistogram: [PersonalizationScoreHistogramEntry]
+    public let recentReadyScores: Int
+    public let recentReadyScoreHistogram: [PersonalizationScoreHistogramEntry]
+    public let reactedArticles: Int
+    public let dismissedArticles: Int
+    public let feedAffinityRows: Int
+    public let topicAffinityRows: Int
+    public let authorAffinityRows: Int
+    public let signalWeightRows: Int
+    public let overTaggedArticles: Int
+    public let missingFeedKeys: Int
+}
+
 public struct TargetFeedCoverageSnapshot: Sendable, Hashable {
     public let familyName: String
     public let total: Int
@@ -210,7 +243,138 @@ actor LocalPersonalizationRepository {
             )
         }
     }
+
+    func auditSnapshot() async -> PersonalizationAuditSnapshot {
+        let descriptor = FetchDescriptor<Article>()
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+        let recentCutoff = Date().addingTimeInterval(-604_800)
+
+        let readyArticles = articles.filter { $0.scoreStatusValue == .ready && $0.score != nil }
+        let recentReadyArticles = readyArticles.filter { $0.fetchedAt >= recentCutoff }
+
+        func histogramEntries(for items: [Article]) -> [PersonalizationScoreHistogramEntry] {
+            Dictionary(grouping: items.compactMap(\.score), by: { $0 })
+                .map { PersonalizationScoreHistogramEntry(score: $0.key, count: $0.value.count) }
+                .sorted { $0.score < $1.score }
+        }
+
+        let feedAffinityRows = ((try? modelContext.fetch(FetchDescriptor<FeedAffinity>())) ?? []).count
+        let topicAffinityRows = ((try? modelContext.fetch(FetchDescriptor<TopicAffinity>())) ?? []).count
+        let authorAffinityRows = ((try? modelContext.fetch(FetchDescriptor<AuthorAffinity>())) ?? []).count
+        let signalWeightRows = ((try? modelContext.fetch(FetchDescriptor<SignalWeight>())) ?? []).count
+
+        let missingFeedKeys = articles.reduce(into: 0) { count, article in
+            if article.feed != nil && normalizedFeedKey(from: article.feed?.feedUrl) == nil {
+                count += 1
+            }
+        }
+
+        return PersonalizationAuditSnapshot(
+            totalReadyScores: readyArticles.count,
+            readyScoreHistogram: histogramEntries(for: readyArticles),
+            recentReadyScores: recentReadyArticles.count,
+            recentReadyScoreHistogram: histogramEntries(for: recentReadyArticles),
+            reactedArticles: articles.count(where: { $0.reactionValue != nil }),
+            dismissedArticles: articles.count(where: \.isDismissed),
+            feedAffinityRows: feedAffinityRows,
+            topicAffinityRows: topicAffinityRows,
+            authorAffinityRows: authorAffinityRows,
+            signalWeightRows: signalWeightRows,
+            overTaggedArticles: articles.count(where: { $0.systemTagIds.count > defaultDeterministicMaxSystemTags }),
+            missingFeedKeys: missingFeedKeys
+        )
+    }
 #endif
+
+    func clearLearnedState() async throws {
+        for row in (try? modelContext.fetch(FetchDescriptor<SignalWeight>())) ?? [] {
+            modelContext.delete(row)
+        }
+        for row in (try? modelContext.fetch(FetchDescriptor<TopicAffinity>())) ?? [] {
+            modelContext.delete(row)
+        }
+        for row in (try? modelContext.fetch(FetchDescriptor<AuthorAffinity>())) ?? [] {
+            modelContext.delete(row)
+        }
+        for row in (try? modelContext.fetch(FetchDescriptor<FeedAffinity>())) ?? [] {
+            modelContext.delete(row)
+        }
+        try modelContext.save()
+        try ensureDefaultSignalWeights()
+    }
+
+    fileprivate func listHistoricalLearningEvents() async -> [HistoricalLearningEvent] {
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.fetchedAt, order: .forward)]
+        )
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+        var events: [HistoricalLearningEvent] = []
+
+        for article in articles {
+            let fallbackTimestamp = article.fetchedAt
+
+            if let reactionValue = article.reactionValue {
+                events.append(
+                    HistoricalLearningEvent(
+                        articleID: article.id,
+                        kind: .reaction,
+                        timestamp: article.reactionUpdatedAt ?? article.dismissedAt ?? article.readAt ?? fallbackTimestamp,
+                        reactionValue: reactionValue,
+                        reasonCodes: article.reactionReasonCodes?
+                            .split(separator: ",")
+                            .map(String.init) ?? []
+                    )
+                )
+            }
+
+            if let dismissedAt = article.dismissedAt {
+                events.append(
+                    HistoricalLearningEvent(
+                        articleID: article.id,
+                        kind: .dismiss,
+                        timestamp: dismissedAt,
+                        reactionValue: nil,
+                        reasonCodes: []
+                    )
+                )
+            }
+        }
+
+        return events.sorted {
+            if $0.timestamp == $1.timestamp {
+                return $0.articleID < $1.articleID
+            }
+            return $0.timestamp < $1.timestamp
+        }
+    }
+
+    func listAllArticleIDs() async -> [String] {
+        let descriptor = FetchDescriptor<Article>(
+            sortBy: [SortDescriptor(\.fetchedAt, order: .reverse)]
+        )
+        return ((try? modelContext.fetch(descriptor)) ?? []).map(\.id)
+    }
+
+    func needsHistoricalRebuild() async -> Bool {
+        let articleDescriptor = FetchDescriptor<Article>()
+        let articles = (try? modelContext.fetch(articleDescriptor)) ?? []
+
+        if articles.contains(where: { article in
+            article.personalizationVersion > 0 && article.personalizationVersion < currentPersonalizationVersion
+        }) {
+            return true
+        }
+
+        let signalWeights = (try? modelContext.fetch(FetchDescriptor<SignalWeight>())) ?? []
+        if signalWeights.contains(where: { $0.sampleCount > 0 }) {
+            return true
+        }
+
+        let topicRows = ((try? modelContext.fetch(FetchDescriptor<TopicAffinity>())) ?? []).count
+        let authorRows = ((try? modelContext.fetch(FetchDescriptor<AuthorAffinity>())) ?? []).count
+        let feedRows = ((try? modelContext.fetch(FetchDescriptor<FeedAffinity>())) ?? []).count
+        return topicRows > 0 || authorRows > 0 || feedRows > 0
+    }
 
     func impactedArticleIDs(for articleID: String, limit: Int) async -> [String] {
         guard let article = try? fetchArticle(articleID) else { return [] }
@@ -678,7 +842,8 @@ actor LocalPersonalizationRepository {
         for signalScore in signalScores {
             let row = try signalWeightRow(for: signalScore.signal)
             let alpha = effectiveAlpha(learningRate: scoringLearningRate, sampleCount: row.sampleCount)
-            let error = direction == 1 ? signalScore.normalizedValue : -signalScore.normalizedValue
+            let centeredValue = signalScore.normalizedValue - 0.5
+            let error = Double(direction) * centeredValue
             let multiplier = useReasonTargeting
                 ? (targetSignals.contains(signalScore.signal) ? targetedReasonSignalMultiplier : backgroundReasonSignalMultiplier)
                 : 1.0
@@ -899,6 +1064,7 @@ public actor LocalStandalonePersonalizationService {
     private let modelContainer: ModelContainer
     private let repository: LocalPersonalizationRepository
     private let generationCoordinator: (any AIGenerationCoordinating)?
+    private var isRebuildingHistoricalState = false
 
     public init(
         modelContainer: ModelContainer,
@@ -918,6 +1084,7 @@ public actor LocalStandalonePersonalizationService {
     @discardableResult
     public func processPendingArticles(limit: Int = 25) async -> Int {
         await bootstrap()
+        _ = await ensureHistoricalRebuildIfNeeded()
         let articleIDs = await repository.listStaleArticleIDs(limit: limit)
         for articleID in articleIDs {
             try? await retagAndScoreArticle(articleID: articleID)
@@ -946,6 +1113,7 @@ public actor LocalStandalonePersonalizationService {
     @discardableResult
     public func reprocessTargetFeedFamilies(batchSize: Int = 200) async -> Int {
         await bootstrap()
+        _ = await ensureHistoricalRebuildIfNeeded(batchSize: batchSize)
         var totalProcessed = 0
 
         while true {
@@ -968,7 +1136,18 @@ public actor LocalStandalonePersonalizationService {
         await bootstrap()
         return await repository.targetFeedCoverageSnapshot()
     }
+
+    public func auditSnapshot() async -> PersonalizationAuditSnapshot {
+        await bootstrap()
+        return await repository.auditSnapshot()
+    }
 #endif
+
+    @discardableResult
+    public func rebuildPersonalizationFromHistory(batchSize: Int = 200, force: Bool = false) async -> Int {
+        await bootstrap()
+        return await ensureHistoricalRebuildIfNeeded(batchSize: batchSize, force: force)
+    }
 
     public func debugSnapshot(articleID: String) async -> PersonalizationDebugSnapshot? {
         await bootstrap()
@@ -996,18 +1175,35 @@ public actor LocalStandalonePersonalizationService {
 
     public func retagAndScoreArticle(articleID: String) async throws {
         await bootstrap()
+        try await retagAndScoreArticle(
+            articleID: articleID,
+            skipTagSuggestions: false,
+            persistScoreAssist: true
+        )
+    }
+
+    private func retagAndScoreArticle(
+        articleID: String,
+        skipTagSuggestions: Bool,
+        persistScoreAssist: Bool
+    ) async throws {
         guard let snapshot = await repository.storedArticleSnapshot(for: articleID) else { return }
 
         let evaluation = await deterministicTagEvaluation(for: snapshot.context)
         try await repository.applySystemTags(articleID: articleID, desiredTagIDs: evaluation.decisions.map(\.tagId))
-        if let refreshedSnapshot = await repository.storedArticleSnapshot(for: articleID) {
+        if !skipTagSuggestions,
+           let refreshedSnapshot = await repository.storedArticleSnapshot(for: articleID) {
             try await refreshTagSuggestionsIfNeeded(snapshot: refreshedSnapshot)
         }
-        try await rescoreArticle(articleID: articleID)
+        try await rescoreArticle(articleID: articleID, persistScoreAssist: persistScoreAssist)
     }
 
     public func rescoreArticle(articleID: String) async throws {
         await bootstrap()
+        try await rescoreArticle(articleID: articleID, persistScoreAssist: true)
+    }
+
+    private func rescoreArticle(articleID: String, persistScoreAssist: Bool) async throws {
         guard let snapshot = await repository.storedArticleSnapshot(for: articleID) else { return }
         let context = snapshot.context
 
@@ -1025,11 +1221,13 @@ public actor LocalStandalonePersonalizationService {
         let weights = await repository.loadSignalWeights()
         let algorithmicScore = computeAlgorithmicScore(signals: signalScores, weights: weights)
         try await repository.persistScore(articleID: articleID, algorithmicScore: algorithmicScore)
-        let scoreAssist = try await generateScoreAssistIfNeeded(
-            context: context,
-            algorithmicScore: algorithmicScore
-        )
-        try await repository.persistScoreAssist(articleID: articleID, output: scoreAssist)
+        if persistScoreAssist {
+            let scoreAssist = try await generateScoreAssistIfNeeded(
+                context: context,
+                algorithmicScore: algorithmicScore
+            )
+            try await repository.persistScoreAssist(articleID: articleID, output: scoreAssist)
+        }
     }
 
     public func processReactionChange(
@@ -1057,6 +1255,80 @@ public actor LocalStandalonePersonalizationService {
             return
         }
 
+        await applyReactionLearning(snapshot: snapshot, finalValue: finalValue, reasonCodes: reasonCodes)
+
+        try? await rescoreArticle(articleID: articleID)
+        await rescoreRelatedArticles(for: articleID)
+    }
+
+    public func processDismissChange(
+        articleID: String,
+        previousDismissedAt: Date?,
+        newDismissedAt: Date?
+    ) async {
+        await bootstrap()
+        guard previousDismissedAt == nil,
+              newDismissedAt != nil
+        else {
+            return
+        }
+
+        guard let snapshot = await refreshSnapshot(articleID: articleID) else {
+            return
+        }
+
+        await applyDismissLearning(snapshot: snapshot)
+
+        try? await rescoreArticle(articleID: articleID)
+        await rescoreSameFeedArticles(for: articleID)
+    }
+
+    public func acceptTagSuggestion(articleID: String, suggestionID: String) async {
+        await bootstrap()
+        guard (try? await repository.acceptTagSuggestion(articleID: articleID, suggestionID: suggestionID)) != nil else {
+            return
+        }
+        try? await rescoreArticle(articleID: articleID)
+    }
+
+    public func dismissTagSuggestion(articleID: String, suggestionID: String) async {
+        await bootstrap()
+        try? await repository.dismissTagSuggestion(articleID: articleID, suggestionID: suggestionID)
+    }
+
+    private func refreshSnapshot(
+        articleID: String,
+        skipTagSuggestions: Bool = false,
+        persistScoreAssist: Bool = true
+    ) async -> StoredArticlePersonalizationSnapshot? {
+        let needsRetagging = await repository.needsRetagging(articleID: articleID)
+        if needsRetagging {
+            try? await retagAndScoreArticle(
+                articleID: articleID,
+                skipTagSuggestions: skipTagSuggestions,
+                persistScoreAssist: persistScoreAssist
+            )
+        }
+
+        guard var snapshot = await repository.storedArticleSnapshot(for: articleID) else {
+            return nil
+        }
+
+        if snapshot.signalScores.isEmpty {
+            try? await rescoreArticle(articleID: articleID, persistScoreAssist: persistScoreAssist)
+            if let refreshedSnapshot = await repository.storedArticleSnapshot(for: articleID) {
+                snapshot = refreshedSnapshot
+            }
+        }
+
+        return snapshot
+    }
+
+    private func applyReactionLearning(
+        snapshot: StoredArticlePersonalizationSnapshot,
+        finalValue: Int,
+        reasonCodes: [ArticleReactionReasonCode]
+    ) async {
         let context = snapshot.context
         let signalScores = snapshot.signalScores
         guard !signalScores.isEmpty else { return }
@@ -1095,27 +1367,10 @@ public actor LocalStandalonePersonalizationService {
                 multiplier: multiplier
             )
         }
-
-        try? await rescoreArticle(articleID: articleID)
-        await rescoreRelatedArticles(for: articleID)
     }
 
-    public func processDismissChange(
-        articleID: String,
-        previousDismissedAt: Date?,
-        newDismissedAt: Date?
-    ) async {
-        await bootstrap()
-        guard previousDismissedAt == nil,
-              newDismissedAt != nil
-        else {
-            return
-        }
-
-        guard let snapshot = await refreshSnapshot(articleID: articleID),
-              let feedKey = snapshot.context.feedKey,
-              !feedKey.isEmpty
-        else {
+    private func applyDismissLearning(snapshot: StoredArticlePersonalizationSnapshot) async {
+        guard let feedKey = snapshot.context.feedKey, !feedKey.isEmpty else {
             return
         }
 
@@ -1124,42 +1379,6 @@ public actor LocalStandalonePersonalizationService {
             direction: -1,
             multiplier: dismissAffinityMultiplier
         )
-
-        try? await rescoreArticle(articleID: articleID)
-        await rescoreSameFeedArticles(for: articleID)
-    }
-
-    public func acceptTagSuggestion(articleID: String, suggestionID: String) async {
-        await bootstrap()
-        guard (try? await repository.acceptTagSuggestion(articleID: articleID, suggestionID: suggestionID)) != nil else {
-            return
-        }
-        try? await rescoreArticle(articleID: articleID)
-    }
-
-    public func dismissTagSuggestion(articleID: String, suggestionID: String) async {
-        await bootstrap()
-        try? await repository.dismissTagSuggestion(articleID: articleID, suggestionID: suggestionID)
-    }
-
-    private func refreshSnapshot(articleID: String) async -> StoredArticlePersonalizationSnapshot? {
-        let needsRetagging = await repository.needsRetagging(articleID: articleID)
-        if needsRetagging {
-            try? await retagAndScoreArticle(articleID: articleID)
-        }
-
-        guard var snapshot = await repository.storedArticleSnapshot(for: articleID) else {
-            return nil
-        }
-
-        if snapshot.signalScores.isEmpty {
-            try? await rescoreArticle(articleID: articleID)
-            if let refreshedSnapshot = await repository.storedArticleSnapshot(for: articleID) {
-                snapshot = refreshedSnapshot
-            }
-        }
-
-        return snapshot
     }
 
     private func rescoreRelatedArticles(for articleID: String) async {
@@ -1184,6 +1403,87 @@ public actor LocalStandalonePersonalizationService {
                 try? await rescoreArticle(articleID: impactedID)
             }
         }
+    }
+
+    private func ensureHistoricalRebuildIfNeeded(
+        batchSize: Int = 200,
+        force: Bool = false
+    ) async -> Int {
+        guard !isRebuildingHistoricalState else { return 0 }
+
+        let settingsRepository = repositorySettingsRepository()
+        let currentVersion = await settingsRepository.personalizationRebuildVersion()
+        guard force || currentVersion < currentPersonalizationVersion else {
+            return 0
+        }
+        let needsRebuild = force ? true : await repository.needsHistoricalRebuild()
+        guard needsRebuild else {
+            await settingsRepository.setPersonalizationRebuildVersion(currentPersonalizationVersion)
+            return 0
+        }
+
+        isRebuildingHistoricalState = true
+        defer { isRebuildingHistoricalState = false }
+
+        let processed = await rebuildHistoricalState(batchSize: batchSize)
+        await settingsRepository.setPersonalizationRebuildVersion(currentPersonalizationVersion)
+        return processed
+    }
+
+    private func rebuildHistoricalState(batchSize: Int) async -> Int {
+        try? await repository.clearLearnedState()
+
+        let articleIDs = await repository.listAllArticleIDs()
+        var processed = 0
+
+        for chunkStart in stride(from: 0, to: articleIDs.count, by: max(1, batchSize)) {
+            let chunk = articleIDs[chunkStart..<min(chunkStart + max(1, batchSize), articleIDs.count)]
+            for articleID in chunk {
+                try? await retagAndScoreArticle(
+                    articleID: articleID,
+                    skipTagSuggestions: true,
+                    persistScoreAssist: false
+                )
+                processed += 1
+            }
+        }
+
+        let events = await repository.listHistoricalLearningEvents()
+        for event in events {
+            guard await refreshSnapshot(
+                articleID: event.articleID,
+                skipTagSuggestions: true,
+                persistScoreAssist: false
+            ) != nil else {
+                continue
+            }
+
+            try? await rescoreArticle(articleID: event.articleID, persistScoreAssist: false)
+            guard let rescoredSnapshot = await repository.storedArticleSnapshot(for: event.articleID) else {
+                continue
+            }
+
+            switch event.kind {
+            case .reaction:
+                guard let finalValue = event.reactionValue else { continue }
+                await applyReactionLearning(
+                    snapshot: rescoredSnapshot,
+                    finalValue: finalValue,
+                    reasonCodes: event.reasonCodes
+                )
+            case .dismiss:
+                await applyDismissLearning(snapshot: rescoredSnapshot)
+            }
+        }
+
+        for chunkStart in stride(from: 0, to: articleIDs.count, by: max(1, batchSize)) {
+            let chunk = articleIDs[chunkStart..<min(chunkStart + max(1, batchSize), articleIDs.count)]
+            for articleID in chunk {
+                try? await rescoreArticle(articleID: articleID, persistScoreAssist: false)
+            }
+        }
+
+        return processed
     }
 
     private func refreshTagSuggestionsIfNeeded(snapshot: StoredArticlePersonalizationSnapshot) async throws {
@@ -1328,7 +1628,7 @@ public actor LocalStandalonePersonalizationService {
             )
         }
 
-        if feedReputation.feedbackCount > 0 {
+        if feedReputation.weightedFeedbackCount >= 3.0 {
             signals.append(
                 StoredSignalScore(
                     signal: .sourceReputation,
@@ -1372,31 +1672,6 @@ public actor LocalStandalonePersonalizationService {
                     isDataBacked: true
                 )
             )
-        }
-
-        if !context.tags.isEmpty {
-            var signedMatchSum = 0.0
-            var knownAffinities = 0
-
-            for tag in context.tags {
-                guard let affinity = topicAffinities[tag.normalizedName]?.affinity, affinity != 0 else {
-                    continue
-                }
-                knownAffinities += 1
-                signedMatchSum += affinity > 0 ? 1 : -1
-            }
-
-            if knownAffinities > 0 {
-                let ratio = signedMatchSum / Double(context.tags.count)
-                signals.append(
-                    StoredSignalScore(
-                        signal: .tagMatchRatio,
-                        rawValue: ratio,
-                        normalizedValue: clamped((ratio + 1) / 2),
-                        isDataBacked: true
-                    )
-                )
-            }
         }
 
         return signals

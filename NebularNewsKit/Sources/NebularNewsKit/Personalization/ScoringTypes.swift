@@ -14,8 +14,7 @@ public let preferenceBackedSignalNames: Set<SignalName> = [
     .topicAffinity,
     .feedAffinity,
     .sourceReputation,
-    .authorAffinity,
-    .tagMatchRatio
+    .authorAffinity
 ]
 
 public enum LocalScoreStatus: String, Codable, Sendable {
@@ -101,7 +100,7 @@ public let minDataBackedSignalsToPublish = 2
 public let minPreferenceBackedSignalsToPublish = 1
 public let sourceReputationVoteWeight = 1.5
 public let sourceReputationPriorWeight = 3.0
-public let currentPersonalizationVersion = 5
+public let currentPersonalizationVersion = 6
 
 private let scoreNeutralPriorWeight = 1.0
 private let scoreNeutralPriorValue = 0.5

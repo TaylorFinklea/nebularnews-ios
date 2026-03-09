@@ -197,16 +197,13 @@ struct ReactionSheet: View {
         switch selectedSelection {
         case .liked, .disliked:
             article.clearDismissal()
-            article.reactionValue = newValue
-            article.reactionReasonCodes = canonicalCodes.isEmpty ? nil : canonicalCodes.joined(separator: ",")
+            article.setReaction(value: newValue, reasonCodes: canonicalCodes)
         case .dismissed:
             article.markDismissed()
-            article.reactionValue = nil
-            article.reactionReasonCodes = nil
+            article.setReaction(value: nil)
         case .none:
             article.clearDismissal()
-            article.reactionValue = nil
-            article.reactionReasonCodes = nil
+            article.setReaction(value: nil)
         }
         try? modelContext.save()
 
@@ -243,8 +240,7 @@ struct ReactionSheet: View {
         selectedSelection = nil
         selectedCodes.removeAll()
         article.clearDismissal()
-        article.reactionValue = nil
-        article.reactionReasonCodes = nil
+        article.setReaction(value: nil)
         try? modelContext.save()
 
         Task {

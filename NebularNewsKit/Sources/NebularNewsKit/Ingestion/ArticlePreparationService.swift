@@ -40,6 +40,7 @@ public actor ArticlePreparationService {
 
     @discardableResult
     public func processPendingArticles(batchSize: Int = 10) async -> Int {
+        _ = await personalization.rebuildPersonalizationFromHistory(batchSize: 200)
         var filter = ArticleFilter()
         filter.presentationFilter = .pendingOnly
         let candidates = await articleRepo.list(filter: filter, sort: .newest, limit: batchSize, offset: 0)

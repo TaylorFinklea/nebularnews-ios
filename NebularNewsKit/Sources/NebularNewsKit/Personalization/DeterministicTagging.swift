@@ -7,10 +7,11 @@ private let titleTokenWeight = 0.3
 private let titleTokenCap = 0.6
 private let contentTokenWeight = 0.08
 private let contentTokenCap = 0.4
-private let feedPriorBonus = 0.25
+private let feedPriorBonus = 0.10
 private let feedPriorMinArticles = 3
 private let feedPriorMinRatio = 0.2
-private let sourceProfileScore = 2.0
+private let sourceBaselineScore = 1.05
+private let sourceProfileBonus = 0.20
 
 public let defaultDeterministicTagAttachThreshold = 0.65
 public let defaultDeterministicMaxSystemTags = 3
@@ -204,6 +205,16 @@ private func mergeDecision(
     )
 }
 
+private func hasLexicalEvidence(_ features: [String]) -> Bool {
+    features.contains { feature in
+        feature == "title_phrase" ||
+        feature == "url_phrase" ||
+        feature == "content_phrase" ||
+        feature.hasPrefix("title_overlap:") ||
+        feature.hasPrefix("content_overlap:")
+    }
+}
+
 public func scoreDeterministicTagCandidate(
     candidate: DeterministicTagCandidate,
     context: DeterministicTaggingContext,
@@ -265,6 +276,7 @@ public func scoreDeterministicTagCandidate(
     }
 
     if let feedPrior,
+       hasLexicalEvidence(features),
        feedPrior.taggedArticleCount >= feedPriorMinArticles,
        feedPrior.ratio >= feedPriorMinRatio {
         score += feedPriorBonus
@@ -307,14 +319,13 @@ public func generateDeterministicTagEvaluation(
     }
 
     for profile in matchedProfiles {
-        for slug in profile.tagSlugs {
-            guard let candidate = candidatesBySlug[slug] else { continue }
-
+        if let baselineSlug = profile.baselineTagSlugs.first,
+           let candidate = candidatesBySlug[baselineSlug] {
             let directDecision = DeterministicTagDecision(
                 tagId: candidate.id,
-                score: sourceProfileScore,
+                score: sourceBaselineScore,
                 confidence: 1,
-                features: ["source_profile:\(profile.name)"]
+                features: ["source_profile_baseline:\(profile.name)"]
             )
 
             decisionsByTagID[candidate.id] = mergeDecision(
@@ -322,10 +333,25 @@ public func generateDeterministicTagEvaluation(
                 incoming: directDecision
             )
         }
+
+        for slug in profile.bonusTagSlugs {
+            guard let candidate = candidatesBySlug[slug] else { continue }
+            guard let existingDecision = decisionsByTagID[candidate.id],
+                  hasLexicalEvidence(existingDecision.features)
+            else {
+                continue
+            }
+
+            decisionsByTagID[candidate.id] = DeterministicTagDecision(
+                tagId: existingDecision.tagId,
+                score: existingDecision.score + sourceProfileBonus,
+                confidence: existingDecision.confidence,
+                features: Array(Set(existingDecision.features + ["source_profile_bonus:\(profile.name)"])).sorted()
+            )
+        }
     }
 
-    let sourceProfileTagCount = Set(matchedProfiles.flatMap(\.tagSlugs)).count
-    let decisionLimit = max(1, max(maxTags, sourceProfileTagCount))
+    let decisionLimit = max(1, maxTags)
     let decisions = decisionsByTagID.values
         .sorted {
             if $0.score != $1.score { return $0.score > $1.score }

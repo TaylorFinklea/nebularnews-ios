@@ -60,13 +60,25 @@ public struct PersonalizationTargetFeedFamily: Sendable, Hashable {
     public let name: String
     public let feedTitleAliases: [String]
     public let siteHosts: [String]
-    public let tagSlugs: [String]
+    public let baselineTagSlugs: [String]
+    public let bonusTagSlugs: [String]
 
-    public init(name: String, feedTitleAliases: [String] = [], siteHosts: [String] = [], tagSlugs: [String]) {
+    public init(
+        name: String,
+        feedTitleAliases: [String] = [],
+        siteHosts: [String] = [],
+        baselineTagSlugs: [String] = [],
+        bonusTagSlugs: [String] = []
+    ) {
         self.name = name
         self.feedTitleAliases = feedTitleAliases
         self.siteHosts = siteHosts
-        self.tagSlugs = tagSlugs
+        self.baselineTagSlugs = baselineTagSlugs
+        self.bonusTagSlugs = bonusTagSlugs
+    }
+
+    public var allTagSlugs: [String] {
+        baselineTagSlugs + bonusTagSlugs
     }
 }
 
@@ -74,13 +86,25 @@ public struct DeterministicTagSourceProfile: Sendable, Hashable {
     public let name: String
     public let feedTitles: [String]
     public let siteHosts: [String]
-    public let tagSlugs: [String]
+    public let baselineTagSlugs: [String]
+    public let bonusTagSlugs: [String]
 
-    public init(name: String, feedTitles: [String] = [], siteHosts: [String] = [], tagSlugs: [String]) {
+    public init(
+        name: String,
+        feedTitles: [String] = [],
+        siteHosts: [String] = [],
+        baselineTagSlugs: [String] = [],
+        bonusTagSlugs: [String] = []
+    ) {
         self.name = name
         self.feedTitles = feedTitles
         self.siteHosts = siteHosts
-        self.tagSlugs = tagSlugs
+        self.baselineTagSlugs = baselineTagSlugs
+        self.bonusTagSlugs = bonusTagSlugs
+    }
+
+    public var allTagSlugs: [String] {
+        baselineTagSlugs + bonusTagSlugs
     }
 }
 
@@ -89,31 +113,36 @@ public let personalizationTargetFeedFamilies: [PersonalizationTargetFeedFamily] 
         name: "OpenAI News",
         feedTitleAliases: ["OpenAI News"],
         siteHosts: ["openai.com"],
-        tagSlugs: ["artificial-intelligence", "generative-ai", "large-language-models"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["generative-ai", "large-language-models"]
     ),
     .init(
         name: "Google DeepMind News",
         feedTitleAliases: ["Google DeepMind News"],
         siteHosts: ["deepmind.google"],
-        tagSlugs: ["artificial-intelligence", "generative-ai", "large-language-models", "research"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["generative-ai", "large-language-models", "research"]
     ),
     .init(
         name: "The latest research from Google",
         feedTitleAliases: ["The latest research from Google"],
         siteHosts: ["research.google"],
-        tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
+        baselineTagSlugs: ["research"],
+        bonusTagSlugs: ["artificial-intelligence", "large-language-models"]
     ),
     .init(
         name: "Microsoft Research Blog - Microsoft Research",
         feedTitleAliases: ["Microsoft Research Blog - Microsoft Research", "Microsoft Research Blog"],
         siteHosts: ["research.microsoft.com"],
-        tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
+        baselineTagSlugs: ["research"],
+        bonusTagSlugs: ["artificial-intelligence", "large-language-models"]
     ),
     .init(
         name: "MIT News - Artificial intelligence",
         feedTitleAliases: ["MIT News - Artificial intelligence"],
         siteHosts: ["news.mit.edu"],
-        tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["research", "large-language-models"]
     ),
     .init(
         name: "Artificial intelligence – MIT Technology Review",
@@ -123,114 +152,133 @@ public let personalizationTargetFeedFamilies: [PersonalizationTargetFeedFamily] 
             "Artificial intelligence &#8211; MIT Technology Review"
         ],
         siteHosts: ["technologyreview.com"],
-        tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["research", "large-language-models"]
     ),
     .init(
         name: "Import AI",
         feedTitleAliases: ["Import AI"],
         siteHosts: ["importai.substack.com"],
-        tagSlugs: ["artificial-intelligence", "research", "large-language-models"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["research", "large-language-models"]
     ),
     .init(
         name: "Hugging Face - Blog",
         feedTitleAliases: ["Hugging Face - Blog"],
         siteHosts: ["huggingface.co"],
-        tagSlugs: ["artificial-intelligence", "open-source", "developer-tools"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["open-source", "developer-tools"]
     ),
     .init(
         name: "InfoQ - DevOps",
         feedTitleAliases: ["InfoQ - DevOps"],
         siteHosts: ["infoq.com"],
-        tagSlugs: ["cloud-infrastructure", "open-source", "developer-tools"]
+        baselineTagSlugs: ["cloud-infrastructure"],
+        bonusTagSlugs: ["open-source", "developer-tools"]
     ),
     .init(
         name: "Kubernetes Blog",
         feedTitleAliases: ["Kubernetes Blog"],
         siteHosts: ["kubernetes.io"],
-        tagSlugs: ["kubernetes", "cloud-infrastructure", "open-source"]
+        baselineTagSlugs: ["kubernetes"],
+        bonusTagSlugs: ["cloud-infrastructure", "open-source"]
     ),
     .init(
         name: "The Berkeley Artificial Intelligence Research Blog",
         feedTitleAliases: ["The Berkeley Artificial Intelligence Research Blog", "Berkeley AI Research Blog"],
         siteHosts: ["bair.berkeley.edu"],
-        tagSlugs: ["artificial-intelligence", "research"]
+        baselineTagSlugs: ["research"],
+        bonusTagSlugs: ["artificial-intelligence"]
     ),
     .init(
         name: "The American Birding Podcast",
         feedTitleAliases: ["The American Birding Podcast"],
         siteHosts: ["aba.org"],
-        tagSlugs: ["birding", "wildlife", "conservation", "nature"]
+        baselineTagSlugs: ["birding"],
+        bonusTagSlugs: ["wildlife", "conservation", "nature"]
     ),
     .init(
         name: "video | All About Birds",
         feedTitleAliases: ["video | All About Birds"],
         siteHosts: ["allaboutbirds.org"],
-        tagSlugs: ["birding", "wildlife", "conservation", "nature"]
+        baselineTagSlugs: ["birding"],
+        bonusTagSlugs: ["wildlife", "conservation", "nature"]
     ),
     .init(
         name: "Nature Boost",
         feedTitleAliases: ["Nature Boost"],
-        tagSlugs: ["wildlife", "conservation", "nature"]
+        baselineTagSlugs: ["nature"],
+        bonusTagSlugs: ["wildlife", "conservation"]
     ),
     .init(
         name: "Kansas City Today",
         feedTitleAliases: ["Kansas City Today"],
         siteHosts: ["kcur.org"],
-        tagSlugs: ["local-news", "kansas-city", "civics"]
+        baselineTagSlugs: ["local-news"],
+        bonusTagSlugs: ["kansas-city", "civics"]
     ),
     .init(
         name: "Up To Date",
         feedTitleAliases: ["Up To Date"],
         siteHosts: ["kcur.org"],
-        tagSlugs: ["local-news", "kansas-city", "civics"]
+        baselineTagSlugs: ["local-news"],
+        bonusTagSlugs: ["kansas-city", "civics"]
     ),
     .init(
         name: "Federal Reserve Bank of Kansas City publications",
         feedTitleAliases: ["Federal Reserve Bank of Kansas City publications"],
         siteHosts: ["kansascityfed.org"],
-        tagSlugs: ["economics", "monetary-policy", "inflation", "banking"]
+        baselineTagSlugs: ["economics"],
+        bonusTagSlugs: ["monetary-policy", "inflation", "banking"]
     ),
     .init(
         name: "NIST News",
         feedTitleAliases: ["NIST News"],
         siteHosts: ["nist.gov"],
-        tagSlugs: ["standards", "research"]
+        baselineTagSlugs: ["standards"],
+        bonusTagSlugs: ["research"]
     ),
     .init(
         name: "News and Events Feed by Topic",
         feedTitleAliases: ["News and Events Feed by Topic"],
         siteHosts: ["nist.gov"],
-        tagSlugs: ["standards", "research"]
+        baselineTagSlugs: ["standards"],
+        bonusTagSlugs: ["research"]
     ),
     .init(
         name: "Distill",
         feedTitleAliases: ["Distill"],
         siteHosts: ["distill.pub"],
-        tagSlugs: ["research", "artificial-intelligence", "deep-learning"]
+        baselineTagSlugs: ["research"],
+        bonusTagSlugs: ["artificial-intelligence", "deep-learning"]
     ),
     .init(
         name: "NVIDIA Blog",
         feedTitleAliases: ["NVIDIA Blog"],
         siteHosts: ["nvidia.com"],
-        tagSlugs: ["artificial-intelligence", "gpus", "semiconductors", "data-centers"]
+        baselineTagSlugs: ["artificial-intelligence"],
+        bonusTagSlugs: ["gpus", "semiconductors", "data-centers"]
     ),
     .init(
         name: "Cloud Native Computing Foundation",
         feedTitleAliases: ["Cloud Native Computing Foundation"],
         siteHosts: ["cncf.io"],
-        tagSlugs: ["cloud-infrastructure", "kubernetes", "open-source"]
+        baselineTagSlugs: ["cloud-infrastructure"],
+        bonusTagSlugs: ["kubernetes", "open-source"]
     ),
     .init(
         name: "Grafana Labs blog on Grafana Labs",
         feedTitleAliases: ["Grafana Labs blog on Grafana Labs"],
         siteHosts: ["grafana.com"],
-        tagSlugs: ["observability", "open-source", "developer-tools"]
+        baselineTagSlugs: ["observability"],
+        bonusTagSlugs: ["open-source", "developer-tools"]
     ),
     .init(
         name: "Security on Grafana Labs",
         feedTitleAliases: ["Security on Grafana Labs"],
         siteHosts: ["grafana.com"],
-        tagSlugs: ["cybersecurity", "observability", "developer-tools"]
+        baselineTagSlugs: ["cybersecurity"],
+        bonusTagSlugs: ["observability", "developer-tools"]
     )
 ]
 
@@ -239,7 +287,8 @@ public let deterministicTagSourceProfiles: [DeterministicTagSourceProfile] = per
         name: family.name,
         feedTitles: family.feedTitleAliases,
         siteHosts: family.siteHosts,
-        tagSlugs: family.tagSlugs
+        baselineTagSlugs: family.baselineTagSlugs,
+        bonusTagSlugs: family.bonusTagSlugs
     )
 }
 

@@ -134,7 +134,7 @@ struct StandalonePersonalizationTests {
         #expect(stored.systemTagIds.count >= 2)
     }
 
-    @Test("Source profiles attach mapped tags even when article text is generic")
+    @Test("Source profiles attach only a safe baseline tag when article text is generic")
     func sourceProfilesAttachMappedTags() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
@@ -161,8 +161,54 @@ struct StandalonePersonalizationTests {
         let tagNames = Set(snapshot.currentTags.map(\.name))
 
         #expect(snapshot.matchedSourceProfiles.contains("OpenAI News"))
-        #expect(tagNames.isSuperset(of: ["Artificial Intelligence", "Generative AI", "Large Language Models"]))
-        #expect(snapshot.systemTagIDs.count == 3)
+        #expect(tagNames.contains("Artificial Intelligence"))
+        #expect(tagNames.contains("Generative AI") == false)
+        #expect(tagNames.contains("Large Language Models") == false)
+        #expect(snapshot.systemTagIDs.count == 1)
+    }
+
+    @Test("Source-profile bonus tags require lexical article evidence")
+    func sourceProfileBonusTagsRequireLexicalEvidence() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+        let genericArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Platform update",
+            canonicalURL: "https://example.com/openai-generic",
+            content: "Release notes and availability changes.",
+            publishedAt: .now
+        )
+        let lexicalArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "GPT language models add generative AI workflows",
+            canonicalURL: "https://example.com/openai-lexical",
+            content: longContent("GPT language models and generative AI workflows keep improving."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let genericTags = Set(try fetchArticle(genericArticle.id, in: context).tags?.map(\.name) ?? [])
+        let lexicalTags = Set(try fetchArticle(lexicalArticle.id, in: context).tags?.map(\.name) ?? [])
+
+        #expect(genericTags.contains("Artificial Intelligence"))
+        #expect(genericTags.contains("Generative AI") == false)
+        #expect(genericTags.contains("Large Language Models") == false)
+
+        #expect(lexicalTags.contains("Artificial Intelligence"))
+        #expect(lexicalTags.contains("Generative AI"))
+        #expect(lexicalTags.contains("Large Language Models"))
     }
 
     @Test("Source profiles match normalized feed-title aliases and host aliases")
@@ -204,12 +250,18 @@ struct StandalonePersonalizationTests {
         let mitSnapshot = try #require(await service.debugSnapshot(articleID: mitArticle.id))
         let mitTagNames = Set(mitSnapshot.currentTags.map(\.name))
         #expect(mitSnapshot.matchedSourceProfiles.contains("Artificial intelligence – MIT Technology Review"))
-        #expect(mitTagNames.isSuperset(of: ["Artificial Intelligence", "Research", "Large Language Models"]))
+        #expect(mitTagNames.contains("Artificial Intelligence"))
+        #expect(mitTagNames.contains("Research") == false)
+        #expect(mitTagNames.contains("Large Language Models") == false)
+        #expect(mitSnapshot.systemTagIDs.count == 1)
 
         let openAISnapshot = try #require(await service.debugSnapshot(articleID: openAIHostArticle.id))
         let openAITagNames = Set(openAISnapshot.currentTags.map(\.name))
         #expect(openAISnapshot.matchedSourceProfiles.contains("OpenAI News"))
-        #expect(openAITagNames.isSuperset(of: ["Artificial Intelligence", "Generative AI", "Large Language Models"]))
+        #expect(openAITagNames.contains("Artificial Intelligence"))
+        #expect(openAITagNames.contains("Generative AI") == false)
+        #expect(openAITagNames.contains("Large Language Models") == false)
+        #expect(openAISnapshot.systemTagIDs.count == 1)
     }
 
     @Test("The Berkeley AI Research feed gets tags from its source profile")
@@ -257,61 +309,61 @@ struct StandalonePersonalizationTests {
                 feedTitle: "The American Birding Podcast",
                 feedURL: "https://www.aba.org/feed/",
                 siteURL: "https://www.aba.org/",
-                expectedTags: ["Birding", "Wildlife", "Conservation", "Nature"]
+                expectedTags: ["Birding"]
             ),
             .init(
                 feedTitle: "Nature Boost",
                 feedURL: "https://example.com/nature-boost.xml",
                 siteURL: nil,
-                expectedTags: ["Wildlife", "Conservation", "Nature"]
+                expectedTags: ["Nature"]
             ),
             .init(
                 feedTitle: "Kansas City Today",
                 feedURL: "https://www.kcur.org/podcast/kansas-city-today/rss.xml",
                 siteURL: "https://www.kcur.org/podcast/kansas-city-today",
-                expectedTags: ["Local News", "Kansas City", "Civics"]
+                expectedTags: ["Local News", "Kansas City"]
             ),
             .init(
                 feedTitle: "Federal Reserve Bank of Kansas City publications",
                 feedURL: "https://www.kansascityfed.org/rss/publications.xml",
                 siteURL: "https://www.kansascityfed.org/research/",
-                expectedTags: ["Economics", "Monetary Policy", "Inflation", "Banking"]
+                expectedTags: ["Economics"]
             ),
             .init(
                 feedTitle: "NIST News",
                 feedURL: "https://www.nist.gov/news-events/news/rss.xml",
                 siteURL: "https://www.nist.gov/news-events/news",
-                expectedTags: ["Standards", "Research"]
+                expectedTags: ["Standards"]
             ),
             .init(
                 feedTitle: "Distill",
                 feedURL: "https://distill.pub/rss.xml",
                 siteURL: "https://distill.pub/",
-                expectedTags: ["Research", "Artificial Intelligence", "Deep Learning"]
+                expectedTags: ["Research"]
             ),
             .init(
                 feedTitle: "NVIDIA Blog",
                 feedURL: "https://blogs.nvidia.com/feed/",
                 siteURL: "https://blogs.nvidia.com/",
-                expectedTags: ["Artificial Intelligence", "GPUs", "Semiconductors", "Data Centers"]
+                expectedTags: ["Artificial Intelligence"]
             ),
             .init(
                 feedTitle: "Cloud Native Computing Foundation",
                 feedURL: "https://www.cncf.io/feed/",
                 siteURL: "https://www.cncf.io/",
-                expectedTags: ["Cloud Infrastructure", "Kubernetes", "Open Source"]
+                expectedTags: ["Cloud Infrastructure"]
             ),
             .init(
                 feedTitle: "Grafana Labs blog on Grafana Labs",
                 feedURL: "https://grafana.com/blog/rss/",
                 siteURL: "https://grafana.com/blog/",
-                expectedTags: ["Observability", "Open Source", "Developer Tools"]
+                expectedTags: ["Observability"]
             ),
             .init(
                 feedTitle: "Security on Grafana Labs",
                 feedURL: "https://grafana.com/security/rss/",
                 siteURL: "https://grafana.com/security/",
-                expectedTags: ["Cybersecurity", "Observability", "Developer Tools"]
+                expectedTags: ["Cybersecurity"]
             )
         ]
 
@@ -346,6 +398,7 @@ struct StandalonePersonalizationTests {
             let snapshot = try #require(await service.debugSnapshot(articleID: article.id))
             let tagNames = Set(snapshot.currentTags.map(\.name))
             #expect(tagNames.isSuperset(of: item.expectedTags))
+            #expect(snapshot.systemTagIDs.count <= defaultDeterministicMaxSystemTags)
         }
     }
 
@@ -393,6 +446,34 @@ struct StandalonePersonalizationTests {
 
         let observabilityTags = Set(try fetchArticle(observabilityArticle.id, in: context).tags?.map(\.name) ?? [])
         #expect(observabilityTags.isSuperset(of: ["Observability", "Site Reliability"]))
+    }
+
+    @Test("Deterministic tagging never attaches more than three system tags")
+    func deterministicTaggingRespectsHardSystemTagCap() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "GPT, multimodal reasoning, AI agents, robotics, and cloud-native tooling",
+            canonicalURL: "https://example.com/capped-tags",
+            content: longContent("GPT multimodal reasoning, large language models, AI agents, robotics, Kubernetes, and cloud infrastructure all appear in the same story."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let stored = try fetchArticle(article.id, in: context)
+        #expect(stored.systemTagIds.count <= defaultDeterministicMaxSystemTags)
     }
 
     @Test("Birding tracking stories no longer get privacy tags")
@@ -524,8 +605,7 @@ struct StandalonePersonalizationTests {
             author: "Sam"
         )
 
-        article.reactionValue = 1
-        article.reactionReasonCodes = "up_interest_match,up_author_like"
+        article.setReaction(value: 1, reasonCodes: ["up_interest_match", "up_author_like"])
         try context.save()
 
         await service.processReactionChange(
@@ -543,8 +623,10 @@ struct StandalonePersonalizationTests {
         #expect(stored.scoreStatus != nil)
         #expect(stored.signalScores.isEmpty == false)
         #expect(stored.systemTagIds.isEmpty == false)
+        #expect(stored.reactionUpdatedAt != nil)
         #expect(topicRows.isEmpty == false)
         #expect(authorRows.count == 1)
+        #expect(try context.fetch(FetchDescriptor<FeedAffinity>()).count == 1)
     }
 
     @Test("Feed affinity keys normalize from feed URLs instead of local feed identity")
@@ -589,12 +671,12 @@ struct StandalonePersonalizationTests {
         let normalizedKey = try #require(normalizedFeedKey(from: firstFeed.feedUrl))
 
         let storedA = try fetchArticle(articleA.id, in: context)
-        storedA.reactionValue = 1
+        storedA.setReaction(value: 1)
         try context.save()
         await service.processReactionChange(articleID: storedA.id, previousValue: nil, newValue: 1, reasonCodes: [])
 
         let storedB = try fetchArticle(articleB.id, in: context)
-        storedB.reactionValue = -1
+        storedB.setReaction(value: -1)
         try context.save()
         await service.processReactionChange(articleID: storedB.id, previousValue: nil, newValue: -1, reasonCodes: [])
 
@@ -670,7 +752,7 @@ struct StandalonePersonalizationTests {
             content: longContent("GPT reasoning model notes."),
             publishedAt: .now.addingTimeInterval(-600)
         )
-        reactedTracked.reactionValue = 1
+        reactedTracked.setReaction(value: 1)
         reactedTracked.fetchedAt = Date(timeIntervalSince1970: 1)
 
         let tracked = try insertArticle(
@@ -740,7 +822,7 @@ struct StandalonePersonalizationTests {
         #expect(baselineB.scoreStatus == LocalScoreStatus.insufficientSignal.rawValue)
 
         let storedA = try fetchArticle(articleA.id, in: context)
-        storedA.reactionValue = 1
+        storedA.setReaction(value: 1)
         try context.save()
 
         await service.processReactionChange(
@@ -850,7 +932,7 @@ struct StandalonePersonalizationTests {
         #expect((rescoredB.scoreWeightedAverage ?? 0) < baselineB)
     }
 
-    @Test("Source trust learning targets source reputation and rescored cohort articles in the same feed")
+    @Test("Source reputation stays hidden until the support threshold is reached")
     func sourceTrustLearningTargetsSourceReputation() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
@@ -879,17 +961,38 @@ struct StandalonePersonalizationTests {
             publishedAt: .now.addingTimeInterval(10),
             author: "Taylor"
         )
+        let articleC = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Third release",
+            content: longContent("A third GPT update ships this week."),
+            publishedAt: .now.addingTimeInterval(20),
+            author: "Taylor"
+        )
 
-        _ = await service.processPendingArticles(limit: 10)
+        _ = await service.processPendingArticles(limit: 20)
 
-        let baselineB = try fetchArticle(articleB.id, in: context).scoreWeightedAverage ?? 0
         let storedA = try fetchArticle(articleA.id, in: context)
-        storedA.reactionValue = 1
-        storedA.reactionReasonCodes = "up_source_trust"
+        storedA.setReaction(value: 1, reasonCodes: ["up_source_trust"])
         try context.save()
 
         await service.processReactionChange(
             articleID: articleA.id,
+            previousValue: nil,
+            newValue: 1,
+            reasonCodes: ["up_source_trust"]
+        )
+
+        let afterFirstReaction = try fetchArticle(articleC.id, in: context)
+        #expect(afterFirstReaction.signalScores.contains(where: { $0.signal == .sourceReputation }) == false)
+
+        let storedB = try fetchArticle(articleB.id, in: context)
+        storedB.setReaction(value: 1, reasonCodes: ["up_source_trust"])
+        try context.save()
+
+        let baselineC = try fetchArticle(articleC.id, in: context).scoreWeightedAverage ?? 0
+        await service.processReactionChange(
+            articleID: articleB.id,
             previousValue: nil,
             newValue: 1,
             reasonCodes: ["up_source_trust"]
@@ -906,14 +1009,14 @@ struct StandalonePersonalizationTests {
         #expect(try context.fetch(FetchDescriptor<TopicAffinity>()).isEmpty)
         #expect(try context.fetch(FetchDescriptor<AuthorAffinity>()).isEmpty)
 
-        let rescoredB = try fetchArticle(articleB.id, in: context)
-        let sourceSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .sourceReputation }))
+        let rescoredC = try fetchArticle(articleC.id, in: context)
+        let sourceSignal = try #require(rescoredC.signalScores.first(where: { $0.signal == .sourceReputation }))
         #expect(sourceSignal.rawValue > 0)
-        #expect((rescoredB.scoreWeightedAverage ?? 0) != baselineB)
+        #expect((rescoredC.scoreWeightedAverage ?? 0) != baselineC)
     }
 
-    @Test("Negative topic learning creates negative tag-match scores for related articles")
-    func negativeTopicLearningAffectsTagMatchRatio() async throws {
+    @Test("Negative topic learning creates negative topic-affinity scores for related articles")
+    func negativeTopicLearningAffectsTopicAffinity() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
         let context = makeContext(container)
@@ -944,8 +1047,7 @@ struct StandalonePersonalizationTests {
 
         let baselineB = try fetchArticle(articleB.id, in: context).scoreWeightedAverage ?? 0
         let storedA = try fetchArticle(articleA.id, in: context)
-        storedA.reactionValue = -1
-        storedA.reactionReasonCodes = "down_off_topic"
+        storedA.setReaction(value: -1, reasonCodes: ["down_off_topic"])
         try context.save()
 
         await service.processReactionChange(
@@ -956,10 +1058,73 @@ struct StandalonePersonalizationTests {
         )
 
         let rescoredB = try fetchArticle(articleB.id, in: context)
-        let tagMatchSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .tagMatchRatio }))
-        #expect(tagMatchSignal.rawValue < 0)
-        #expect(tagMatchSignal.normalizedValue < 0.5)
+        let topicSignal = try #require(rescoredB.signalScores.first(where: { $0.signal == .topicAffinity }))
+        #expect(topicSignal.rawValue < 0)
+        #expect(topicSignal.normalizedValue < 0.5)
         #expect((rescoredB.scoreWeightedAverage ?? 0) < baselineB)
+    }
+
+    @Test("Centered learning increases low-signal weights on downvotes and decreases them on upvotes")
+    func centeredLearningAdjustsLowSignalsAroundNeutral() async throws {
+        let downvoteContainer = try makeContainer()
+        let downvoteService = LocalStandalonePersonalizationService(modelContainer: downvoteContainer)
+        let downvoteContext = makeContext(downvoteContainer)
+
+        await downvoteService.bootstrap()
+        let downvoteFeed = try insertFeed(in: downvoteContext, title: "General Interest")
+        let oldDownvoteArticle = try insertArticle(
+            in: downvoteContext,
+            feed: downvoteFeed,
+            title: "Old archive story",
+            canonicalURL: "https://example.com/old-downvote",
+            content: longContent("A plain archive story with enough depth to produce structural signals."),
+            publishedAt: .now.addingTimeInterval(-(24 * 3600 * 120))
+        )
+
+        _ = await downvoteService.processPendingArticles(limit: 10)
+        let freshnessWeightBeforeDownvote = try fetchSignalWeight(.contentFreshness, in: downvoteContext).weight
+        oldDownvoteArticle.setReaction(value: -1)
+        try downvoteContext.save()
+
+        await downvoteService.processReactionChange(
+            articleID: oldDownvoteArticle.id,
+            previousValue: nil,
+            newValue: -1,
+            reasonCodes: []
+        )
+
+        let freshnessWeightAfterDownvote = try fetchSignalWeight(.contentFreshness, in: downvoteContext).weight
+        #expect(freshnessWeightAfterDownvote > freshnessWeightBeforeDownvote)
+
+        let upvoteContainer = try makeContainer()
+        let upvoteService = LocalStandalonePersonalizationService(modelContainer: upvoteContainer)
+        let upvoteContext = makeContext(upvoteContainer)
+
+        await upvoteService.bootstrap()
+        let upvoteFeed = try insertFeed(in: upvoteContext, title: "General Interest")
+        let oldUpvoteArticle = try insertArticle(
+            in: upvoteContext,
+            feed: upvoteFeed,
+            title: "Old favorite story",
+            canonicalURL: "https://example.com/old-upvote",
+            content: longContent("A plain archive story with enough depth to produce structural signals."),
+            publishedAt: .now.addingTimeInterval(-(24 * 3600 * 120))
+        )
+
+        _ = await upvoteService.processPendingArticles(limit: 10)
+        let freshnessWeightBeforeUpvote = try fetchSignalWeight(.contentFreshness, in: upvoteContext).weight
+        oldUpvoteArticle.setReaction(value: 1)
+        try upvoteContext.save()
+
+        await upvoteService.processReactionChange(
+            articleID: oldUpvoteArticle.id,
+            previousValue: nil,
+            newValue: 1,
+            reasonCodes: []
+        )
+
+        let freshnessWeightAfterUpvote = try fetchSignalWeight(.contentFreshness, in: upvoteContext).weight
+        #expect(freshnessWeightAfterUpvote < freshnessWeightBeforeUpvote)
     }
 
     @Test("Author learning propagates to related articles by the same author")
@@ -996,8 +1161,7 @@ struct StandalonePersonalizationTests {
 
         let baselineB = try fetchArticle(articleB.id, in: context).scoreWeightedAverage ?? 0
         let storedA = try fetchArticle(articleA.id, in: context)
-        storedA.reactionValue = -1
-        storedA.reactionReasonCodes = "down_avoid_author"
+        storedA.setReaction(value: -1, reasonCodes: ["down_avoid_author"])
         try context.save()
 
         await service.processReactionChange(
@@ -1088,7 +1252,7 @@ struct StandalonePersonalizationTests {
             content: longContent("GPT reasoning model release notes."),
             publishedAt: .now
         )
-        reactedTracked.reactionValue = 1
+        reactedTracked.setReaction(value: 1)
 
         let dismissedTracked = try insertArticle(
             in: context,
@@ -1119,6 +1283,120 @@ struct StandalonePersonalizationTests {
         #expect(openAI.readyScored == 0)
         #expect(openAI.reacted == 1)
         #expect(openAI.dismissed == 1)
+    }
+
+    @Test("Historical replay rebuilds learned state from reactions and dismissals")
+    func historicalReplayRebuildsLearnedState() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "OpenAI News",
+            feedURL: "https://openai.com/blog/rss.xml",
+            siteURL: "https://openai.com/news"
+        )
+
+        let reactedArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "GPT reasoning improves workplace automation",
+            canonicalURL: "https://example.com/replay-reaction",
+            content: longContent("GPT reasoning improves workplace automation and author preference learning."),
+            publishedAt: .now,
+            author: "Riley"
+        )
+        reactedArticle.personalizationVersion = 5
+        reactedArticle.setReaction(
+            value: 1,
+            reasonCodes: ["up_interest_match", "up_author_like"],
+            at: Date(timeIntervalSince1970: 10)
+        )
+
+        let dismissedArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Older update to dismiss",
+            canonicalURL: "https://example.com/replay-dismiss",
+            content: longContent("A plain update from the same feed."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+        dismissedArticle.personalizationVersion = 5
+        dismissedArticle.markDismissed(at: Date(timeIntervalSince1970: 20))
+        try context.save()
+
+        let processed = await service.rebuildPersonalizationFromHistory(batchSize: 10, force: true)
+
+        let feedKey = try #require(normalizedFeedKey(from: feed.feedUrl))
+        let rebuiltReactedArticle = try fetchArticle(reactedArticle.id, in: context)
+        let rebuiltDismissedArticle = try fetchArticle(dismissedArticle.id, in: context)
+        let feedAffinity = try fetchFeedAffinity(feedKey, in: context)
+        let topicRows = try context.fetch(FetchDescriptor<TopicAffinity>())
+        let authorRows = try context.fetch(FetchDescriptor<AuthorAffinity>())
+        let signalWeights = try context.fetch(FetchDescriptor<SignalWeight>())
+
+        #expect(processed == 2)
+        #expect(rebuiltReactedArticle.personalizationVersion == currentPersonalizationVersion)
+        #expect(rebuiltDismissedArticle.personalizationVersion == currentPersonalizationVersion)
+        #expect(feedAffinity.interactionCount == 2)
+        #expect(topicRows.isEmpty == false)
+        #expect(authorRows.count == 1)
+        #expect(signalWeights.contains(where: { $0.sampleCount > 0 }))
+    }
+
+    @Test("Audit snapshot reports learned rows and over-tagged articles")
+    func auditSnapshotReportsLearnedRowsAndOverTaggedArticles() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "General Interest",
+            feedURL: "https://example.com/general.xml"
+        )
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Audit target",
+            canonicalURL: "https://example.com/audit-target",
+            content: longContent("A plain briefing with enough depth to create structural signals."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        article.setReaction(value: 1, reasonCodes: ["up_interest_match"])
+        article.markDismissed(at: Date(timeIntervalSince1970: 30))
+        try context.save()
+
+        await service.processReactionChange(
+            articleID: article.id,
+            previousValue: nil,
+            newValue: 1,
+            reasonCodes: ["up_interest_match"]
+        )
+
+        let firstFourTagIDs = try context.fetch(FetchDescriptor<NebularNewsKit.Tag>())
+            .prefix(4)
+            .map(\.id)
+        article.systemTagIdsJson = String(
+            data: try JSONEncoder().encode(firstFourTagIDs),
+            encoding: .utf8
+        )
+        try context.save()
+
+        let snapshot = await service.auditSnapshot()
+
+        #expect(snapshot.reactedArticles == 1)
+        #expect(snapshot.dismissedArticles == 1)
+        #expect(snapshot.feedAffinityRows == 1)
+        #expect(snapshot.signalWeightRows == SignalName.allCases.count)
+        #expect(snapshot.overTaggedArticles == 1)
+        #expect(snapshot.readyScoreHistogram.reduce(0) { $0 + $1.count } == snapshot.totalReadyScores)
     }
 #endif
 

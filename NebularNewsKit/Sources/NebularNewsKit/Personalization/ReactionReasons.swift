@@ -34,8 +34,8 @@ public let downReactionReasonOptions: [ReactionReasonOption] = [
 public let allReactionReasonOptions = upReactionReasonOptions + downReactionReasonOptions
 
 public let reactionReasonSignalMap: [ArticleReactionReasonCode: Set<SignalName>] = [
-    "up_interest_match": [.topicAffinity, .feedAffinity, .tagMatchRatio],
-    "down_off_topic": [.topicAffinity, .feedAffinity, .tagMatchRatio],
+    "up_interest_match": [.topicAffinity, .feedAffinity],
+    "down_off_topic": [.topicAffinity, .feedAffinity],
     "up_source_trust": [.sourceReputation],
     "down_source_distrust": [.sourceReputation],
     "up_good_timing": [.contentFreshness],
