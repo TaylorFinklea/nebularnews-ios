@@ -15,6 +15,7 @@ struct FeedTabView: View {
 
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
+    @State private var reactionSheetArticleID: String?
 
     var body: some View {
         NavigationStack {
@@ -22,7 +23,11 @@ struct FeedTabView: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         FeedFilterBar(filterMode: $filterMode, count: filteredArticles.count)
-                        MagazineGrid(articles: filteredArticles)
+                        MagazineGrid(
+                            articles: filteredArticles,
+                            onToggleRead: handleReadToggle,
+                            onReact: presentReactionSheet
+                        )
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
@@ -31,6 +36,11 @@ struct FeedTabView: View {
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
+            .sheet(isPresented: isReactionSheetPresented) {
+                if let article = selectedReactionArticle {
+                    ReactionSheet(article: article, allowsDismiss: true)
+                }
+            }
             .navigationDestination(for: String.self) { articleId in
                 ArticleDetailView(articleId: articleId)
             }
@@ -65,5 +75,36 @@ struct FeedTabView: View {
         }
 
         return result
+    }
+
+    private var selectedReactionArticle: Article? {
+        guard let reactionSheetArticleID else { return nil }
+        return allArticles.first(where: { $0.id == reactionSheetArticleID })
+    }
+
+    private var isReactionSheetPresented: Binding<Bool> {
+        Binding(
+            get: { selectedReactionArticle != nil },
+            set: { isPresented in
+                if !isPresented {
+                    reactionSheetArticleID = nil
+                }
+            }
+        )
+    }
+
+    private func handleReadToggle(for article: Article) {
+        withAnimation(.snappy(duration: 0.22)) {
+            if article.isRead {
+                article.markUnread()
+            } else {
+                article.markRead()
+            }
+        }
+        try? modelContext.save()
+    }
+
+    private func presentReactionSheet(for article: Article) {
+        reactionSheetArticleID = article.id
     }
 }

@@ -11,13 +11,15 @@ struct ReactionSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     let article: Article
+    let allowsDismiss: Bool
 
-    @State private var selectedValue: Int? = nil
+    @State private var selectedSelection: ReactionSelection? = nil
     @State private var selectedCodes: Set<String> = []
 
-    init(article: Article) {
+    init(article: Article, allowsDismiss: Bool = false) {
         self.article = article
-        _selectedValue = State(initialValue: article.reactionValue)
+        self.allowsDismiss = allowsDismiss
+        _selectedSelection = State(initialValue: ReactionSelection(article: article, allowsDismiss: allowsDismiss))
         _selectedCodes = State(
             initialValue: Set(
                 article.reactionReasonCodes?
@@ -32,18 +34,54 @@ struct ReactionSheet: View {
         return reasonOptions(for: selectedValue)
     }
 
+    private var selectedValue: Int? {
+        selectedSelection?.reactionValue
+    }
+
+    private var hasPersistedFeedback: Bool {
+        article.reactionValue != nil || article.isDismissed
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                // Thumbs selection
-                HStack(spacing: 40) {
-                    reactionButton(value: 1, icon: "hand.thumbsup", filledIcon: "hand.thumbsup.fill", color: .green, label: "Liked it")
-                    reactionButton(value: -1, icon: "hand.thumbsdown", filledIcon: "hand.thumbsdown.fill", color: .red, label: "Not for me")
+                HStack(spacing: allowsDismiss ? 24 : 40) {
+                    reactionButton(
+                        selection: .liked,
+                        icon: "hand.thumbsup",
+                        filledIcon: "hand.thumbsup.fill",
+                        color: .green,
+                        label: "Liked it"
+                    )
+
+                    if allowsDismiss {
+                        reactionButton(
+                            selection: .dismissed,
+                            icon: "eye.slash",
+                            filledIcon: "eye.slash.fill",
+                            color: .orange,
+                            label: "Dismiss"
+                        )
+                    }
+
+                    reactionButton(
+                        selection: .disliked,
+                        icon: "hand.thumbsdown",
+                        filledIcon: "hand.thumbsdown.fill",
+                        color: .red,
+                        label: "Not for me"
+                    )
                 }
                 .padding(.top, 20)
 
-                // Reason codes (shown after selecting thumbs)
-                if let _ = selectedValue {
+                if selectedSelection == .dismissed {
+                    Spacer()
+                    Text("Dismiss keeps this article out of your unread queue without opening it.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 24)
+                    Spacer()
+                } else if let _ = selectedValue {
                     List(currentOptions, id: \.code) { option in
                         Button {
                             if selectedCodes.contains(option.code) {
@@ -66,12 +104,12 @@ struct ReactionSheet: View {
                     .listStyle(.plain)
                 } else {
                     Spacer()
-                    Text("Select a reaction above")
+                    Text(allowsDismiss ? "Select feedback above" : "Select a reaction above")
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
             }
-            .navigationTitle("Reaction")
+            .navigationTitle(allowsDismiss ? "Feedback" : "Reaction")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -79,11 +117,11 @@ struct ReactionSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .disabled(selectedValue == nil)
+                        .disabled(selectedSelection == nil)
                 }
-                if article.reactionValue != nil {
+                if hasPersistedFeedback {
                     ToolbarItem(placement: .bottomBar) {
-                        Button("Clear Reaction", role: .destructive) { clearReaction() }
+                        Button("Clear Feedback", role: .destructive) { clearReaction() }
                     }
                 }
             }
@@ -93,23 +131,33 @@ struct ReactionSheet: View {
 
     // MARK: - Components
 
-    private func reactionButton(value: Int, icon: String, filledIcon: String, color: Color, label: String) -> some View {
+    private func reactionButton(
+        selection: ReactionSelection,
+        icon: String,
+        filledIcon: String,
+        color: Color,
+        label: String
+    ) -> some View {
         Button {
-            if selectedValue == value {
-                selectedValue = nil
+            if selectedSelection == selection {
+                selectedSelection = nil
                 selectedCodes.removeAll()
             } else {
-                selectedValue = value
-                selectedCodes.removeAll()
+                selectedSelection = selection
+                if selection == .dismissed {
+                    selectedCodes.removeAll()
+                } else {
+                    selectedCodes.removeAll()
+                }
             }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: selectedValue == value ? filledIcon : icon)
+                Image(systemName: selectedSelection == selection ? filledIcon : icon)
                     .font(.largeTitle)
-                    .foregroundStyle(selectedValue == value ? color : .secondary)
+                    .foregroundStyle(selectedSelection == selection ? color : .secondary)
                 Text(label)
                     .font(.caption)
-                    .foregroundStyle(selectedValue == value ? color : .secondary)
+                    .foregroundStyle(selectedSelection == selection ? color : .secondary)
             }
         }
         .buttonStyle(.plain)
@@ -119,6 +167,7 @@ struct ReactionSheet: View {
 
     private func save() {
         let previousValue = article.reactionValue
+        let previousDismissedAt = article.dismissedAt
         let newValue = selectedValue
         let canonicalCodes = selectedValue.map {
             canonicalizeReasonCodes(
@@ -129,9 +178,23 @@ struct ReactionSheet: View {
             )
         } ?? []
 
-        article.reactionValue = newValue
-        article.reactionReasonCodes = canonicalCodes.isEmpty ? nil : canonicalCodes.joined(separator: ",")
+        switch selectedSelection {
+        case .liked, .disliked:
+            article.clearDismissal()
+            article.reactionValue = newValue
+            article.reactionReasonCodes = canonicalCodes.isEmpty ? nil : canonicalCodes.joined(separator: ",")
+        case .dismissed:
+            article.markDismissed()
+            article.reactionValue = nil
+            article.reactionReasonCodes = nil
+        case .none:
+            article.clearDismissal()
+            article.reactionValue = nil
+            article.reactionReasonCodes = nil
+        }
         try? modelContext.save()
+
+        let newDismissedAt = article.dismissedAt
 
         Task {
             let service = LocalStandalonePersonalizationService(
@@ -141,8 +204,13 @@ struct ReactionSheet: View {
             await service.processReactionChange(
                 articleID: article.id,
                 previousValue: previousValue,
-                newValue: newValue,
+                newValue: article.reactionValue,
                 reasonCodes: canonicalCodes
+            )
+            await service.processDismissChange(
+                articleID: article.id,
+                previousDismissedAt: previousDismissedAt,
+                newDismissedAt: newDismissedAt
             )
         }
         dismiss()
@@ -150,6 +218,10 @@ struct ReactionSheet: View {
 
     private func clearReaction() {
         let previousValue = article.reactionValue
+        let previousDismissedAt = article.dismissedAt
+        selectedSelection = nil
+        selectedCodes.removeAll()
+        article.clearDismissal()
         article.reactionValue = nil
         article.reactionReasonCodes = nil
         try? modelContext.save()
@@ -165,7 +237,45 @@ struct ReactionSheet: View {
                 newValue: nil,
                 reasonCodes: []
             )
+            await service.processDismissChange(
+                articleID: article.id,
+                previousDismissedAt: previousDismissedAt,
+                newDismissedAt: article.dismissedAt
+            )
         }
         dismiss()
+    }
+}
+
+private enum ReactionSelection: Hashable {
+    case liked
+    case dismissed
+    case disliked
+
+    init?(article: Article, allowsDismiss: Bool) {
+        if allowsDismiss, article.isDismissed {
+            self = .dismissed
+            return
+        }
+
+        switch article.reactionValue {
+        case 1:
+            self = .liked
+        case -1:
+            self = .disliked
+        default:
+            return nil
+        }
+    }
+
+    var reactionValue: Int? {
+        switch self {
+        case .liked:
+            return 1
+        case .dismissed:
+            return nil
+        case .disliked:
+            return -1
+        }
     }
 }
