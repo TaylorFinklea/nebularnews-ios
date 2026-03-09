@@ -13,18 +13,20 @@ struct FeedTabView: View {
     @Query(sort: [SortDescriptor(\Article.publishedAt, order: .reverse)])
     private var allArticles: [Article]
 
+    @State private var navigationPath: [String] = []
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
     @State private var reactionSheetArticleID: String?
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             NebularScreen(emphasis: .reading) {
                 ScrollView {
                     VStack(spacing: 16) {
                         FeedFilterBar(filterMode: $filterMode, count: filteredArticles.count)
                         MagazineGrid(
                             articles: filteredArticles,
+                            onOpenArticle: openArticle,
                             onToggleRead: handleReadToggle,
                             onReact: presentReactionSheet
                         )
@@ -106,5 +108,9 @@ struct FeedTabView: View {
 
     private func presentReactionSheet(for article: Article) {
         reactionSheetArticleID = article.id
+    }
+
+    private func openArticle(for article: Article) {
+        navigationPath.append(article.id)
     }
 }

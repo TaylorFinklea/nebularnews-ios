@@ -11,10 +11,12 @@ struct FeedSwipeContainer<Content: View>: View {
     private let cornerRadius: CGFloat
     private let leadingAction: FeedSwipeActionDescriptor
     private let trailingAction: FeedSwipeActionDescriptor
+    private let onTap: (() -> Void)?
     private let content: Content
 
     @State private var dragOffset: CGFloat = 0
     @State private var isHorizontalSwipe = false
+    @State private var suppressTap = false
 
     private let maxReveal: CGFloat = 108
     private let triggerThreshold: CGFloat = 72
@@ -23,11 +25,13 @@ struct FeedSwipeContainer<Content: View>: View {
         cornerRadius: CGFloat,
         leadingAction: FeedSwipeActionDescriptor,
         trailingAction: FeedSwipeActionDescriptor,
+        onTap: (() -> Void)? = nil,
         @ViewBuilder content: () -> Content
     ) {
         self.cornerRadius = cornerRadius
         self.leadingAction = leadingAction
         self.trailingAction = trailingAction
+        self.onTap = onTap
         self.content = content()
     }
 
@@ -39,7 +43,7 @@ struct FeedSwipeContainer<Content: View>: View {
                 actionBackground(for: trailingAction, alignment: .trailing)
             }
 
-            content
+            tappableContent
                 .offset(x: dragOffset)
                 .allowsHitTesting(!isHorizontalSwipe)
         }
@@ -54,12 +58,28 @@ struct FeedSwipeContainer<Content: View>: View {
         .animation(.snappy(duration: 0.18), value: dragOffset)
     }
 
+    @ViewBuilder
+    private var tappableContent: some View {
+        if let onTap {
+            Button {
+                guard !suppressTap else { return }
+                onTap()
+            } label: {
+                content
+            }
+            .buttonStyle(.plain)
+        } else {
+            content
+        }
+    }
+
     private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 14, coordinateSpace: .local)
             .onChanged { value in
                 guard shouldTrackSwipe(for: value.translation) else { return }
 
                 isHorizontalSwipe = true
+                suppressTap = true
                 dragOffset = min(max(value.translation.width, -maxReveal), maxReveal)
             }
             .onEnded { value in
@@ -81,6 +101,8 @@ struct FeedSwipeContainer<Content: View>: View {
                 } else {
                     resetDrag()
                 }
+
+                releaseTapSuppression()
             }
     }
 
@@ -139,5 +161,12 @@ struct FeedSwipeContainer<Content: View>: View {
 
     private func resetDrag() {
         dragOffset = 0
+    }
+
+    private func releaseTapSuppression() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            suppressTap = false
+        }
     }
 }

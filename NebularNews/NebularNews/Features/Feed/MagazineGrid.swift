@@ -8,15 +8,18 @@ import NebularNewsKit
 /// through card height rather than column count.
 struct MagazineGrid: View {
     let articles: [Article]
+    let onOpenArticle: ((Article) -> Void)?
     let onToggleRead: ((Article) -> Void)?
     let onReact: ((Article) -> Void)?
 
     init(
         articles: [Article],
+        onOpenArticle: ((Article) -> Void)? = nil,
         onToggleRead: ((Article) -> Void)? = nil,
         onReact: ((Article) -> Void)? = nil
     ) {
         self.articles = articles
+        self.onOpenArticle = onOpenArticle
         self.onToggleRead = onToggleRead
         self.onReact = onReact
     }
@@ -119,21 +122,22 @@ struct MagazineGrid: View {
         cornerRadius: CGFloat,
         @ViewBuilder content: () -> Card
     ) -> some View {
-        let card = NavigationLink(value: article.id) {
-            content()
-        }
-        .buttonStyle(.plain)
-
-        if onToggleRead != nil, onReact != nil {
+        if let onOpenArticle, onToggleRead != nil, onReact != nil {
             FeedSwipeContainer(
                 cornerRadius: cornerRadius,
                 leadingAction: readAction(for: article),
-                trailingAction: reactionAction(for: article)
+                trailingAction: reactionAction(for: article),
+                onTap: {
+                    onOpenArticle(article)
+                }
             ) {
-                card
+                content()
             }
         } else {
-            card
+            NavigationLink(value: article.id) {
+                content()
+            }
+            .buttonStyle(.plain)
         }
     }
 }
