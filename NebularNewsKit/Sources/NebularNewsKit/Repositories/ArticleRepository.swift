@@ -54,6 +54,34 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func deleteOlderThan(date: Date) async throws -> Int
 }
 
+public struct ArticleFallbackImageSnapshot: Sendable {
+    public let id: String
+    public let title: String?
+    public let canonicalUrl: String?
+    public let feedTitle: String?
+    public let contentText: String
+    public let tags: [String]
+    public let resolvedImageUrl: String?
+
+    public init(
+        id: String,
+        title: String?,
+        canonicalUrl: String?,
+        feedTitle: String?,
+        contentText: String,
+        tags: [String],
+        resolvedImageUrl: String?
+    ) {
+        self.id = id
+        self.title = title
+        self.canonicalUrl = canonicalUrl
+        self.feedTitle = feedTitle
+        self.contentText = contentText
+        self.tags = tags
+        self.resolvedImageUrl = resolvedImageUrl
+    }
+}
+
 // MARK: - Local Implementation
 
 @ModelActor
@@ -137,6 +165,25 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate? {
         guard let article = await get(id: id) else { return nil }
         return articleContentFetchCandidate(from: article)
+    }
+
+    public func fallbackImageSnapshot(id: String) async -> ArticleFallbackImageSnapshot? {
+        guard let article = await get(id: id) else { return nil }
+
+        let text = article.bestAvailableContentText
+        let tags = (article.tags ?? [])
+            .map(\.name)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        return ArticleFallbackImageSnapshot(
+            id: article.id,
+            title: article.title,
+            canonicalUrl: article.canonicalUrl,
+            feedTitle: article.feed?.title,
+            contentText: text,
+            tags: tags,
+            resolvedImageUrl: article.resolvedImageUrl
+        )
     }
 
     public func listContentFetchCandidates(limit: Int = 10, recentOnly: Bool = true) async -> [ArticleContentFetchCandidate] {
@@ -290,6 +337,22 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func recordContentFetchAttempt(id: String) async throws {
         guard let article = await get(id: id) else { return }
         article.contentFetchAttemptedAt = Date()
+        try modelContext.save()
+    }
+
+    public func updateFallbackImage(
+        id: String,
+        url: String,
+        provider: String,
+        themeKey: String
+    ) async throws {
+        guard let article = await get(id: id) else { return }
+        guard article.imageUrl == nil, article.ogImageUrl == nil else { return }
+
+        article.fallbackImageUrl = url
+        article.fallbackImageProvider = provider
+        article.fallbackImageTheme = themeKey
+        article.fallbackImageGeneratedAt = Date()
         try modelContext.save()
     }
 

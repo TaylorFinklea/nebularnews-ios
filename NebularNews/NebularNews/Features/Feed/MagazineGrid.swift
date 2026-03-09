@@ -44,6 +44,7 @@ struct MagazineGrid: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Layout Grouping
@@ -133,11 +134,13 @@ struct MagazineGrid: View {
             ) {
                 content()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             NavigationLink(value: article.id) {
                 content()
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

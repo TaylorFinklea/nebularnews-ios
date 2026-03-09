@@ -25,7 +25,9 @@ struct GlassCard<Content: View>: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(GlassCardBackground(shape: shape, style: style, tintColor: tintColor))
     }
 }
@@ -296,7 +298,9 @@ struct GlassImageCard<Content: View>: View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         content
+            .frame(maxWidth: .infinity, alignment: .leading)
             .clipShape(shape)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(GlassCardBackground(shape: shape, style: style, tintColor: tintColor))
     }
 }

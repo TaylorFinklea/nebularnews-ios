@@ -3,9 +3,9 @@ import SwiftData
 import NebularNewsKit
 
 /// Reusable article image with automatic fallback chain:
-/// RSS imageUrl -> cached OG image -> space-themed placeholder.
+/// RSS imageUrl -> cached OG image -> persisted Unsplash fallback -> placeholder.
 ///
-/// Triggers OG image fetching lazily when no image is available.
+/// Triggers OG image fetching and fallback-image selection lazily when no image is available.
 struct ArticleImageView: View {
     let article: Article
     var size: ImageSize = .hero
@@ -15,6 +15,7 @@ struct ArticleImageView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
     @State private var ogFetchAttempted = false
+    @State private var fallbackFetchAttempted = false
 
     enum ImageSize {
         case hero       // full width, 220pt tall
@@ -51,6 +52,9 @@ struct ArticleImageView: View {
                     .task {
                         await fetchOGImageIfNeeded()
                     }
+                    .task {
+                        await fetchFallbackImageIfNeeded()
+                    }
             }
         }
         .overlay {
@@ -81,5 +85,16 @@ struct ArticleImageView: View {
 
         let fetcher = OGImageFetcher(modelContainer: modelContext.container)
         _ = await fetcher.fetchOGImage(articleId: article.id, canonicalUrl: canonicalUrl)
+    }
+
+    private func fetchFallbackImageIfNeeded() async {
+        guard !fallbackFetchAttempted,
+              article.resolvedImageUrl == nil
+        else { return }
+
+        fallbackFetchAttempted = true
+
+        let service = ArticleFallbackImageService(modelContainer: modelContext.container)
+        _ = await service.ensureFallbackImage(articleID: article.id)
     }
 }

@@ -20,6 +20,10 @@ public final class Article: @unchecked Sendable {
     public var excerpt: String?
     public var imageUrl: String?
     public var ogImageUrl: String?
+    public var fallbackImageUrl: String?
+    public var fallbackImageProvider: String?
+    public var fallbackImageTheme: String?
+    public var fallbackImageGeneratedAt: Date?
     public var contentHash: String?
     public var contentFetchAttemptedAt: Date?
     public var contentFetchedAt: Date?
@@ -73,7 +77,7 @@ public final class Article: @unchecked Sendable {
 
     /// Best available image URL: RSS-provided imageUrl, then cached OG image.
     public var resolvedImageUrl: String? {
-        imageUrl ?? ogImageUrl
+        imageUrl ?? ogImageUrl ?? fallbackImageUrl
     }
 
     /// Decoded key points from the JSON string.
