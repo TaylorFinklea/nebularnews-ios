@@ -44,6 +44,9 @@ struct HeroArticleCard: View {
                                 .font(NebularTypography.heroTitle)
                                 .foregroundStyle(.white)
                                 .lineLimit(3)
+                                .minimumScaleFactor(0.74)
+                                .allowsTightening(true)
+                                .truncationMode(.tail)
                                 .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
 
                             HStack(spacing: 8) {

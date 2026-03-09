@@ -205,6 +205,9 @@ struct StandaloneDashboardView: View {
                                 Text(article.title ?? "Untitled")
                                     .font(.headline)
                                     .lineLimit(2)
+                                    .minimumScaleFactor(0.82)
+                                    .allowsTightening(true)
+                                    .truncationMode(.tail)
                                 if let feedTitle = article.feed?.title {
                                     Text(feedTitle)
                                         .font(.caption)

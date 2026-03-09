@@ -26,6 +26,9 @@ struct MediumArticleCard: View {
                     Text(article.title ?? "Untitled")
                         .font(NebularTypography.mediumCardTitle)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                        .allowsTightening(true)
+                        .truncationMode(.tail)
 
                     if let summary = article.preferredCardSummaryText, !summary.isEmpty {
                         Text(summary)

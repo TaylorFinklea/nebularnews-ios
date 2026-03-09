@@ -16,6 +16,9 @@ struct CompactArticleRow: View {
                     Text((article.title ?? "Untitled").strippedHTML)
                         .font(NebularTypography.compactTitle)
                         .lineLimit(2)
+                        .minimumScaleFactor(0.84)
+                        .allowsTightening(true)
+                        .truncationMode(.tail)
 
                     if let summary = article.preferredCardSummaryText, !summary.isEmpty {
                         Text(summary)
