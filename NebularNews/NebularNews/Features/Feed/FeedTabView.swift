@@ -11,49 +11,76 @@ import NebularNewsKit
 struct FeedTabView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @State private var navigationPath: [String] = []
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
     @State private var reactionSheetArticleID: String?
-    @State private var isScrollInteractionActive = false
     @State private var viewModel = FeedBrowseViewModel()
 
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack {
             NebularScreen(emphasis: .reading) {
-                ScrollView {
-                    VStack(spacing: 16) {
+                List {
+                    Section {
                         FeedFilterBar(filterMode: $filterMode, count: viewModel.visibleCount)
+                    }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
 
-                        if viewModel.pendingPreparationCount > 0 {
+                    if viewModel.pendingPreparationCount > 0 {
+                        Section {
                             FeedPreparingSection(count: viewModel.pendingPreparationCount)
                         }
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 10, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
 
-                        if viewModel.isInitialLoadInProgress && viewModel.articles.isEmpty {
-                            FeedSkeletonSection()
-                        } else if viewModel.articles.isEmpty {
+                    if viewModel.isInitialLoadInProgress && viewModel.articles.isEmpty {
+                        Section {
+                            FeedSkeletonCard(height: 320, cornerRadius: 24)
+                                .feedRowStyle(top: 0, bottom: 8)
+                            FeedSkeletonCard(height: 190, cornerRadius: 16)
+                                .feedRowStyle(top: 8, bottom: 8)
+                            FeedSkeletonCard(height: 190, cornerRadius: 16)
+                                .feedRowStyle(top: 8, bottom: 8)
+                        }
+                    } else if viewModel.articles.isEmpty {
+                        Section {
                             ContentUnavailableView.search(text: searchText)
-                        } else {
-                            MagazineGrid(
-                                articles: viewModel.articles,
-                                isScrollInteractionActive: isScrollInteractionActive,
-                                onOpenArticle: openArticle,
-                                onToggleRead: handleReadToggle,
-                                onReact: presentReactionSheet,
-                                onArticleVisible: handleArticleVisible
-                            )
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 40)
+                                .feedRowStyle(top: 0, bottom: 8)
+                        }
+                    } else {
+                        if !featuredArticles.isEmpty {
+                            Section {
+                                ForEach(featuredArticles, id: \.id) { article in
+                                    feedArticleRow(article)
+                                }
+                            }
+                        }
 
-                            if viewModel.isLoadingMore {
-                                FeedLoadingMoreSection()
+                        if !standardArticles.isEmpty {
+                            Section {
+                                ForEach(standardArticles, id: \.id) { article in
+                                    feedArticleRow(article)
+                                }
+                            }
+                        }
+
+                        if viewModel.isLoadingMore {
+                            Section {
+                                FeedSkeletonCard(height: 190, cornerRadius: 16)
+                                    .feedRowStyle(top: 8, bottom: 8)
+                                FeedSkeletonCard(height: 190, cornerRadius: 16)
+                                    .feedRowStyle(top: 8, bottom: 8)
                             }
                         }
                     }
-                    .padding(.top, 8)
-                    .padding(.bottom, 28)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .contentMargins(.horizontal, 16, for: .scrollContent)
-                .simultaneousGesture(scrollMonitorGesture)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
@@ -118,10 +145,6 @@ struct FeedTabView: View {
         reactionSheetArticleID = article.id
     }
 
-    private func openArticle(for article: Article) {
-        navigationPath.append(article.id)
-    }
-
     private func handleArticleVisible(_ article: Article) {
         Task {
             await viewModel.loadMoreIfNeeded(
@@ -137,23 +160,70 @@ struct FeedTabView: View {
         viewModel.articles.first(where: { $0.id == articleID })
     }
 
-    private var scrollMonitorGesture: some Gesture {
-        DragGesture(minimumDistance: 4, coordinateSpace: .local)
-            .onChanged { value in
-                guard abs(value.translation.height) > abs(value.translation.width) else { return }
-                if !isScrollInteractionActive {
-                    isScrollInteractionActive = true
-                }
-            }
-            .onEnded { _ in
-                releaseScrollInteraction()
-            }
+    private var featuredArticles: [Article] {
+        viewModel.articles.filter { ($0.displayedScore ?? 0) >= 4 }
     }
 
-    private func releaseScrollInteraction() {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(180))
-            isScrollInteractionActive = false
+    private var standardArticles: [Article] {
+        viewModel.articles.filter { ($0.displayedScore ?? 0) < 4 }
+    }
+
+    @ViewBuilder
+    private func feedArticleRow(_ article: Article) -> some View {
+        NavigationLink(value: article.id) {
+            FeedArticleCard(article: article)
+        }
+        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                handleReadToggle(for: article)
+            } label: {
+                Label(article.isRead ? "Unread" : "Read", systemImage: article.isRead ? "envelope.badge" : "checkmark.circle")
+            }
+            .tint(.blue)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                presentReactionSheet(for: article)
+            } label: {
+                Label("React", systemImage: reactionSystemImage(for: article))
+            }
+            .tint(reactionTint(for: article))
+        }
+        .onAppear {
+            handleArticleVisible(article)
+        }
+    }
+
+    private func reactionSystemImage(for article: Article) -> String {
+        if article.isDismissed {
+            return "eye.slash.fill"
+        }
+
+        switch article.reactionValue {
+        case 1:
+            return "hand.thumbsup.fill"
+        case -1:
+            return "hand.thumbsdown.fill"
+        default:
+            return "hand.thumbsup"
+        }
+    }
+
+    private func reactionTint(for article: Article) -> Color {
+        if article.isDismissed {
+            return .orange
+        }
+
+        switch article.reactionValue {
+        case 1:
+            return .green
+        case -1:
+            return .red
+        default:
+            return .gray
         }
     }
 }
@@ -224,6 +294,29 @@ private struct FeedSkeletonCard: View {
                 .padding(18)
             }
             .redacted(reason: .placeholder)
+    }
+}
+
+private struct FeedArticleCard: View {
+    let article: Article
+
+    var body: some View {
+        Group {
+            if (article.displayedScore ?? 0) >= 4 {
+                HeroArticleCard(article: article)
+            } else {
+                CompactArticleRow(article: article)
+            }
+        }
+    }
+}
+
+private extension View {
+    func feedRowStyle(top: CGFloat, bottom: CGFloat) -> some View {
+        self
+            .listRowInsets(EdgeInsets(top: top, leading: 16, bottom: bottom, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 
