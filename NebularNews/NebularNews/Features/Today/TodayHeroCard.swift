@@ -5,21 +5,22 @@ import NebularNewsKit
 struct TodayHeroCard: View {
     let article: Article
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        let palette = NebularPalette.forColorScheme(colorScheme)
-
         NavigationLink(value: article.id) {
             GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.displayedScore)) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ArticleImageView(article: article, size: .hero)
+                    ArticleImageView(article: article, size: .hero, dimmingOpacity: 0.18)
                         .frame(height: 200)
                         .frame(maxWidth: .infinity)
                         .clipped()
                         .overlay(alignment: .bottomLeading) {
                             LinearGradient(
-                                colors: [.clear, palette.cardImageOverlay],
+                                stops: [
+                                    .init(color: .clear, location: 0.0),
+                                    .init(color: .black.opacity(0.34), location: 0.3),
+                                    .init(color: .black.opacity(0.68), location: 0.62),
+                                    .init(color: .black.opacity(0.86), location: 1.0)
+                                ],
                                 startPoint: .top,
                                 endPoint: .bottom
                             )

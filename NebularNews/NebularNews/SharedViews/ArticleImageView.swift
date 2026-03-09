@@ -10,6 +10,7 @@ struct ArticleImageView: View {
     let article: Article
     var size: ImageSize = .hero
     var showGradientOverlay: Bool = false
+    var dimmingOpacity: Double = 0
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.modelContext) private var modelContext
@@ -50,6 +51,11 @@ struct ArticleImageView: View {
                     .task {
                         await fetchOGImageIfNeeded()
                     }
+            }
+        }
+        .overlay {
+            if dimmingOpacity > 0 {
+                Color.black.opacity(dimmingOpacity)
             }
         }
         .overlay {

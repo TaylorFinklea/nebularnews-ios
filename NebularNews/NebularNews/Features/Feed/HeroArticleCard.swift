@@ -8,14 +8,10 @@ import NebularNewsKit
 struct HeroArticleCard: View {
     let article: Article
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        let palette = NebularPalette.forColorScheme(colorScheme)
-
         GlassImageCard(cornerRadius: 24, style: .hero, tintColor: Color.forScore(article.displayedScore)) {
             VStack(alignment: .leading, spacing: 0) {
-                ArticleImageView(article: article, size: .hero)
+                ArticleImageView(article: article, size: .hero, dimmingOpacity: 0.18)
                     .frame(height: 220)
                     .frame(maxWidth: .infinity)
                     .clipped()
@@ -25,9 +21,9 @@ struct HeroArticleCard: View {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.0),
-                                .init(color: .black.opacity(0.25), location: 0.3),
-                                .init(color: .black.opacity(0.6), location: 0.55),
-                                .init(color: .black.opacity(0.82), location: 1.0)
+                                .init(color: .black.opacity(0.38), location: 0.28),
+                                .init(color: .black.opacity(0.74), location: 0.58),
+                                .init(color: .black.opacity(0.9), location: 1.0)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
