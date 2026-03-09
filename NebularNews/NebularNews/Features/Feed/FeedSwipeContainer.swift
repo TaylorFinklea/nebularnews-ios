@@ -50,6 +50,12 @@ struct FeedSwipeContainer<Content: View>: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .simultaneousGesture(dragGesture)
+        .simultaneousGesture(tapGesture)
+        .accessibilityAddTraits(onTap == nil ? [] : .isButton)
+        .accessibilityAction(named: Text("Open Article")) {
+            guard onTap != nil, !suppressTap, dragOffset == 0 else { return }
+            onTap?()
+        }
         .accessibilityAction(named: Text(leadingAction.title)) {
             leadingAction.handler()
         }
@@ -61,17 +67,15 @@ struct FeedSwipeContainer<Content: View>: View {
 
     @ViewBuilder
     private var tappableContent: some View {
-        if let onTap {
-            Button {
-                guard !suppressTap, dragOffset == 0 else { return }
-                onTap()
-            } label: {
-                content
+        content
+    }
+
+    private var tapGesture: some Gesture {
+        TapGesture()
+            .onEnded {
+                guard onTap != nil, !suppressTap, dragOffset == 0 else { return }
+                onTap?()
             }
-            .buttonStyle(.plain)
-        } else {
-            content
-        }
     }
 
     private var dragGesture: some Gesture {
