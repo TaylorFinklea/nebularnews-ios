@@ -101,8 +101,8 @@ struct ArticleDetailView: View {
                 scrollOffset = value
             }
         }
-        .toolbar {
-            articleToolbar(article)
+        .safeAreaInset(edge: .bottom) {
+            articleActionTray(article)
         }
     }
 
@@ -422,47 +422,88 @@ struct ArticleDetailView: View {
         }
     }
 
-    // MARK: - Floating Bottom Toolbar
+    // MARK: - Bottom Action Tray
 
-    @ToolbarContentBuilder
-    private func articleToolbar(_ article: Article) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .bottomBar) {
+    @ViewBuilder
+    private func articleActionTray(_ article: Article) -> some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: 18) {
+                articleActionTrayContent(article)
+            }
+        } else {
+            articleActionTrayContent(article)
+        }
+    }
+
+    private func articleActionTrayContent(_ article: Article) -> some View {
+        HStack(spacing: 18) {
             if let url = articleURL(for: article) {
                 Button {
                     openURL(url)
                 } label: {
-                    toolbarLabel("Open in Browser", systemImage: "safari")
+                    articleTraySideIcon(systemImage: "safari")
                 }
-                Spacer()
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open in Browser")
+            } else {
+                Color.clear
+                    .frame(width: 52, height: 52)
+                    .accessibilityHidden(true)
             }
 
+            articleActionCluster(article)
+
+            overflowMenu(article)
+                .accessibilityLabel("More")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+    }
+
+    private func articleActionCluster(_ article: Article) -> some View {
+        HStack(spacing: 2) {
             Button {
                 toggleReadingList(for: article)
             } label: {
-                toolbarLabel(
-                    article.isInReadingList ? "Remove from Reading List" : "Add to Reading List",
+                articleClusterIcon(
                     systemImage: article.isInReadingList ? "bookmark.fill" : "bookmark",
                     tint: article.isInReadingList ? palette.primary : .secondary
                 )
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(article.isInReadingList ? "Remove from Reading List" : "Add to Reading List")
-            Spacer()
+
+            Button {
+                Task { await enrichArticle(articleId: article.id, target: .automatic) }
+            } label: {
+                articleClusterIcon(
+                    systemImage: isEnriching ? "sparkles" : "text.alignleft",
+                    tint: isEnriching ? palette.primary : .secondary,
+                    showsProgress: isEnriching
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isEnriching)
+            .accessibilityLabel(isEnriching ? "Summarizing" : "Summarize")
 
             Button {
                 showReactionSheet = true
             } label: {
-                toolbarLabel(
-                    "React",
+                articleClusterIcon(
                     systemImage: reactionIcon(for: article.reactionValue),
                     tint: reactionToolbarTint(for: article.reactionValue)
                 )
             }
+            .buttonStyle(.plain)
             .accessibilityLabel("React")
             .accessibilityValue(reactionAccessibilityValue(for: article.reactionValue))
-
-            Spacer()
-            overflowMenu(article)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .modifier(ArticleTrayCapsuleBackground())
+        .accessibilityElement(children: .contain)
     }
 
     private func overflowMenu(_ article: Article) -> some View {
@@ -511,18 +552,37 @@ struct ArticleDetailView: View {
                 .disabled(isEnriching)
             }
         } label: {
-            toolbarLabel("More", systemImage: "ellipsis")
+            articleTraySideIcon(systemImage: "ellipsis")
         }
     }
 
-    private func toolbarLabel(
-        _ title: LocalizedStringKey,
-        systemImage: String,
-        tint: Color = .secondary
-    ) -> some View {
-        Label(title, systemImage: systemImage)
-            .labelStyle(.iconOnly)
+    private func articleTraySideIcon(systemImage: String, tint: Color = .secondary) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 20, weight: .semibold))
             .foregroundStyle(tint)
+            .frame(width: 52, height: 52)
+            .modifier(ArticleTrayCircleBackground())
+    }
+
+    @ViewBuilder
+    private func articleClusterIcon(
+        systemImage: String,
+        tint: Color = .secondary,
+        showsProgress: Bool = false
+    ) -> some View {
+        Group {
+            if showsProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(tint)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: 52, height: 44)
+        .contentShape(Rectangle())
     }
 
     // MARK: - Helpers
@@ -692,6 +752,50 @@ struct ArticleDetailView: View {
 }
 
 // MARK: - Scroll Offset Tracking
+
+private struct ArticleTrayCircleBackground: ViewModifier {
+    func body(content: Content) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            fallback(content)
+        }
+#else
+        fallback(content)
+#endif
+    }
+
+    private func fallback(_ content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.08)))
+            .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
+    }
+}
+
+private struct ArticleTrayCapsuleBackground: ViewModifier {
+    func body(content: Content) -> some View {
+#if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: Capsule())
+        } else {
+            fallback(content)
+        }
+#else
+        fallback(content)
+#endif
+    }
+
+    private func fallback(_ content: Content) -> some View {
+        content
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
+            .shadow(color: Color.black.opacity(0.18), radius: 12, y: 5)
+    }
+}
 
 private struct ScrollOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
