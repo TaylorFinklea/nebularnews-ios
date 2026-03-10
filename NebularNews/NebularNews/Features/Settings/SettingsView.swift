@@ -249,13 +249,10 @@ struct SettingsView: View {
                 settings.maxArticlesPerFeed = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
-                Task {
-                    let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-                    _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: newValue)
-#if DEBUG
-                    refreshDebugMetrics()
-#endif
-                }
+                enforceArticleStoragePolicies(
+                    retentionDays: settings.retentionDays,
+                    maxArticlesPerFeed: newValue
+                )
             }
         )
     }
@@ -267,8 +264,29 @@ struct SettingsView: View {
                 settings.retentionDays = newValue
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                enforceArticleStoragePolicies(
+                    retentionDays: newValue,
+                    maxArticlesPerFeed: settings.maxArticlesPerFeed
+                )
             }
         )
+    }
+
+    private func enforceArticleStoragePolicies(retentionDays: Int, maxArticlesPerFeed: Int) {
+        let container = modelContext.container
+
+        Task {
+            let feedRepo = LocalFeedRepository(modelContainer: container)
+            let articleRepo = LocalArticleRepository(modelContainer: container)
+            let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
+            _ = await poller.enforceArticleStoragePolicies(
+                retentionDays: retentionDays,
+                maxArticlesPerFeed: maxArticlesPerFeed
+            )
+#if DEBUG
+            refreshDebugMetrics()
+#endif
+        }
     }
 
     private var automaticAIModeBinding: Binding<AIAutomaticMode> {

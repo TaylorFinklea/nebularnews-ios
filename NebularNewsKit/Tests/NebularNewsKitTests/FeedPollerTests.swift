@@ -53,6 +53,37 @@ struct FeedPollerTests {
         return Data(xml.utf8)
     }
 
+    private func makeRSSXMLWithDates(title: String = "Test Feed", items: [(title: String, link: String, publishedAt: Date)]) -> Data {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+
+        var itemsXML = ""
+        for item in items {
+            itemsXML += """
+                <item>
+                    <title>\(item.title)</title>
+                    <link>\(item.link)</link>
+                    <description>Description of \(item.title)</description>
+                    <pubDate>\(formatter.string(from: item.publishedAt))</pubDate>
+                </item>
+            """
+        }
+
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+            <channel>
+                <title>\(title)</title>
+                <link>https://example.com</link>
+                \(itemsXML)
+            </channel>
+        </rss>
+        """
+        return Data(xml.utf8)
+    }
+
     // MARK: - Tests
 
     @Test("Poll inserts new articles from RSS feed")
@@ -344,5 +375,50 @@ struct FeedPollerTests {
         #expect(remaining.count == 3)
         #expect(titles == ["Article 0", "Article 1", "Article 4"])
         #expect(remaining.contains(where: { $0.title == "Article 4" && $0.isInReadingList }))
+    }
+
+    @Test("Single-feed polls can enforce retention and per-feed limits immediately")
+    func singleFeedPollingEnforcesStoragePolicies() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Roshar")
+
+        let now = Date()
+        let feedItems = [
+            (title: "Recent 0", link: "https://example.com/recent-0", publishedAt: now),
+            (title: "Recent 1", link: "https://example.com/recent-1", publishedAt: now.addingTimeInterval(-86400)),
+            (title: "Recent 2", link: "https://example.com/recent-2", publishedAt: now.addingTimeInterval(-2 * 86400)),
+            (title: "Archive 0", link: "https://example.com/archive-0", publishedAt: now.addingTimeInterval(-120 * 86400)),
+            (title: "Archive 1", link: "https://example.com/archive-1", publishedAt: now.addingTimeInterval(-121 * 86400)),
+            (title: "Archive 2", link: "https://example.com/archive-2", publishedAt: now.addingTimeInterval(-122 * 86400)),
+        ]
+
+        var mockFetcher = MockFeedFetcher()
+        mockFetcher.responses["https://example.com/feed.xml"] = .success(FeedFetchResult(
+            data: makeRSSXMLWithDates(title: "Roshar", items: feedItems),
+            httpStatus: 200
+        ))
+
+        let poller = FeedPoller(fetcher: mockFetcher, feedRepo: feedRepo, articleRepo: articleRepo)
+
+        let pollResult = try #require(await poller.pollFeed(id: feed.id))
+        #expect(pollResult.newArticles == 6)
+
+        let storage = await poller.enforceArticleStoragePolicies(
+            retentionDays: 90,
+            maxArticlesPerFeed: 2
+        )
+
+        #expect(storage.deleted == 3)
+        #expect(storage.trimmed == 1)
+
+        var filter = ArticleFilter()
+        filter.feedId = feed.id
+        let remaining = await articleRepo.list(filter: filter, sort: .newest, limit: 100, offset: 0)
+
+        #expect(remaining.count == 2)
+        #expect(Set(remaining.compactMap(\.title)) == ["Recent 0", "Recent 1"])
     }
 }

@@ -50,10 +50,12 @@ actor RefreshCoordinator {
         let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
 
         let result = await poller.pollAllFeeds(bypassBackoff: true)
-        let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
-        let trimmed = (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
+        let storage = await poller.enforceArticleStoragePolicies(
+            retentionDays: retentionDays,
+            maxArticlesPerFeed: maxArticlesPerFeed
+        )
         let prepared = await preparation.processPendingArticles(batchSize: 10, allowLowPriority: true)
-        return (result, deleted, trimmed, prepared)
+        return (result, storage.deleted, storage.trimmed, prepared)
     }
 
     func runBackgroundRefresh(modelContainer: ModelContainer, keychainService: String) async {
@@ -88,8 +90,10 @@ actor RefreshCoordinator {
             let retentionDays = await settingsRepo.retentionDays()
             let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
             _ = await poller.pollAllFeeds(bypassBackoff: bypassBackoff)
-            _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
-            _ = (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
+            _ = await poller.enforceArticleStoragePolicies(
+                retentionDays: retentionDays,
+                maxArticlesPerFeed: maxArticlesPerFeed
+            )
         }
 
         _ = await preparation.processPendingArticles(

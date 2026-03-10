@@ -38,6 +38,17 @@ public struct SingleFeedPollResult: Sendable {
     }
 }
 
+/// Result of enforcing article retention and per-feed limits.
+public struct ArticleStoragePolicyResult: Sendable {
+    public let deleted: Int
+    public let trimmed: Int
+
+    public init(deleted: Int = 0, trimmed: Int = 0) {
+        self.deleted = deleted
+        self.trimmed = trimmed
+    }
+}
+
 // MARK: - FeedPoller Actor
 
 /// Orchestrates the feed ingestion pipeline: fetch → parse → dedupe → store.
@@ -117,6 +128,15 @@ public actor FeedPoller {
     public func cleanupOldArticles(retentionDays: Int) async -> Int {
         let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
         return (try? await articleRepo.deleteOlderThan(date: cutoff)) ?? 0
+    }
+
+    public func enforceArticleStoragePolicies(
+        retentionDays: Int,
+        maxArticlesPerFeed: Int
+    ) async -> ArticleStoragePolicyResult {
+        let deleted = await cleanupOldArticles(retentionDays: retentionDays)
+        let trimmed = (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
+        return ArticleStoragePolicyResult(deleted: deleted, trimmed: trimmed)
     }
 
     // MARK: - Internal Pipeline

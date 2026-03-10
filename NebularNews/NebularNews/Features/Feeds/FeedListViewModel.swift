@@ -8,6 +8,7 @@ import NebularNewsKit
 final class FeedListViewModel {
     let feedRepo: LocalFeedRepository
     private let articleRepo: LocalArticleRepository
+    private let settingsRepo: LocalSettingsRepository
     private let modelContainer: ModelContainer
     private var poller: FeedPoller?
 
@@ -24,6 +25,7 @@ final class FeedListViewModel {
         self.modelContainer = container
         self.feedRepo = LocalFeedRepository(modelContainer: container)
         self.articleRepo = LocalArticleRepository(modelContainer: container)
+        self.settingsRepo = LocalSettingsRepository(modelContainer: container)
     }
 
     private func getPoller() -> FeedPoller {
@@ -66,7 +68,13 @@ final class FeedListViewModel {
     /// Poll a single feed (e.g., right after adding it for title auto-detection).
     func pollSingleFeed(id: String) async {
         let poller = getPoller()
+        let retentionDays = await settingsRepo.retentionDays()
+        let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
         _ = await poller.pollFeed(id: id)
+        _ = await poller.enforceArticleStoragePolicies(
+            retentionDays: retentionDays,
+            maxArticlesPerFeed: maxArticlesPerFeed
+        )
         await loadFeeds()
     }
 
