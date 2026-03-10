@@ -83,6 +83,68 @@ actor RefreshCoordinator {
         )
     }
 
+#if DEBUG
+    func debugKickVisibilityQueue(
+        modelContainer: ModelContainer,
+        keychainService: String
+    ) async -> (backfilled: Int, processed: Int, remainingPending: Int) {
+        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
+        let preparation = ArticlePreparationService(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
+
+        let backfilled = (try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 500)) ?? 0
+        var processed = 0
+
+        for _ in 0..<12 {
+            let batchProcessed = await preparation.processPendingArticles(
+                batchSize: 24,
+                allowLowPriority: false
+            )
+            processed += batchProcessed
+
+            let pending = await articleRepo.pendingVisibleArticleCount()
+            if pending == 0 || batchProcessed == 0 {
+                return (backfilled, processed, pending)
+            }
+        }
+
+        let remainingPending = await articleRepo.pendingVisibleArticleCount()
+        return (backfilled, processed, remainingPending)
+    }
+
+    func debugKickAllQueuedWork(
+        modelContainer: ModelContainer,
+        keychainService: String
+    ) async -> (backfilled: Int, imageBackfilled: Int, processed: Int, remainingPending: Int) {
+        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
+        let preparation = ArticlePreparationService(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
+
+        let backfilled = (try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 500)) ?? 0
+        let imageBackfilled = (try? await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 300)) ?? 0
+        var processed = 0
+
+        for _ in 0..<20 {
+            let batchProcessed = await preparation.processPendingArticles(
+                batchSize: 24,
+                allowLowPriority: true
+            )
+            processed += batchProcessed
+
+            if batchProcessed == 0 {
+                break
+            }
+        }
+
+        let remainingPending = await articleRepo.pendingVisibleArticleCount()
+        return (backfilled, imageBackfilled, processed, remainingPending)
+    }
+#endif
+
     private func refreshIfNeeded(
         modelContainer: ModelContainer,
         keychainService: String,

@@ -5,9 +5,13 @@ import NebularNewsKit
 
 struct DeveloperJobInspectorView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppState.self) private var appState
 
     @State private var snapshot: ArticleProcessingDebugSnapshot?
     @State private var isRefreshing = false
+    @State private var isKickingVisibility = false
+    @State private var isKickingAll = false
+    @State private var kickStatusMessage: String?
 
     var body: some View {
         List {
@@ -28,6 +32,36 @@ struct DeveloperJobInspectorView: View {
                         LabeledContent("Resolve image", value: "\(totalCount(for: .resolveImage, in: snapshot))")
                     }
                     .padding(.vertical, 4)
+
+                    if snapshot.queuedCount > 0 && snapshot.runningCount == 0 {
+                        Label("Queued jobs exist, but nothing is actively running.", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+
+                    if let kickStatusMessage, !kickStatusMessage.isEmpty {
+                        Text(kickStatusMessage)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Button {
+                        Task {
+                            await kickVisibilityQueue()
+                        }
+                    } label: {
+                        Label("Kick Visibility Queue", systemImage: "bolt.fill")
+                    }
+                    .disabled(isRefreshing || isKickingVisibility || isKickingAll)
+
+                    Button {
+                        Task {
+                            await kickAllQueuedWork()
+                        }
+                    } label: {
+                        Label("Run All Queued Work", systemImage: "play.fill")
+                    }
+                    .disabled(isRefreshing || isKickingVisibility || isKickingAll)
                 } else {
                     HStack(spacing: 12) {
                         ProgressView()
@@ -81,7 +115,7 @@ struct DeveloperJobInspectorView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if isRefreshing {
+                if isRefreshing || isKickingVisibility || isKickingAll {
                     ProgressView()
                         .controlSize(.small)
                 }
@@ -137,6 +171,40 @@ struct DeveloperJobInspectorView: View {
         await MainActor.run {
             self.snapshot = snapshot
             isRefreshing = false
+        }
+    }
+
+    private func kickVisibilityQueue() async {
+        guard !isKickingVisibility && !isKickingAll else { return }
+        isKickingVisibility = true
+        kickStatusMessage = "Running score-and-tag jobs for hidden articles…"
+
+        let result = await RefreshCoordinator.shared.debugKickVisibilityQueue(
+            modelContainer: modelContext.container,
+            keychainService: appState.configuration.keychainService
+        )
+
+        await refreshSnapshot()
+        await MainActor.run {
+            kickStatusMessage = "Visibility queue: backfilled \(result.backfilled), processed \(result.processed), remaining \(result.remainingPending)."
+            isKickingVisibility = false
+        }
+    }
+
+    private func kickAllQueuedWork() async {
+        guard !isKickingVisibility && !isKickingAll else { return }
+        isKickingAll = true
+        kickStatusMessage = "Running queued score, content, image, and summary jobs…"
+
+        let result = await RefreshCoordinator.shared.debugKickAllQueuedWork(
+            modelContainer: modelContext.container,
+            keychainService: appState.configuration.keychainService
+        )
+
+        await refreshSnapshot()
+        await MainActor.run {
+            kickStatusMessage = "All work: backfilled \(result.backfilled), image backfilled \(result.imageBackfilled), processed \(result.processed), remaining visible backlog \(result.remainingPending)."
+            isKickingAll = false
         }
     }
 
