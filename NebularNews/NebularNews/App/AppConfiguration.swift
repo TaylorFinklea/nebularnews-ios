@@ -6,6 +6,7 @@ struct AppConfiguration {
     let bundleIdentifier: String
     let keychainService: String
     let backgroundRefreshTaskIdentifier: String
+    let backgroundProcessingTaskIdentifier: String
     let cloudKitEnabled: Bool
     let cloudKitContainerIdentifier: String?
     let mobileOAuthClientId: String
@@ -20,6 +21,9 @@ struct AppConfiguration {
         self.backgroundRefreshTaskIdentifier =
             bundle.stringValue(forInfoDictionaryKey: "BackgroundRefreshTaskIdentifier")
             ?? "\(bundleIdentifier).feedRefresh"
+        self.backgroundProcessingTaskIdentifier =
+            bundle.stringValue(forInfoDictionaryKey: "BackgroundProcessingTaskIdentifier")
+            ?? "\(bundleIdentifier).articleProcessing"
         self.cloudKitEnabled = bundle.boolValue(forInfoDictionaryKey: "CloudKitEnabled")
         self.cloudKitContainerIdentifier = bundle.stringValue(forInfoDictionaryKey: "CloudKitContainerIdentifier")
         self.mobileOAuthClientId = bundle.stringValue(forInfoDictionaryKey: "MobileOAuthClientId") ?? "nebular-news-ios"

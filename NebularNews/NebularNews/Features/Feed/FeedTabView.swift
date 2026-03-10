@@ -99,14 +99,12 @@ struct FeedTabView: View {
                     searchText: searchText
                 )
             }
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-                Task {
-                    await viewModel.reload(
-                        container: modelContext.container,
-                        filterMode: filterMode,
-                        searchText: searchText
-                    )
-                }
+            .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
+                viewModel.scheduleDebouncedReload(
+                    container: modelContext.container,
+                    filterMode: filterMode,
+                    searchText: searchText
+                )
             }
         }
     }
@@ -329,6 +327,8 @@ private final class FeedBrowseViewModel {
     private var articleRepo: LocalArticleRepository?
     private var requestToken = 0
     private var totalVisibleCount = 0
+    private var nextCursor: ArticleListCursor?
+    private var reloadTask: Task<Void, Never>?
 
     var articles: [Article] = []
     var visibleCount = 0
@@ -351,20 +351,14 @@ private final class FeedBrowseViewModel {
         isInitialLoadInProgress = true
 
         let filter = makeFilter(filterMode: filterMode, searchText: searchText)
-        let pendingFilter: ArticleFilter = {
-            var filter = ArticleFilter()
-            filter.presentationFilter = .pendingOnly
-            return filter
-        }()
 
-        async let visibleArticles = articleRepo.listVisibleArticles(
+        async let visibleArticles = articleRepo.listFeedPage(
             filter: filter,
-            sort: .newest,
-            limit: initialBatchSize,
-            offset: 0
+            cursor: nil,
+            limit: initialBatchSize
         )
-        async let visibleCount = articleRepo.countVisibleArticles(filter: filter)
-        async let pendingCount = articleRepo.count(filter: pendingFilter)
+        async let visibleCount = articleRepo.countFeed(filter: filter)
+        async let pendingCount = articleRepo.pendingVisibleArticleCount()
 
         let loadedArticles = await visibleArticles
         let loadedCount = await visibleCount
@@ -373,6 +367,7 @@ private final class FeedBrowseViewModel {
         guard token == requestToken else { return }
 
         articles = loadedArticles
+        nextCursor = loadedArticles.last.map { ArticleListCursor(sortDate: $0.querySortDate, articleID: $0.id) }
         totalVisibleCount = loadedCount
         self.visibleCount = loadedCount
         pendingPreparationCount = loadedPendingCount
@@ -396,16 +391,16 @@ private final class FeedBrowseViewModel {
         let articleRepo = repository(for: container)
         isLoadingMore = true
         let filter = makeFilter(filterMode: filterMode, searchText: searchText)
-        let nextBatch = await articleRepo.listVisibleArticles(
+        let nextBatch = await articleRepo.listFeedPage(
             filter: filter,
-            sort: .newest,
-            limit: loadMoreBatchSize,
-            offset: articles.count
+            cursor: nextCursor,
+            limit: loadMoreBatchSize
         )
 
         let existingIDs = Set(articles.map(\.id))
         let appended = nextBatch.filter { !existingIDs.contains($0.id) }
         articles.append(contentsOf: appended)
+        nextCursor = articles.last.map { ArticleListCursor(sortDate: $0.querySortDate, articleID: $0.id) }
         isLoadingMore = false
     }
 
@@ -430,6 +425,23 @@ private final class FeedBrowseViewModel {
         }
 
         return index >= max(0, articles.count - 5)
+    }
+
+    func scheduleDebouncedReload(
+        container: ModelContainer,
+        filterMode: FeedFilterMode,
+        searchText: String
+    ) {
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+            await self.reload(
+                container: container,
+                filterMode: filterMode,
+                searchText: searchText
+            )
+        }
     }
 
     private func makeFilter(

@@ -5,7 +5,10 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).articleProcessing</string>
 	</array>
+	<key>BackgroundProcessingTaskIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER).articleProcessing</string>
 	<key>BackgroundRefreshTaskIdentifier</key>
 	<string>$(BACKGROUND_REFRESH_TASK_IDENTIFIER)</string>
 	<key>CFBundleDevelopmentRegion</key>

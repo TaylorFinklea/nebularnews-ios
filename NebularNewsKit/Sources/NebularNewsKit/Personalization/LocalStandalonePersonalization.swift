@@ -708,6 +708,7 @@ actor LocalPersonalizationRepository {
             article.scoreAssistGeneratedAt = nil
         }
 
+        article.refreshQueryState()
         try modelContext.save()
     }
 
@@ -836,6 +837,7 @@ actor LocalPersonalizationRepository {
         article.signalScoresJson = encodeJSON(algorithmicScore.signals)
         article.scoreExplanation = algorithmicScore.status == .ready ? explanation : nil
         article.personalizationVersion = currentPersonalizationVersion
+        article.markScorePrepared(revision: max(article.contentRevision, currentPersonalizationVersion))
         try modelContext.save()
     }
 

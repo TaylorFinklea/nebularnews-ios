@@ -17,6 +17,16 @@ public enum ArticleSort: String, Sendable, CaseIterable {
     case newest, oldest, scoreDesc, scoreAsc, unreadFirst
 }
 
+public struct ArticleListCursor: Codable, Hashable, Sendable {
+    public let sortDate: Date
+    public let articleID: String
+
+    public init(sortDate: Date, articleID: String) {
+        self.sortDate = sortDate
+        self.articleID = articleID
+    }
+}
+
 public struct ArticleFilter: Sendable {
     public var presentationFilter: ArticlePresentationFilter = .all
     public var readFilter: ArticleReadFilter = .all
@@ -38,11 +48,22 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func listVisibleArticles(filter: ArticleFilter, sort: ArticleSort, limit: Int, offset: Int) async -> [Article]
     func count(filter: ArticleFilter) async -> Int
     func countVisibleArticles(filter: ArticleFilter) async -> Int
+    func listFeedPage(filter: ArticleFilter, cursor: ArticleListCursor?, limit: Int) async -> [Article]
+    func countFeed(filter: ArticleFilter) async -> Int
+    func fetchTodaySnapshot() async -> TodaySnapshot
+    func rebuildTodaySnapshot() async
+    func fetchReadingListPage(filter: ArticleFilter, cursor: ArticleListCursor?, limit: Int) async -> [Article]
+    func listArticles(ids: [String]) async -> [Article]
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
     func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate?
     func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
+    func pendingVisibleArticleCount() async -> Int
+    func enqueueMissingProcessingJobs(for articleID: String) async throws
+    func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String]
+    func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob?
+    func completeProcessingJob(articleID: String, stage: ArticleProcessingStage, status: ArticleProcessingJobStatus, inputRevision: Int, error: String?) async throws
     func insert(_ article: Article) async throws
     func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
@@ -152,9 +173,27 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func count(filter: ArticleFilter) async -> Int {
-        // For simple counts, fetch IDs only
-        let descriptor = FetchDescriptor<Article>()
-        let all = (try? modelContext.fetch(descriptor)) ?? []
+        let searchText = filter.searchText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let needsInMemoryFiltering =
+            filter.readFilter != .all ||
+            filter.minScore != nil ||
+            filter.maxScore != nil ||
+            filter.publishedAfter != nil ||
+            filter.feedId != nil ||
+            !filter.tagIds.isEmpty ||
+            !((searchText?.isEmpty) ?? true)
+
+        let baseDescriptor = baseCountDescriptor(
+            presentationFilter: filter.presentationFilter,
+            requireReadingList: filter.readingListOnly
+        )
+
+        if !needsInMemoryFiltering,
+           let count = try? modelContext.fetchCount(baseDescriptor) {
+            return count
+        }
+
+        let all = (try? modelContext.fetch(baseDescriptor)) ?? []
         return applyInMemoryFilters(all, filter: filter).count
     }
 
@@ -162,6 +201,213 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         var visibleFilter = filter
         visibleFilter.presentationFilter = .readyOnly
         return await count(filter: visibleFilter)
+    }
+
+    public func listFeedPage(
+        filter: ArticleFilter,
+        cursor: ArticleListCursor?,
+        limit: Int
+    ) async -> [Article] {
+        var feedFilter = filter
+        feedFilter.presentationFilter = .readyOnly
+        return await pagedArticles(
+            filter: feedFilter,
+            cursor: cursor,
+            limit: limit,
+            requireReadingList: false
+        )
+    }
+
+    public func countFeed(filter: ArticleFilter) async -> Int {
+        var feedFilter = filter
+        feedFilter.presentationFilter = .readyOnly
+        return await count(filter: feedFilter)
+    }
+
+    public func fetchTodaySnapshot() async -> TodaySnapshot {
+        var descriptor = FetchDescriptor<TodaySnapshot>(
+            predicate: #Predicate<TodaySnapshot> { $0.id == "singleton" }
+        )
+        descriptor.fetchLimit = 1
+        if let snapshot = try? modelContext.fetch(descriptor).first {
+            return snapshot
+        }
+
+        let snapshot = TodaySnapshot()
+        modelContext.insert(snapshot)
+        try? modelContext.save()
+        return snapshot
+    }
+
+    public func rebuildTodaySnapshot() async {
+        let snapshot = await fetchTodaySnapshot()
+        let now = Date()
+        let dayAgo = now.addingTimeInterval(-86_400)
+
+        snapshot.generatedAt = now
+        snapshot.unreadCount = unreadVisibleCount()
+        snapshot.newTodayCount = unreadVisibleCount(publishedAfter: dayAgo)
+        snapshot.highFitCount = highFitUnreadVisibleCount()
+        snapshot.readyArticleCount = readyVisibleCount()
+
+        let topArticles = topVisibleUnreadArticles(limit: 10)
+        snapshot.heroArticleID = topArticles.first?.id
+        snapshot.updateUpNextArticleIDs(Array(topArticles.dropFirst()).map(\.id))
+        snapshot.sourceWatermark = topArticles.first?.querySortDate ?? now
+
+        try? modelContext.save()
+        ArticleChangeBus.postTodaySnapshotChanged()
+    }
+
+    public func fetchReadingListPage(
+        filter: ArticleFilter,
+        cursor: ArticleListCursor?,
+        limit: Int
+    ) async -> [Article] {
+        var readingListFilter = filter
+        readingListFilter.readingListOnly = true
+        readingListFilter.presentationFilter = .readyOnly
+        return await pagedArticles(
+            filter: readingListFilter,
+            cursor: cursor,
+            limit: limit,
+            requireReadingList: true
+        )
+    }
+
+    public func listArticles(ids: [String]) async -> [Article] {
+        guard !ids.isEmpty else { return [] }
+        let descriptor = FetchDescriptor<Article>()
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+        let byID = Dictionary(uniqueKeysWithValues: articles.map { ($0.id, $0) })
+        return ids.compactMap { byID[$0] }
+    }
+
+    public func pendingVisibleArticleCount() async -> Int {
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.queryIsVisible == false }
+        )
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    public func enqueueMissingProcessingJobs(for articleID: String) async throws {
+        guard let article = await get(id: articleID) else { return }
+
+        try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .scoreAndTag,
+            priority: 300,
+            inputRevision: max(article.contentRevision, currentPersonalizationVersion),
+            shouldQueue: article.scorePreparedRevision < max(article.contentRevision, currentPersonalizationVersion)
+        )
+
+        try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .fetchContent,
+            priority: 200,
+            inputRevision: article.contentRevision,
+            shouldQueue: article.contentFetchAttemptedAt == nil && article.needsContentFetch()
+        )
+
+        try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .generateSummary,
+            priority: 100,
+            inputRevision: article.contentRevision,
+            shouldQueue: article.summaryPreparedRevision < article.contentRevision
+        )
+
+        try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .resolveImage,
+            priority: 100,
+            inputRevision: currentImagePreparationRevision,
+            shouldQueue: article.resolvedImageUrl == nil && article.imagePreparedRevision < currentImagePreparationRevision
+        )
+
+        try modelContext.save()
+    }
+
+    public func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String] {
+        let descriptor = FetchDescriptor<ArticleProcessingJob>(
+            sortBy: [
+                SortDescriptor(\.priority, order: .reverse),
+                SortDescriptor(\.updatedAt, order: .forward)
+            ]
+        )
+
+        let now = Date()
+        let minimumPriority = allowLowPriority ? 0 : 200
+        let queuedJobs = ((try? modelContext.fetch(descriptor)) ?? [])
+            .filter { job in
+                job.status == .queued &&
+                job.availableAt <= now &&
+                job.priority >= minimumPriority
+            }
+            .prefix(limit)
+
+        var claimed: [String] = []
+        for job in queuedJobs {
+            job.status = .running
+            job.updatedAt = now
+            claimed.append(job.key)
+        }
+        try? modelContext.save()
+        return claimed
+    }
+
+    public func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob? {
+        let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
+        var descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    public func completeProcessingJob(
+        articleID: String,
+        stage: ArticleProcessingStage,
+        status: ArticleProcessingJobStatus,
+        inputRevision: Int,
+        error: String? = nil
+    ) async throws {
+        guard let job = await processingJob(articleID: articleID, stage: stage) else { return }
+        job.status = status
+        job.inputRevision = inputRevision
+        job.lastError = error
+        job.updatedAt = Date()
+        if status == .failed {
+            job.attemptCount += 1
+            job.availableAt = Date().addingTimeInterval(60)
+        }
+        try modelContext.save()
+    }
+
+    public func markSummaryAttempt(
+        id: String,
+        status: ArticlePreparationStageStatus,
+        revision: Int
+    ) async throws {
+        guard let article = await get(id: id) else { return }
+        article.enrichmentPreparationStatusRaw = status.rawValue
+        article.markSummaryPrepared(revision: revision)
+        try modelContext.save()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
+    }
+
+    public func markImageAttempt(
+        id: String,
+        status: ArticlePreparationStageStatus,
+        revision: Int
+    ) async throws {
+        guard let article = await get(id: id) else { return }
+        article.imagePreparationStatusRaw = status.rawValue
+        article.markImagePrepared(revision: revision)
+        try modelContext.save()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func get(id: String) async -> Article? {
@@ -250,8 +496,13 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         if article.enrichmentPreparationStatusRaw == nil {
             article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
         }
+        if article.contentRevision == 0 {
+            article.contentRevision = 1
+        }
+        article.refreshQueryState()
         modelContext.insert(article)
         try modelContext.save()
+        try await enqueueMissingProcessingJobs(for: article.id)
     }
 
     public func insertForFeed(feedId: String, article: ParsedArticle) async throws {
@@ -274,9 +525,13 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         newArticle.imagePreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
         newArticle.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
         newArticle.presentationReadyAt = nil
+        newArticle.queryIsVisible = false
+        newArticle.contentRevision = 1
+        newArticle.refreshQueryState()
 
         modelContext.insert(newArticle)
         try modelContext.save()
+        try await enqueueMissingProcessingJobs(for: newArticle.id)
     }
 
     public func markRead(id: String, isRead: Bool) async throws {
@@ -287,6 +542,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             article.markUnread()
         }
         try modelContext.save()
+        await rebuildTodaySnapshot()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func setReadingList(id: String, isSaved: Bool) async throws {
@@ -297,12 +555,17 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             article.removeFromReadingList()
         }
         try modelContext.save()
+        ArticleChangeBus.postReadingListChanged()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func react(id: String, value: Int?, reasonCodes: [String]?) async throws {
         guard let article = await get(id: id) else { return }
         article.setReaction(value: value, reasonCodes: reasonCodes)
         try modelContext.save()
+        await rebuildTodaySnapshot()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func addTag(articleId: String, tag: Tag) async throws {
@@ -344,8 +607,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         if let summaryModel { article.summaryModel = summaryModel }
         article.aiProcessedAt = Date()
         article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        article.markSummaryPrepared(revision: article.contentRevision)
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func updateFetchedContent(id: String, contentHtml: String, excerpt: String?) async throws {
@@ -362,6 +627,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.contentFetchAttemptedAt = now
         article.contentFetchedAt = now
         article.contentPreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        article.bumpContentRevision()
 
         // Recompute downstream outputs from the fuller article body.
         article.summaryText = nil
@@ -371,6 +637,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.keyPointsJson = nil
         article.aiProcessedAt = nil
         article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        article.summaryPreparedRevision = 0
 
         article.score = nil
         article.scoreLabel = nil
@@ -380,6 +647,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.scoreExplanation = nil
         article.scoreStatus = nil
         article.signalScoresJson = nil
+        article.queryDisplayedScore = 0
+        article.scorePreparedRevision = 0
 
         article.scoreAssistExplanation = nil
         article.scoreAssistProvider = nil
@@ -391,6 +660,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+        try await enqueueMissingProcessingJobs(for: id)
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func recordContentFetchAttempt(id: String) async throws {
@@ -413,8 +684,11 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.fallbackImageTheme = themeKey
         article.fallbackImageGeneratedAt = Date()
         article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        article.markImagePrepared(revision: currentImagePreparationRevision)
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     /// Returns snapshots of articles that haven't been AI-processed yet and have content.
@@ -454,8 +728,11 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         guard let article = await get(id: id) else { return }
         article.ogImageUrl = ogImageUrl
         article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+        article.markImagePrepared(revision: currentImagePreparationRevision)
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func setPreparationState(
@@ -478,6 +755,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         applyPresentationReadyIfNeeded(to: article)
         try modelContext.save()
+        ArticleChangeBus.postArticleChanged(id: id)
     }
 
     public func trimExcessArticlesPerFeed(maxPerFeed: Int) async throws -> Int {
@@ -547,15 +825,21 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     private func sortDescriptors(for sort: ArticleSort) -> [SortDescriptor<Article>] {
         switch sort {
         case .newest:
-            return [SortDescriptor(\.publishedAt, order: .reverse)]
+            return [SortDescriptor(\.querySortDate, order: .reverse)]
         case .oldest:
-            return [SortDescriptor(\.publishedAt, order: .forward)]
+            return [SortDescriptor(\.querySortDate, order: .forward)]
         case .scoreDesc:
-            return [SortDescriptor(\.score, order: .reverse)]
+            return [
+                SortDescriptor(\.queryDisplayedScore, order: .reverse),
+                SortDescriptor(\.querySortDate, order: .reverse)
+            ]
         case .scoreAsc:
-            return [SortDescriptor(\.score, order: .forward)]
+            return [
+                SortDescriptor(\.queryDisplayedScore, order: .forward),
+                SortDescriptor(\.querySortDate, order: .reverse)
+            ]
         case .unreadFirst:
-            return [SortDescriptor(\.publishedAt, order: .reverse)]
+            return [SortDescriptor(\.querySortDate, order: .reverse)]
         }
     }
 
@@ -633,12 +917,233 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     private func applyPresentationReadyIfNeeded(to article: Article) {
-        guard article.presentationReadyAt == nil else {
+        article.refreshQueryState()
+        guard article.queryIsVisible,
+              article.presentationReadyAt == nil else {
             return
         }
 
-        if article.hasAttemptedPresentationPreparation {
-            article.presentationReadyAt = Date()
+        article.presentationReadyAt = Date()
+    }
+
+    private func pagedArticles(
+        filter: ArticleFilter,
+        cursor: ArticleListCursor?,
+        limit: Int,
+        requireReadingList: Bool
+    ) async -> [Article] {
+        if let search = filter.searchText?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !search.isEmpty {
+            var boundedFilter = filter
+            boundedFilter.searchText = search
+            return await list(
+                filter: boundedFilter,
+                sort: .newest,
+                limit: limit,
+                offset: 0
+            )
         }
+
+        let chunkSize = max(limit * 4, 120)
+        let maxPasses = 8
+        var offset = 0
+        var collected: [Article] = []
+
+        for _ in 0..<maxPasses {
+            var descriptor = basePagedDescriptor(
+                presentationFilter: filter.presentationFilter,
+                requireReadingList: requireReadingList
+            )
+            descriptor.fetchOffset = offset
+            descriptor.fetchLimit = chunkSize
+
+            let chunk = (try? modelContext.fetch(descriptor)) ?? []
+            if chunk.isEmpty {
+                break
+            }
+
+            let filtered = applyInMemoryFilters(chunk, filter: filter).filter { article in
+                guard let cursor else { return true }
+                return article.querySortDate < cursor.sortDate ||
+                    (article.querySortDate == cursor.sortDate && article.id < cursor.articleID)
+            }
+
+            collected.append(contentsOf: filtered)
+            if collected.count >= limit {
+                break
+            }
+
+            offset += chunkSize
+        }
+
+        return Array(collected.prefix(limit))
+    }
+
+    private func basePagedDescriptor(
+        presentationFilter: ArticlePresentationFilter,
+        requireReadingList: Bool
+    ) -> FetchDescriptor<Article> {
+        let sortBy = [
+            SortDescriptor(\Article.querySortDate, order: .reverse),
+            SortDescriptor(\Article.id, order: .reverse)
+        ]
+
+        switch (presentationFilter, requireReadingList) {
+        case (.pendingOnly, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false && article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        case (.pendingOnly, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false
+                },
+                sortBy: sortBy
+            )
+        case (_, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        default:
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == true
+                },
+                sortBy: sortBy
+            )
+        }
+    }
+
+    private func baseCountDescriptor(
+        presentationFilter: ArticlePresentationFilter,
+        requireReadingList: Bool
+    ) -> FetchDescriptor<Article> {
+        switch (presentationFilter, requireReadingList) {
+        case (.pendingOnly, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false && article.readingListAddedAt != nil
+                }
+            )
+        case (.pendingOnly, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false
+                }
+            )
+        case (_, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.readingListAddedAt != nil
+                }
+            )
+        default:
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == true
+                }
+            )
+        }
+    }
+
+    private func unreadVisibleCount(publishedAfter: Date? = nil) -> Int {
+        let threshold = publishedAfter ?? .distantPast
+        let hasThreshold = publishedAfter != nil
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { article in
+                article.queryIsVisible == true &&
+                article.queryIsUnreadQueueCandidate == true &&
+                (!hasThreshold || article.querySortDate >= threshold)
+            }
+        )
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    private func highFitUnreadVisibleCount() -> Int {
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { article in
+                article.queryIsVisible == true &&
+                article.queryIsUnreadQueueCandidate == true &&
+                article.queryDisplayedScore >= 4
+            }
+        )
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    private func readyVisibleCount() -> Int {
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { article in
+                article.queryIsVisible == true
+            }
+        )
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    private func topVisibleUnreadArticles(limit: Int) -> [Article] {
+        var descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { article in
+                article.queryIsVisible == true &&
+                article.queryIsUnreadQueueCandidate == true &&
+                article.queryDisplayedScore >= 1
+            },
+            sortBy: [
+                SortDescriptor(\.queryDisplayedScore, order: .reverse),
+                SortDescriptor(\.querySortDate, order: .reverse)
+            ]
+        )
+        descriptor.fetchLimit = limit
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    private func ensureProcessingJobIfNeeded(
+        articleID: String,
+        stage: ArticleProcessingStage,
+        priority: Int,
+        inputRevision: Int,
+        shouldQueue: Bool
+    ) throws {
+        let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
+        var descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
+        )
+        descriptor.fetchLimit = 1
+        let existing = try modelContext.fetch(descriptor).first
+
+        guard shouldQueue else {
+            if let existing, existing.status == .queued || existing.status == .running {
+                existing.status = .skipped
+                existing.inputRevision = inputRevision
+                existing.updatedAt = Date()
+            }
+            return
+        }
+
+        if let existing {
+            guard existing.status != .queued || existing.inputRevision != inputRevision else {
+                return
+            }
+            existing.status = .queued
+            existing.priority = priority
+            existing.availableAt = Date()
+            existing.inputRevision = inputRevision
+            existing.lastError = nil
+            existing.updatedAt = Date()
+            return
+        }
+
+        modelContext.insert(
+            ArticleProcessingJob(
+                articleID: articleID,
+                stage: stage,
+                priority: priority,
+                inputRevision: inputRevision
+            )
+        )
     }
 }

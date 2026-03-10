@@ -46,20 +46,21 @@ struct NebularNewsApp: App {
             .task(id: appState.mode) {
                 guard appState.isStandaloneMode else { return }
                 let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
-                let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
                 let service = LocalStandalonePersonalizationService(
                     modelContainer: modelContainer,
                     keychainService: appState.configuration.keychainService
                 )
                 await service.bootstrap()
+                _ = await settingsRepo.getOrCreate()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
                 }
 #endif
-                let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
-                _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)
-                await runAutomaticArticlePreparation(limit: 8)
+                WarmStartCoordinator.schedule(
+                    modelContainer: modelContainer,
+                    keychainService: appState.configuration.keychainService
+                )
             }
         }
         .modelContainer(modelContainer)
@@ -68,6 +69,7 @@ struct NebularNewsApp: App {
             case .background:
                 if appState.isStandaloneMode {
                     BackgroundTaskManager.scheduleNextRefresh()
+                    BackgroundTaskManager.scheduleNextProcessing()
                 }
             case .active:
                 // Could trigger foreground poll-if-stale here in the future
@@ -76,13 +78,5 @@ struct NebularNewsApp: App {
                 break
             }
         }
-    }
-
-    private func runAutomaticArticlePreparation(limit: Int) async {
-        let preparation = ArticlePreparationService(
-            modelContainer: modelContainer,
-            keychainService: appState.configuration.keychainService
-        )
-        _ = await preparation.processPendingArticles(batchSize: limit)
     }
 }

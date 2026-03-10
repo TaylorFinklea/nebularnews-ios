@@ -92,14 +92,19 @@ struct ReadingListView: View {
                     filterMode: filterMode
                 )
             }
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
-                Task {
-                    await viewModel.reload(
-                        container: modelContext.container,
-                        searchText: searchText,
-                        filterMode: filterMode
-                    )
-                }
+            .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.readingListChanged)) { _ in
+                viewModel.scheduleDebouncedReload(
+                    container: modelContext.container,
+                    searchText: searchText,
+                    filterMode: filterMode
+                )
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
+                viewModel.scheduleDebouncedReload(
+                    container: modelContext.container,
+                    searchText: searchText,
+                    filterMode: filterMode
+                )
             }
         }
     }
@@ -248,6 +253,7 @@ private struct ReadingListSkeletonRow: View {
 private final class ReadingListBrowseViewModel {
     private var articleRepo: LocalArticleRepository?
     private var requestToken = 0
+    private var reloadTask: Task<Void, Never>?
 
     var savedArticles: [Article] = []
     var pendingSavedCount = 0
@@ -276,11 +282,10 @@ private final class ReadingListBrowseViewModel {
             return filter
         }()
 
-        async let savedArticles = articleRepo.listVisibleArticles(
+        async let savedArticles = articleRepo.fetchReadingListPage(
             filter: savedFilter,
-            sort: .newest,
-            limit: 500,
-            offset: 0
+            cursor: nil,
+            limit: 500
         )
         async let totalSavedCount = articleRepo.count(filter: savedFilter)
         async let pendingSavedCount = articleRepo.count(filter: pendingSavedFilter)
@@ -314,5 +319,22 @@ private final class ReadingListBrowseViewModel {
         let articleRepo = LocalArticleRepository(modelContainer: container)
         self.articleRepo = articleRepo
         return articleRepo
+    }
+
+    func scheduleDebouncedReload(
+        container: ModelContainer,
+        searchText: String,
+        filterMode: ReadingListFilterMode
+    ) {
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+            await self.reload(
+                container: container,
+                searchText: searchText,
+                filterMode: filterMode
+            )
+        }
     }
 }

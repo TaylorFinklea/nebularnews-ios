@@ -33,20 +33,20 @@ public actor ArticlePreparationService {
     }
 
     public func pendingPresentationCount() async -> Int {
-        var filter = ArticleFilter()
-        filter.presentationFilter = .pendingOnly
-        return await articleRepo.count(filter: filter)
+        await articleRepo.pendingVisibleArticleCount()
     }
 
     @discardableResult
-    public func processPendingArticles(batchSize: Int = 10) async -> Int {
-        _ = await personalization.rebuildPersonalizationFromHistory(batchSize: 200)
-        var filter = ArticleFilter()
-        filter.presentationFilter = .pendingOnly
-        let candidates = await articleRepo.list(filter: filter, sort: .newest, limit: batchSize, offset: 0)
-        let articleIDs = candidates.map(\.id)
+    public func processPendingArticles(
+        batchSize: Int = 10,
+        allowLowPriority: Bool = true
+    ) async -> Int {
+        let claimedKeys = await articleRepo.claimProcessingJobs(
+            limit: batchSize,
+            allowLowPriority: allowLowPriority
+        )
 
-        guard !articleIDs.isEmpty else {
+        guard !claimedKeys.isEmpty else {
             return 0
         }
 
@@ -60,27 +60,23 @@ public actor ArticlePreparationService {
             enricher: enricher
         )
 
-        return await withTaskGroup(of: Bool.self, returning: Int.self) { group in
-            var iterator = articleIDs.makeIterator()
-            let initialConcurrency = min(2, articleIDs.count)
+        return await withTaskGroup(of: Void.self, returning: Int.self) { group in
+            var iterator = claimedKeys.makeIterator()
+            let maxConcurrency = min(2, claimedKeys.count)
 
-            for _ in 0..<initialConcurrency {
-                guard let articleID = iterator.next() else { break }
+            for _ in 0..<maxConcurrency {
+                guard let key = iterator.next() else { break }
                 group.addTask {
-                    await preparePendingArticle(articleID: articleID, dependencies: dependencies)
+                    await processJob(key: key, dependencies: dependencies)
                 }
             }
 
             var completed = 0
-
-            while let succeeded = await group.next() {
-                if succeeded {
-                    completed += 1
-                }
-
-                if let nextArticleID = iterator.next() {
+            while await group.next() != nil {
+                completed += 1
+                if let key = iterator.next() {
                     group.addTask {
-                        await preparePendingArticle(articleID: nextArticleID, dependencies: dependencies)
+                        await processJob(key: key, dependencies: dependencies)
                     }
                 }
             }
@@ -100,125 +96,135 @@ private struct PreparationDependencies: Sendable {
     let enricher: AIEnrichmentService
 }
 
-private func preparePendingArticle(
-    articleID: String,
+private func processJob(
+    key: String,
     dependencies: PreparationDependencies
-) async -> Bool {
-    guard await dependencies.articleRepo.get(id: articleID) != nil else {
-        return false
-    }
+) async {
+    guard let parsed = parseJobKey(key) else { return }
 
-    await prepareContentStage(articleID: articleID, dependencies: dependencies)
-    await prepareImageStage(articleID: articleID, dependencies: dependencies)
-    try? await dependencies.personalization.retagAndScoreArticle(articleID: articleID)
-    await prepareEnrichmentStage(articleID: articleID, dependencies: dependencies)
-    return true
+    switch parsed.stage {
+    case .scoreAndTag:
+        await processScoreJob(articleID: parsed.articleID, dependencies: dependencies)
+    case .fetchContent:
+        await processContentJob(articleID: parsed.articleID, dependencies: dependencies)
+    case .generateSummary:
+        await processSummaryJob(articleID: parsed.articleID, dependencies: dependencies)
+    case .resolveImage:
+        await processImageJob(articleID: parsed.articleID, dependencies: dependencies)
+    }
 }
 
-private func prepareContentStage(
+private func processScoreJob(
     articleID: String,
     dependencies: PreparationDependencies
 ) async {
-    guard let article = await dependencies.articleRepo.get(id: articleID) else {
-        return
-    }
+    guard let article = await dependencies.articleRepo.get(id: articleID) else { return }
+    let revision = max(article.contentRevision, currentPersonalizationVersion)
 
-    guard article.contentPreparationStatusValue == .pending else {
-        return
+    do {
+        try await dependencies.personalization.retagAndScoreArticle(articleID: articleID)
+        try await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .scoreAndTag,
+            status: .done,
+            inputRevision: revision,
+            error: nil
+        )
+        await dependencies.articleRepo.rebuildTodaySnapshot()
+        ArticleChangeBus.postFeedPageMightChange()
+        ArticleChangeBus.postArticleChanged(id: articleID)
+    } catch {
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .scoreAndTag,
+            status: .failed,
+            inputRevision: revision,
+            error: error.localizedDescription
+        )
     }
+}
 
-    if article.needsContentFetch() {
-        let result = await dependencies.contentFetcher.fetchMissingContent(articleId: articleID)
+private func processContentJob(
+    articleID: String,
+    dependencies: PreparationDependencies
+) async {
+    guard let article = await dependencies.articleRepo.get(id: articleID) else { return }
+    let revision = article.contentRevision
+
+    guard article.needsContentFetch() else {
+        let status: ArticlePreparationStageStatus = article.bestAvailableContentLength >= 1_200 ? .skipped : .blocked
         try? await dependencies.articleRepo.setPreparationState(
             id: articleID,
-            content: mapContentPreparationStatus(result.status),
+            content: status,
             image: nil,
             enrichment: nil
+        )
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .fetchContent,
+            status: status == .failed ? .failed : .skipped,
+            inputRevision: revision,
+            error: nil
         )
         return
     }
 
-    let status: ArticlePreparationStageStatus = article.bestAvailableContentLength >= 1_200
-        ? .skipped
-        : .blocked
-
+    let result = await dependencies.contentFetcher.fetchMissingContent(articleId: articleID)
     try? await dependencies.articleRepo.setPreparationState(
         id: articleID,
-        content: status,
+        content: mapContentPreparationStatus(result.status),
         image: nil,
         enrichment: nil
     )
-}
 
-private func prepareImageStage(
-    articleID: String,
-    dependencies: PreparationDependencies
-) async {
-    guard let article = await dependencies.articleRepo.get(id: articleID) else {
-        return
+    let jobStatus: ArticleProcessingJobStatus
+    switch result.status {
+    case .fetched:
+        jobStatus = .done
+        try? await dependencies.articleRepo.enqueueMissingProcessingJobs(for: articleID)
+    case .skipped, .blocked:
+        jobStatus = .skipped
+    case .failed:
+        jobStatus = .failed
     }
 
-    guard article.imagePreparationStatusValue == .pending else {
-        return
+    let jobError: String? = switch result.status {
+    case .failed:
+        "Content extraction failed"
+    case .blocked:
+        "Content source blocked extraction"
+    default:
+        nil
     }
 
-    if article.resolvedImageUrl != nil {
-        try? await dependencies.articleRepo.setPreparationState(
-            id: articleID,
-            content: nil,
-            image: .succeeded,
-            enrichment: nil
-        )
-        return
-    }
-
-    if let canonicalURL = article.canonicalUrl,
-       await dependencies.ogImageFetcher.fetchOGImage(articleId: articleID, canonicalUrl: canonicalURL) != nil {
-        try? await dependencies.articleRepo.setPreparationState(
-            id: articleID,
-            content: nil,
-            image: .succeeded,
-            enrichment: nil
-        )
-        return
-    }
-
-    if await dependencies.fallbackImageService.ensureFallbackImage(articleID: articleID) != nil {
-        try? await dependencies.articleRepo.setPreparationState(
-            id: articleID,
-            content: nil,
-            image: .succeeded,
-            enrichment: nil
-        )
-        return
-    }
-
-    try? await dependencies.articleRepo.setPreparationState(
-        id: articleID,
-        content: nil,
-        image: .failed,
-        enrichment: nil
+    try? await dependencies.articleRepo.completeProcessingJob(
+        articleID: articleID,
+        stage: .fetchContent,
+        status: jobStatus,
+        inputRevision: revision,
+        error: jobError
     )
 }
 
-private func prepareEnrichmentStage(
+private func processSummaryJob(
     articleID: String,
     dependencies: PreparationDependencies
 ) async {
-    guard let article = await dependencies.articleRepo.get(id: articleID) else {
-        return
-    }
-
-    guard article.enrichmentPreparationStatusValue == .pending else {
-        return
-    }
+    guard let article = await dependencies.articleRepo.get(id: articleID) else { return }
+    let revision = article.contentRevision
 
     guard let snapshot = await dependencies.articleRepo.enrichmentSnapshot(id: articleID) else {
-        try? await dependencies.articleRepo.setPreparationState(
+        try? await dependencies.articleRepo.markSummaryAttempt(
             id: articleID,
-            content: nil,
-            image: nil,
-            enrichment: .blocked
+            status: .blocked,
+            revision: revision
+        )
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .generateSummary,
+            status: .skipped,
+            inputRevision: revision,
+            error: nil
         )
         return
     }
@@ -230,22 +236,110 @@ private func prepareEnrichmentStage(
         target: .automatic
     )
 
-    let status: ArticlePreparationStageStatus
     switch result.status {
     case .generated:
-        status = .succeeded
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .generateSummary,
+            status: .done,
+            inputRevision: revision,
+            error: nil
+        )
     case .skipped:
-        status = .skipped
+        try? await dependencies.articleRepo.markSummaryAttempt(
+            id: articleID,
+            status: .skipped,
+            revision: revision
+        )
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .generateSummary,
+            status: .skipped,
+            inputRevision: revision,
+            error: result.error
+        )
     case .failed:
-        status = .failed
+        try? await dependencies.articleRepo.markSummaryAttempt(
+            id: articleID,
+            status: .failed,
+            revision: revision
+        )
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .generateSummary,
+            status: .failed,
+            inputRevision: revision,
+            error: result.error
+        )
+    }
+}
+
+private func processImageJob(
+    articleID: String,
+    dependencies: PreparationDependencies
+) async {
+    guard let article = await dependencies.articleRepo.get(id: articleID) else { return }
+
+    if article.resolvedImageUrl != nil {
+        try? await dependencies.articleRepo.markImageAttempt(
+            id: articleID,
+            status: .succeeded,
+            revision: currentImagePreparationRevision
+        )
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .resolveImage,
+            status: .done,
+            inputRevision: currentImagePreparationRevision,
+            error: nil
+        )
+        return
     }
 
-    try? await dependencies.articleRepo.setPreparationState(
+    if let canonicalURL = article.canonicalUrl,
+       await dependencies.ogImageFetcher.fetchOGImage(articleId: articleID, canonicalUrl: canonicalURL) != nil {
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .resolveImage,
+            status: .done,
+            inputRevision: currentImagePreparationRevision,
+            error: nil
+        )
+        return
+    }
+
+    if await dependencies.fallbackImageService.ensureFallbackImage(articleID: articleID) != nil {
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .resolveImage,
+            status: .done,
+            inputRevision: currentImagePreparationRevision,
+            error: nil
+        )
+        return
+    }
+
+    try? await dependencies.articleRepo.markImageAttempt(
         id: articleID,
-        content: nil,
-        image: nil,
-        enrichment: status
+        status: .failed,
+        revision: currentImagePreparationRevision
     )
+    try? await dependencies.articleRepo.completeProcessingJob(
+        articleID: articleID,
+        stage: .resolveImage,
+        status: .failed,
+        inputRevision: currentImagePreparationRevision,
+        error: "No image source available"
+    )
+}
+
+private func parseJobKey(_ key: String) -> (articleID: String, stage: ArticleProcessingStage)? {
+    let marker = "::"
+    guard let range = key.range(of: marker, options: .backwards) else { return nil }
+    let articleID = String(key[..<range.lowerBound])
+    let stageRaw = String(key[range.upperBound...])
+    guard let stage = ArticleProcessingStage(rawValue: stageRaw) else { return nil }
+    return (articleID, stage)
 }
 
 private func mapContentPreparationStatus(

@@ -11,6 +11,10 @@ enum BackgroundTaskManager {
         AppConfiguration.shared.backgroundRefreshTaskIdentifier
     }
 
+    static var processingTaskIdentifier: String {
+        AppConfiguration.shared.backgroundProcessingTaskIdentifier
+    }
+
     /// Register the background task handler. Call once from `NebularNewsApp.init()`.
     static func register(modelContainer: ModelContainer) {
         BGTaskScheduler.shared.register(
@@ -19,6 +23,14 @@ enum BackgroundTaskManager {
         ) { task in
             guard let refreshTask = task as? BGAppRefreshTask else { return }
             handleRefreshTask(refreshTask, modelContainer: modelContainer)
+        }
+
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: processingTaskIdentifier,
+            using: nil
+        ) { task in
+            guard let processingTask = task as? BGProcessingTask else { return }
+            handleProcessingTask(processingTask, modelContainer: modelContainer)
         }
     }
 
@@ -35,30 +47,32 @@ enum BackgroundTaskManager {
         }
     }
 
+    static func scheduleNextProcessing(intervalMinutes: Int = 45) {
+        let request = BGProcessingTaskRequest(identifier: processingTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: TimeInterval(intervalMinutes * 60))
+        request.requiresNetworkConnectivity = true
+        request.requiresExternalPower = false
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            print("[BackgroundTaskManager] Failed to schedule processing: \(error)")
+        }
+    }
+
     /// Handle a background refresh task.
     private static func handleRefreshTask(_ task: BGAppRefreshTask, modelContainer: ModelContainer) {
         // Schedule the NEXT task immediately — if iOS kills this one early,
         // at least the next refresh is already queued.
         scheduleNextRefresh()
-
-        let feedRepo = LocalFeedRepository(modelContainer: modelContainer)
-        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
-        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
-        let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let preparation = ArticlePreparationService(
-            modelContainer: modelContainer,
-            keychainService: AppConfiguration.shared.keychainService
-        )
+        scheduleNextProcessing()
 
         // Create a task that iOS can cancel if time runs out
         let pollTask = Task {
-            // Automatic poll respects backoff (not user-initiated)
-            let retentionDays = await settingsRepo.retentionDays()
-            let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
-            _ = await poller.pollAllFeeds(bypassBackoff: false)
-            _ = await poller.cleanupOldArticles(retentionDays: retentionDays)
-            _ = try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)
-            _ = await preparation.processPendingArticles(batchSize: 5)
+            await RefreshCoordinator.shared.runBackgroundRefresh(
+                modelContainer: modelContainer,
+                keychainService: AppConfiguration.shared.keychainService
+            )
         }
 
         // If iOS needs to terminate this task early
@@ -70,6 +84,31 @@ enum BackgroundTaskManager {
         Task {
             _ = await pollTask.result
             task.setTaskCompleted(success: !pollTask.isCancelled)
+        }
+    }
+
+    private static func handleProcessingTask(_ task: BGProcessingTask, modelContainer: ModelContainer) {
+        scheduleNextProcessing()
+
+        let processingTask = Task {
+            await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
+                modelContainer: modelContainer,
+                keychainService: AppConfiguration.shared.keychainService
+            )
+            let preparation = ArticlePreparationService(
+                modelContainer: modelContainer,
+                keychainService: AppConfiguration.shared.keychainService
+            )
+            _ = await preparation.processPendingArticles(batchSize: 12, allowLowPriority: true)
+        }
+
+        task.expirationHandler = {
+            processingTask.cancel()
+        }
+
+        Task {
+            _ = await processingTask.result
+            task.setTaskCompleted(success: !processingTask.isCancelled)
         }
     }
 }

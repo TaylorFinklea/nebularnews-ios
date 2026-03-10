@@ -5,6 +5,8 @@ import SwiftData
 public let allModelTypes: [any PersistentModel.Type] = [
     Feed.self,
     Article.self,
+    ArticleProcessingJob.self,
+    TodaySnapshot.self,
     Tag.self,
     SignalWeight.self,
     TopicAffinity.self,

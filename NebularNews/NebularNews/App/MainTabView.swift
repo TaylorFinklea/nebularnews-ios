@@ -5,8 +5,8 @@ import NebularNewsKit
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
-    @Query(filter: #Predicate<Article> { $0.readingListAddedAt != nil })
-    private var readingListArticles: [Article]
+    @Environment(\.modelContext) private var modelContext
+    @State private var readingListCount = 0
 
     private var palette: NebularPalette {
         NebularPalette.forColorScheme(colorScheme)
@@ -23,6 +23,12 @@ struct MainTabView: View {
             }
         }
         .tint(palette.primary)
+        .task {
+            await reloadReadingListCount()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.readingListChanged)) { _ in
+            Task { await reloadReadingListCount() }
+        }
     }
 
     // MARK: - Standalone: Today / Feed / Reading List / Discover
@@ -40,7 +46,7 @@ struct MainTabView: View {
             Tab("Reading List", systemImage: "bookmark") {
                 ReadingListView()
             }
-            .badge(readingListArticles.count)
+            .badge(readingListCount)
 
             Tab("Discover", systemImage: "safari") {
                 DiscoverView()
@@ -68,6 +74,13 @@ struct MainTabView: View {
                 CompanionMoreView()
             }
         }
+    }
+
+    private func reloadReadingListCount() async {
+        let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+        var filter = ArticleFilter()
+        filter.readingListOnly = true
+        readingListCount = await articleRepo.count(filter: filter)
     }
 }
 

@@ -44,39 +44,23 @@ final class FeedListViewModel {
         isPolling = true
         lastPollMessage = nil
 
-        let poller = getPoller()
-        let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
-        let retentionDays = await settingsRepo.retentionDays()
-        let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
-        let result = await poller.pollAllFeeds(bypassBackoff: true)
+        let refreshResult = await RefreshCoordinator.shared.runManualRefresh(
+            modelContainer: modelContainer,
+            keychainService: AppConfiguration.shared.keychainService
+        )
 
-        let deleted = await poller.cleanupOldArticles(retentionDays: retentionDays)
-        let trimmed = await trimExcessArticlesPerFeed(maxArticlesPerFeed)
-        let prepared = await preparePendingArticles()
-
-        lastPollMessage = formatPollResult(result, deleted: deleted, trimmed: trimmed)
-        if prepared > 0 {
-            lastPollMessage = (lastPollMessage ?? "") + " · \(prepared) prepared"
+        lastPollMessage = formatPollResult(
+            refreshResult.result,
+            deleted: refreshResult.deleted,
+            trimmed: refreshResult.trimmed
+        )
+        if refreshResult.prepared > 0 {
+            lastPollMessage = (lastPollMessage ?? "") + " · \(refreshResult.prepared) prepared"
         }
         isPolling = false
 
         // Reload feed list to show updated article counts + poll timestamps
         await loadFeeds()
-    }
-
-    private func preparePendingArticles() async -> Int {
-        isPreparing = true
-        defer { isPreparing = false }
-
-        let service = ArticlePreparationService(
-            modelContainer: modelContainer,
-            keychainService: AppConfiguration.shared.keychainService
-        )
-        return await service.processPendingArticles(batchSize: 10)
-    }
-
-    private func trimExcessArticlesPerFeed(_ maxArticlesPerFeed: Int) async -> Int {
-        (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
     }
 
     /// Poll a single feed (e.g., right after adding it for title auto-detection).

@@ -39,9 +39,18 @@ struct ArticlePreparationServiceTests {
         article.contentHtml = content
         article.imageUrl = imageURL
         article.contentHash = UUID().uuidString
+        article.contentRevision = 1
         article.contentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
         article.imagePreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
         article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
+        if let content, !content.isEmpty {
+            article.contentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        }
+        if imageURL != nil {
+            article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
+            article.imagePreparedRevision = currentImagePreparationRevision
+        }
+        article.refreshQueryState()
         context.insert(article)
         try context.save()
         return article
@@ -75,8 +84,8 @@ struct ArticlePreparationServiceTests {
         #expect(pendingCount == 1)
     }
 
-    @Test("Articles become visible after failed, blocked, or skipped attempts")
-    func attemptedArticlesBecomeVisibleWithoutSuccess() async throws {
+    @Test("Articles become visible after score preparation even when other attempts fail")
+    func scoredArticlesBecomeVisibleWithoutSuccessfulLowPriorityStages() async throws {
         let container = try makeContainer()
         let context = makeContext(container)
         let feed = try insertFeed(in: context, title: "Example Feed")
@@ -88,14 +97,13 @@ struct ArticlePreparationServiceTests {
             imageURL: nil
         )
 
-        let articleRepo = LocalArticleRepository(modelContainer: container)
-        try await articleRepo.setPreparationState(
-            id: article.id,
-            content: .failed,
-            image: .blocked,
-            enrichment: .skipped
-        )
+        article.contentPreparationStatusRaw = ArticlePreparationStageStatus.failed.rawValue
+        article.imagePreparationStatusRaw = ArticlePreparationStageStatus.blocked.rawValue
+        article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        article.markScorePrepared(revision: currentPersonalizationVersion)
+        try context.save()
 
+        let articleRepo = LocalArticleRepository(modelContainer: container)
         let visibleCount = await articleRepo.countVisibleArticles(filter: ArticleFilter())
         let stored = await articleRepo.get(id: article.id)
 
@@ -121,12 +129,13 @@ struct ArticlePreparationServiceTests {
             modelContainer: container,
             generationCoordinator: PreparationMockGenerationCoordinator(summaryOutput: nil)
         )
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        try await articleRepo.enqueueMissingProcessingJobs(for: article.id)
 
         let processed = await service.processPendingArticles(batchSize: 10)
-        let articleRepo = LocalArticleRepository(modelContainer: container)
         let stored = try #require(await articleRepo.get(id: article.id))
 
-        #expect(processed == 1)
+        #expect(processed == 2)
         #expect(stored.contentPreparationStatusValue == .skipped)
         #expect(stored.imagePreparationStatusValue == .succeeded)
         #expect(stored.enrichmentPreparationStatusValue == .skipped)

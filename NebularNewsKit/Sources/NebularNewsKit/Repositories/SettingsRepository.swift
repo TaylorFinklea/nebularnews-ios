@@ -34,6 +34,10 @@ public actor LocalSettingsRepository {
         max(await getOrCreate().maxArticlesPerFeed, 1)
     }
 
+    public func pollIntervalMinutes() async -> Int {
+        max(await getOrCreate().pollIntervalMinutes, 1)
+    }
+
     public func personalizationRebuildVersion() async -> Int {
         await getOrCreate().personalizationRebuildVersion
     }

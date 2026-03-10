@@ -39,6 +39,15 @@ public final class Article: @unchecked Sendable {
     public var imagePreparationStatusRaw: String?
     public var enrichmentPreparationStatusRaw: String?
     public var presentationReadyAt: Date?
+    public var queryIsVisible: Bool = false
+    public var queryIsUnreadQueueCandidate: Bool = true
+    public var querySortDate: Date = Date()
+    public var queryDisplayedScore: Int = 0
+    public var queryFeedID: String?
+    public var contentRevision: Int = 0
+    public var scorePreparedRevision: Int = 0
+    public var summaryPreparedRevision: Int = 0
+    public var imagePreparedRevision: Int = 0
 
     // AI-generated enrichments
     public var cardSummaryText: String?
@@ -84,6 +93,7 @@ public final class Article: @unchecked Sendable {
         self.canonicalUrl = canonicalUrl
         self.title = title
         self.fetchedAt = Date()
+        self.querySortDate = self.fetchedAt
     }
 
     // MARK: - Computed Helpers
@@ -139,11 +149,11 @@ public final class Article: @unchecked Sendable {
     }
 
     public var isPreparationPending: Bool {
-        !hasAttemptedPresentationPreparation
+        !queryIsVisible
     }
 
     public var isPresentationReady: Bool {
-        presentationReadyAt != nil || hasAttemptedPresentationPreparation
+        queryIsVisible
     }
 
     public var hasReadyScore: Bool {
@@ -226,29 +236,35 @@ public final class Article: @unchecked Sendable {
         dismissedAt = nil
         isRead = true
         readAt = date
+        refreshQueryState()
     }
 
     public func markUnread() {
         isRead = false
         readAt = nil
+        refreshQueryState()
     }
 
     public func markDismissed(at date: Date = Date()) {
         isRead = false
         readAt = nil
         dismissedAt = date
+        refreshQueryState()
     }
 
     public func clearDismissal() {
         dismissedAt = nil
+        refreshQueryState()
     }
 
     public func addToReadingList(at date: Date = Date()) {
         readingListAddedAt = date
+        refreshQueryState()
     }
 
     public func removeFromReadingList() {
         readingListAddedAt = nil
+        refreshQueryState()
     }
 
     public func toggleReadingList(at date: Date = Date()) {
@@ -267,6 +283,40 @@ public final class Article: @unchecked Sendable {
         reactionValue = value
         reactionReasonCodes = reasonCodes?.isEmpty == false ? reasonCodes?.joined(separator: ",") : nil
         reactionUpdatedAt = value == nil ? nil : date
+        refreshQueryState()
+    }
+
+    public func bumpContentRevision() {
+        contentRevision = max(1, contentRevision + 1)
+        refreshQueryState()
+    }
+
+    public func markScorePrepared(revision: Int? = nil, makeVisible: Bool = true) {
+        scorePreparedRevision = revision ?? max(contentRevision, currentPersonalizationVersion)
+        if makeVisible {
+            queryIsVisible = true
+            if presentationReadyAt == nil {
+                presentationReadyAt = Date()
+            }
+        }
+        refreshQueryState()
+    }
+
+    public func markSummaryPrepared(revision: Int? = nil) {
+        summaryPreparedRevision = revision ?? max(contentRevision, currentSummaryPreparationRevision)
+        refreshQueryState()
+    }
+
+    public func markImagePrepared(revision: Int? = nil) {
+        imagePreparedRevision = revision ?? currentImagePreparationRevision
+        refreshQueryState()
+    }
+
+    public func refreshQueryState() {
+        querySortDate = publishedAt ?? fetchedAt
+        queryDisplayedScore = displayedScore ?? 0
+        queryIsUnreadQueueCandidate = !isRead && !isDismissed
+        queryFeedID = feed?.id
     }
 
     public func needsContentFetch(

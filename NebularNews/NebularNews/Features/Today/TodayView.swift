@@ -78,10 +78,13 @@ struct TodayView: View {
             .task {
                 await viewModel.reload(container: modelContext.container)
             }
-            .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.todaySnapshotChanged)) { _ in
                 Task {
                     await viewModel.reload(container: modelContext.container)
                 }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
+                viewModel.scheduleDebouncedReload(container: modelContext.container)
             }
         }
     }
@@ -166,6 +169,7 @@ private struct TodaySkeletonCard: View {
 private final class TodayViewModel {
     private var articleRepo: LocalArticleRepository?
     private var requestToken = 0
+    private var reloadTask: Task<Void, Never>?
 
     var stats = TodayStats(
         unreadCount: 0,
@@ -186,98 +190,36 @@ private final class TodayViewModel {
         let token = requestToken
         isLoading = true
 
-        let now = Date()
-        let dayAgo = now.addingTimeInterval(-86_400)
-        let weekAgo = now.addingTimeInterval(-604_800)
-
-        let unreadFilter: ArticleFilter = {
-            var filter = ArticleFilter()
-            filter.readFilter = .unread
-            return filter
-        }()
-
-        let unreadTodayFilter: ArticleFilter = {
-            var filter = unreadFilter
-            filter.publishedAfter = dayAgo
-            return filter
-        }()
-
-        let unreadWeekFilter: ArticleFilter = {
-            var filter = unreadFilter
-            filter.publishedAfter = weekAgo
-            return filter
-        }()
-
-        let highFitFilter: ArticleFilter = {
-            var filter = unreadWeekFilter
-            filter.minScore = 4
-            return filter
-        }()
-
-        let scoredFilter: ArticleFilter = {
-            var filter = ArticleFilter()
-            filter.minScore = 1
-            return filter
-        }()
-
-        let pendingFilter: ArticleFilter = {
-            var filter = ArticleFilter()
-            filter.presentationFilter = .pendingOnly
-            return filter
-        }()
-
-        let topFilter: ArticleFilter = {
-            var filter = unreadFilter
-            filter.minScore = 1
-            return filter
-        }()
-
-        async let totalArticles = articleRepo.countVisibleArticles(filter: ArticleFilter())
-        async let unreadCount = articleRepo.countVisibleArticles(filter: unreadFilter)
-        async let unreadTodayCount = articleRepo.countVisibleArticles(filter: unreadTodayFilter)
-        async let unreadWeekCount = articleRepo.countVisibleArticles(filter: unreadWeekFilter)
-        async let highFitCount = articleRepo.countVisibleArticles(filter: highFitFilter)
-        async let scoredCount = articleRepo.countVisibleArticles(filter: scoredFilter)
-        async let pendingCount = articleRepo.count(filter: pendingFilter)
-        async let topArticles = articleRepo.listVisibleArticles(
-            filter: topFilter,
-            sort: .scoreDesc,
-            limit: 10,
-            offset: 0
-        )
-
-        let total = await totalArticles
-        let unread = await unreadCount
-        let today = await unreadTodayCount
-        let week = await unreadWeekCount
-        let highFit = await highFitCount
-        let scored = await scoredCount
-        let pending = await pendingCount
-        let loadedTopArticles = await topArticles
+        async let snapshotTask = articleRepo.fetchTodaySnapshot()
+        async let pendingCountTask = articleRepo.pendingVisibleArticleCount()
+        let snapshot = await snapshotTask
+        let pending = await pendingCountTask
+        let articleIDs = [snapshot.heroArticleID].compactMap { $0 } + snapshot.upNextArticleIDs
+        let loadedTopArticles = await articleRepo.listArticles(ids: articleIDs)
 
         guard token == requestToken else { return }
 
         stats = TodayStats(
-            unreadCount: unread,
-            newToday: today,
-            newThisWeek: week,
-            highFit: highFit,
-            scoredCount: scored,
-            learningCount: max(total - scored, 0),
-            totalArticles: total
+            unreadCount: snapshot.unreadCount,
+            newToday: snapshot.newTodayCount,
+            newThisWeek: snapshot.newTodayCount,
+            highFit: snapshot.highFitCount,
+            scoredCount: snapshot.readyArticleCount,
+            learningCount: 0,
+            totalArticles: snapshot.readyArticleCount
         )
-        self.topArticles = loadedTopArticles.sorted {
-            let lhsScore = $0.displayedScore ?? 0
-            let rhsScore = $1.displayedScore ?? 0
-
-            if lhsScore == rhsScore {
-                return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
-            }
-
-            return lhsScore > rhsScore
-        }
+        self.topArticles = loadedTopArticles
         pendingPreparationCount = pending
         isLoading = false
+    }
+
+    func scheduleDebouncedReload(container: ModelContainer) {
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard let self, !Task.isCancelled else { return }
+            await self.reload(container: container)
+        }
     }
 
     private func repository(for container: ModelContainer) -> LocalArticleRepository {
