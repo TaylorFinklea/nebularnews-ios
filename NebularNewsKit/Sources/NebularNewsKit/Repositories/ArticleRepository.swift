@@ -456,11 +456,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob? {
         let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
-        var descriptor = FetchDescriptor<ArticleProcessingJob>(
-            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
-        )
-        descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
+        return allProcessingJobs().first { $0.key == key }
     }
 
     public func completeProcessingJob(
@@ -1232,11 +1228,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         shouldQueue: Bool
     ) throws {
         let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
-        var descriptor = FetchDescriptor<ArticleProcessingJob>(
-            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
-        )
-        descriptor.fetchLimit = 1
-        let existing = try modelContext.fetch(descriptor).first
+        let existing = allProcessingJobs().first { $0.key == key }
 
         guard shouldQueue else {
             if let existing, existing.status == .queued || existing.status == .running {
@@ -1275,19 +1267,19 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         stage: ArticleProcessingStage
     ) throws -> ArticleProcessingJob? {
         let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
-        var descriptor = FetchDescriptor<ArticleProcessingJob>(
-            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first
+        return allProcessingJobs().first { $0.key == key }
+    }
+
+    private func allProcessingJobs() -> [ArticleProcessingJob] {
+        let descriptor = FetchDescriptor<ArticleProcessingJob>()
+        return (try? modelContext.fetch(descriptor)) ?? []
     }
 
     private func cleanupOrphanedProcessingJobs() {
         let articleDescriptor = FetchDescriptor<Article>()
         let liveArticleIDs = Set(((try? modelContext.fetch(articleDescriptor)) ?? []).map(\.id))
 
-        let jobDescriptor = FetchDescriptor<ArticleProcessingJob>()
-        let jobs = (try? modelContext.fetch(jobDescriptor)) ?? []
+        let jobs = allProcessingJobs()
 
         for job in jobs where !liveArticleIDs.contains(job.articleID) {
             modelContext.delete(job)
@@ -1298,8 +1290,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         timeout: TimeInterval = 120
     ) {
         let cutoff = Date().addingTimeInterval(-timeout)
-        let descriptor = FetchDescriptor<ArticleProcessingJob>()
-        let jobs = (try? modelContext.fetch(descriptor)) ?? []
+        let jobs = allProcessingJobs()
 
         for job in jobs
         where job.status == .running && job.updatedAt < cutoff {
