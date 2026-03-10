@@ -25,6 +25,10 @@ actor RefreshCoordinator {
             allowLowPriority: false,
             bypassBackoff: false
         )
+        await drainWarmStartVisibilityBacklog(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
         Task(priority: .background) {
             await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
                 modelContainer: modelContainer,
@@ -99,13 +103,37 @@ actor RefreshCoordinator {
         }
 
         _ = try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(
-            limit: allowLowPriority ? 80 : 40
+            limit: allowLowPriority ? 200 : 200
         )
 
         _ = await preparation.processPendingArticles(
             batchSize: allowLowPriority ? 8 : 16,
             allowLowPriority: allowLowPriority
         )
+    }
+
+    private func drainWarmStartVisibilityBacklog(
+        modelContainer: ModelContainer,
+        keychainService: String
+    ) async {
+        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
+        let preparation = ArticlePreparationService(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
+
+        for _ in 0..<8 {
+            _ = try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 200)
+            let prepared = await preparation.processPendingArticles(
+                batchSize: 16,
+                allowLowPriority: false
+            )
+            let pending = await articleRepo.pendingVisibleArticleCount()
+
+            if pending == 0 || prepared == 0 {
+                break
+            }
+        }
     }
 
     private func feedsAreStale(

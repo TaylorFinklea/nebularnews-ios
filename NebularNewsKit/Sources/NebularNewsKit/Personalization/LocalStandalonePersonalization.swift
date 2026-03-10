@@ -1192,6 +1192,15 @@ public actor LocalStandalonePersonalizationService {
         )
     }
 
+    public func prepareVisibleScore(articleID: String) async throws {
+        await bootstrap()
+        try await retagAndScoreArticle(
+            articleID: articleID,
+            skipTagSuggestions: true,
+            persistScoreAssist: false
+        )
+    }
+
     private func retagAndScoreArticle(
         articleID: String,
         skipTagSuggestions: Bool,

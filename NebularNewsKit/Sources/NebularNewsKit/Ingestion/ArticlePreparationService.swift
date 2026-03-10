@@ -122,7 +122,7 @@ private func processScoreJob(
     let revision = max(article.contentRevision, currentPersonalizationVersion)
 
     do {
-        try await dependencies.personalization.retagAndScoreArticle(articleID: articleID)
+        try await dependencies.personalization.prepareVisibleScore(articleID: articleID)
         try await dependencies.articleRepo.completeProcessingJob(
             articleID: articleID,
             stage: .scoreAndTag,

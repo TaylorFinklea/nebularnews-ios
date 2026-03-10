@@ -374,6 +374,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String] {
+        cleanupOrphanedProcessingJobs()
+        reclaimStaleRunningProcessingJobs()
+
         let descriptor = FetchDescriptor<ArticleProcessingJob>(
             sortBy: [
                 SortDescriptor(\.priority, order: .reverse),
@@ -1202,5 +1205,33 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         )
         descriptor.fetchLimit = 1
         return try modelContext.fetch(descriptor).first
+    }
+
+    private func cleanupOrphanedProcessingJobs() {
+        let articleDescriptor = FetchDescriptor<Article>()
+        let liveArticleIDs = Set(((try? modelContext.fetch(articleDescriptor)) ?? []).map(\.id))
+
+        let jobDescriptor = FetchDescriptor<ArticleProcessingJob>()
+        let jobs = (try? modelContext.fetch(jobDescriptor)) ?? []
+
+        for job in jobs where !liveArticleIDs.contains(job.articleID) {
+            modelContext.delete(job)
+        }
+    }
+
+    private func reclaimStaleRunningProcessingJobs(
+        timeout: TimeInterval = 120
+    ) {
+        let cutoff = Date().addingTimeInterval(-timeout)
+        let descriptor = FetchDescriptor<ArticleProcessingJob>()
+        let jobs = (try? modelContext.fetch(descriptor)) ?? []
+
+        for job in jobs
+        where job.status == .running && job.updatedAt < cutoff {
+            job.status = .queued
+            job.updatedAt = Date()
+            job.availableAt = Date()
+            job.lastError = nil
+        }
     }
 }
