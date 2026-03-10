@@ -5,15 +5,10 @@ import NebularNewsKit
 
 struct ReadingListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
 
     @State private var searchText = ""
     @State private var filterMode: ReadingListFilterMode = .all
     @State private var viewModel = ReadingListBrowseViewModel()
-
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
 
     var body: some View {
         NavigationStack {
@@ -40,11 +35,33 @@ struct ReadingListView: View {
                     } else {
                         List {
                             Section {
-                                readingListHeader
+                                Picker("Filter", selection: $filterMode) {
+                                    ForEach(ReadingListFilterMode.allCases, id: \.self) { mode in
+                                        Text(mode.rawValue)
+                                            .tag(mode)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .controlSize(.small)
+
+                                LabeledContent("Visible", value: "\(viewModel.savedArticles.count)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                if viewModel.totalSavedCount != viewModel.savedArticles.count {
+                                    LabeledContent("Saved", value: "\(viewModel.totalSavedCount)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } header: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Saved for later")
+                                    Text(filterSummaryText)
+                                        .textCase(nil)
+                                }
+                            } footer: {
+                                Text(filterFooterText)
                             }
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
 
                             if viewModel.pendingSavedCount > 0 {
                                 Section {
@@ -113,63 +130,6 @@ struct ReadingListView: View {
         "\(filterMode.rawValue)|\(searchText)"
     }
 
-    private var readingListHeader: some View {
-        GlassCard(cornerRadius: 24, style: .raised, tintColor: filterMode == .all ? nil : palette.primary) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Saved for later")
-                            .font(.title3.bold())
-                        Text(filterSummaryText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text("\(viewModel.savedArticles.count)")
-                        .font(.headline.bold())
-                        .monospacedDigit()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .background(palette.primarySoft, in: Capsule())
-                        .overlay(Capsule().strokeBorder(palette.primary.opacity(0.16)))
-                }
-
-                HStack(spacing: 8) {
-                    ForEach(ReadingListFilterMode.allCases, id: \.self) { mode in
-                        Button {
-                            withAnimation(.snappy(duration: 0.22)) {
-                                filterMode = mode
-                            }
-                        } label: {
-                            Text(mode.rawValue)
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(.ultraThinMaterial, in: Capsule())
-                                .background(
-                                    (filterMode == mode ? palette.primarySoft : palette.surfaceSoft),
-                                    in: Capsule()
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .strokeBorder(
-                                            filterMode == mode
-                                            ? palette.primary.opacity(0.22)
-                                            : palette.surfaceBorder.opacity(0.7)
-                                        )
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(filterMode == mode ? palette.primary : .secondary)
-                    }
-                }
-            }
-        }
-    }
-
     private var filterSummaryText: String {
         switch filterMode {
         case .all:
@@ -179,6 +139,17 @@ struct ReadingListView: View {
         case .read:
             return "Saved articles you've already read."
         }
+    }
+
+    private var filterFooterText: String {
+        let visibleCount = viewModel.savedArticles.count
+        let totalCount = viewModel.totalSavedCount
+
+        if searchText.isEmpty && filterMode == .all {
+            return "\(visibleCount) saved article\(visibleCount == 1 ? "" : "s")."
+        }
+
+        return "\(visibleCount) shown of \(totalCount) saved article\(totalCount == 1 ? "" : "s")."
     }
 
     private var emptyStateTitle: String {

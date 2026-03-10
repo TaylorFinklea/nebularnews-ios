@@ -118,20 +118,18 @@ private struct TodayPreparingSection: View {
     let count: Int
 
     var body: some View {
-        GlassCard(cornerRadius: 22, style: .raised, tintColor: .cyan) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Label("Preparing \(count) article\(count == 1 ? "" : "s")", systemImage: "sparkles")
-                        .font(.headline)
-                    Spacer()
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                Text("Fresh stories finish content, imagery, scoring, and summaries before they appear here.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Preparing \(count) article\(count == 1 ? "" : "s")", systemImage: "sparkles")
+                    .font(.headline)
+                Spacer()
+                ProgressView()
+                    .controlSize(.small)
             }
+
+            Text("Fresh stories finish content, imagery, scoring, and summaries before they appear here.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
     }
 }

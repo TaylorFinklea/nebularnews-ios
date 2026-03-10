@@ -4,7 +4,6 @@ import NebularNewsKit
 
 struct ArticleListView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.colorScheme) private var colorScheme
 
     @Query(sort: [SortDescriptor(\Article.publishedAt, order: .reverse)])
     private var articles: [Article]
@@ -57,10 +56,6 @@ struct ArticleListView: View {
         return result
     }
 
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
     var body: some View {
         NavigationStack {
             NebularScreen(emphasis: .reading) {
@@ -76,11 +71,27 @@ struct ArticleListView: View {
                     } else {
                         List {
                             Section {
-                                articleFilterHeader
+                                LabeledContent("Articles", value: "\(filteredArticles.count)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                LabeledContent("Filter") {
+                                    Picker("Filter", selection: $filterMode) {
+                                        ForEach(FilterMode.allCases, id: \.self) { mode in
+                                            Text(mode.rawValue)
+                                                .tag(mode)
+                                        }
+                                    }
+                                    .labelsHidden()
+                                    .pickerStyle(.menu)
+                                }
+                            } header: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Reading queue")
+                                    Text(filterSummaryText)
+                                        .textCase(nil)
+                                }
                             }
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
 
                             Section {
                                 ForEach(filteredArticles, id: \.id) { article in
@@ -111,65 +122,6 @@ struct ArticleListView: View {
                 ArticleDetailView(articleId: articleId)
             }
             .searchable(text: $searchText, prompt: "Search articles")
-        }
-    }
-
-    private var articleFilterHeader: some View {
-        GlassCard(cornerRadius: 24, style: .raised, tintColor: filterMode == .all ? nil : palette.primary) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Reading queue")
-                            .font(.title3.bold())
-                        Text(filterSummaryText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    Text("\(filteredArticles.count)")
-                        .font(.headline.bold())
-                        .monospacedDigit()
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial, in: Capsule())
-                        .background(palette.primarySoft, in: Capsule())
-                        .overlay(Capsule().strokeBorder(palette.primary.opacity(0.16)))
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(FilterMode.allCases, id: \.self) { mode in
-                            Button {
-                                withAnimation(.snappy(duration: 0.22)) {
-                                    filterMode = mode
-                                }
-                            } label: {
-                                Text(mode.rawValue)
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background(.ultraThinMaterial, in: Capsule())
-                                    .background(
-                                        (filterMode == mode ? palette.primarySoft : palette.surfaceSoft),
-                                        in: Capsule()
-                                    )
-                                    .overlay(
-                                        Capsule()
-                                            .strokeBorder(
-                                                filterMode == mode
-                                                ? palette.primary.opacity(0.22)
-                                                : palette.surfaceBorder.opacity(0.7)
-                                            )
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(filterMode == mode ? palette.primary : .secondary)
-                        }
-                    }
-                }
-            }
         }
     }
 

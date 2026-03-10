@@ -2,10 +2,7 @@ import SwiftUI
 import SwiftData
 import NebularNewsKit
 
-/// Sheet for reacting to an article (thumbs up/down with optional reason codes).
-///
-/// Saves reactions directly to SwiftData (standalone mode), unlike the companion
-/// version which posts to the server API.
+/// Sheet for reacting to an article with optional reason codes.
 struct ReactionSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -53,71 +50,76 @@ struct ReactionSheet: View {
         article?.reactionValue != nil || article?.isDismissed == true
     }
 
+    private var selectionBinding: Binding<ReactionSelection?> {
+        Binding(
+            get: { selectedSelection },
+            set: { newValue in
+                selectedSelection = newValue
+                selectedCodes.removeAll()
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                HStack(spacing: allowsDismiss ? 24 : 40) {
-                    reactionButton(
-                        selection: .liked,
-                        icon: "hand.thumbsup",
-                        filledIcon: "hand.thumbsup.fill",
-                        color: .green,
-                        label: "Liked it"
-                    )
+            Form {
+                Section("Response") {
+                    Picker("Feedback", selection: selectionBinding) {
+                        Text("Liked it")
+                            .tag(ReactionSelection?.some(.liked))
 
-                    if allowsDismiss {
-                        reactionButton(
-                            selection: .dismissed,
-                            icon: "eye.slash",
-                            filledIcon: "eye.slash.fill",
-                            color: .orange,
-                            label: "Dismiss"
-                        )
+                        if allowsDismiss {
+                            Text("Dismiss")
+                                .tag(ReactionSelection?.some(.dismissed))
+                        }
+
+                        Text("Not for me")
+                            .tag(ReactionSelection?.some(.disliked))
                     }
-
-                    reactionButton(
-                        selection: .disliked,
-                        icon: "hand.thumbsdown",
-                        filledIcon: "hand.thumbsdown.fill",
-                        color: .red,
-                        label: "Not for me"
-                    )
+                    .pickerStyle(.inline)
                 }
-                .padding(.top, 20)
 
                 if selectedSelection == .dismissed {
-                    Spacer()
-                    Text("Dismiss keeps this article out of your unread queue without opening it.")
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 24)
-                    Spacer()
+                    Section {
+                        Text("Dismiss keeps this article out of your unread queue without opening it.")
+                            .foregroundStyle(.secondary)
+                    }
                 } else if let _ = selectedValue {
-                    List(currentOptions, id: \.code) { option in
-                        Button {
-                            if selectedCodes.contains(option.code) {
-                                selectedCodes.remove(option.code)
-                            } else {
-                                selectedCodes.insert(option.code)
-                            }
-                        } label: {
-                            HStack {
-                                Text(option.label)
-                                Spacer()
-                                if selectedCodes.contains(option.code) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.tint)
+                    Section {
+                        ForEach(currentOptions, id: \.code) { option in
+                            Button {
+                                toggleReasonCode(option.code)
+                            } label: {
+                                HStack {
+                                    Text(option.label)
+                                        .foregroundStyle(.primary)
+                                    Spacer()
+                                    if selectedCodes.contains(option.code) {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.tint)
+                                    }
                                 }
                             }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                    } header: {
+                        Text("Reasons")
+                    } footer: {
+                        Text("Reasons help Nebular learn why a story matched or missed.")
                     }
-                    .listStyle(.plain)
                 } else {
-                    Spacer()
-                    Text(allowsDismiss ? "Select feedback above" : "Select a reaction above")
-                        .foregroundStyle(.secondary)
-                    Spacer()
+                    Section {
+                        Text(allowsDismiss ? "Select feedback to continue." : "Select a reaction to continue.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if hasPersistedFeedback {
+                    Section {
+                        Button("Clear Feedback", role: .destructive) {
+                            clearReaction()
+                        }
+                    }
                 }
             }
             .navigationTitle(allowsDismiss ? "Feedback" : "Reaction")
@@ -130,51 +132,18 @@ struct ReactionSheet: View {
                     Button("Save") { save() }
                         .disabled(selectedSelection == nil)
                 }
-                if hasPersistedFeedback {
-                    ToolbarItem(placement: .bottomBar) {
-                        Button("Clear Feedback", role: .destructive) { clearReaction() }
-                    }
-                }
             }
         }
         .presentationDetents([.medium, .large])
     }
 
-    // MARK: - Components
-
-    private func reactionButton(
-        selection: ReactionSelection,
-        icon: String,
-        filledIcon: String,
-        color: Color,
-        label: String
-    ) -> some View {
-        Button {
-            if selectedSelection == selection {
-                selectedSelection = nil
-                selectedCodes.removeAll()
-            } else {
-                selectedSelection = selection
-                if selection == .dismissed {
-                    selectedCodes.removeAll()
-                } else {
-                    selectedCodes.removeAll()
-                }
-            }
-        } label: {
-            VStack(spacing: 6) {
-                Image(systemName: selectedSelection == selection ? filledIcon : icon)
-                    .font(.largeTitle)
-                    .foregroundStyle(selectedSelection == selection ? color : .secondary)
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(selectedSelection == selection ? color : .secondary)
-            }
+    private func toggleReasonCode(_ code: String) {
+        if selectedCodes.contains(code) {
+            selectedCodes.remove(code)
+        } else {
+            selectedCodes.insert(code)
         }
-        .buttonStyle(.plain)
     }
-
-    // MARK: - Actions
 
     private func save() {
         guard let article else {

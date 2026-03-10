@@ -1,44 +1,33 @@
 import SwiftUI
 import NebularNewsKit
 
-/// Horizontal scrolling row of stat pills for the Today briefing.
+/// Simple native-style stat grid for the Today briefing.
 struct TodayQuickStats: View {
     let stats: TodayStats
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                QuickStatPill(label: "Unread", value: "\(stats.unreadCount)", icon: "envelope.badge", accent: .cyan)
-                QuickStatPill(label: "New Today", value: "\(stats.newToday)", icon: "clock", accent: .orange)
-                QuickStatPill(label: "High Fit", value: "\(stats.highFit)", icon: "star.fill", accent: Color.forScore(5))
+        Grid(horizontalSpacing: 16, verticalSpacing: 12) {
+            GridRow {
+                quickStat(label: "Unread", value: "\(stats.unreadCount)", icon: "envelope.badge", accent: .cyan)
+                quickStat(label: "New Today", value: "\(stats.newToday)", icon: "clock", accent: .orange)
+                quickStat(label: "High Fit", value: "\(stats.highFit)", icon: "star.fill", accent: Color.forScore(5))
             }
         }
     }
-}
 
-private struct QuickStatPill: View {
-    let label: String
-    let value: String
-    let icon: String
-    let accent: Color
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
+    @ViewBuilder
+    private func quickStat(label: String, value: String, icon: String, accent: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label(label, systemImage: icon)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(accent)
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.subheadline.bold())
-                    .monospacedDigit()
-                Text(label)
-                    .font(.caption2.weight(.medium))
-                    .foregroundStyle(.secondary)
-            }
+            Text(value)
+                .font(.headline.bold())
+                .monospacedDigit()
+                .foregroundStyle(.primary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .modifier(GlassRoundedBackground(cornerRadius: 16))
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

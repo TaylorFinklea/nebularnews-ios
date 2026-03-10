@@ -144,30 +144,25 @@ private struct StatusBanner: View {
     let showProgress: Bool
 
     var body: some View {
-        GlassCard(cornerRadius: 24, style: .raised, tintColor: accent) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(accent.opacity(0.14))
-                        .frame(width: 42, height: 42)
+        HStack(alignment: .top, spacing: 12) {
+            if showProgress {
+                ProgressView()
+                    .tint(accent)
+                    .padding(.top, 2)
+            } else {
+                Image(systemName: systemImage)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 20)
+                    .padding(.top, 2)
+            }
 
-                    if showProgress {
-                        ProgressView()
-                            .tint(accent)
-                    } else {
-                        Image(systemName: systemImage)
-                            .font(.headline.weight(.semibold))
-                            .foregroundStyle(accent)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -179,63 +174,55 @@ private struct FeedRow: View {
     let feed: Feed
 
     var body: some View {
-        GlassCard(cornerRadius: 22, style: feed.isEnabled ? .raised : .standard, tintColor: accentColor) {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(accentColor.opacity(0.14))
-                    .frame(width: 46, height: 46)
-                    .overlay {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .foregroundStyle(accentColor)
-                            .font(.system(size: 17, weight: .semibold))
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    if !feed.isEnabled {
+                        Text("Paused")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
                     }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
-                        .font(.headline)
-                        .lineLimit(1)
-
-                    HStack(spacing: 8) {
-                        if !feed.isEnabled {
-                            Text("Paused")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        }
-
-                        if let lastPolled = feed.lastPolledAt {
-                            Text("Polled \(lastPolled.relativeDisplay)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text("Never polled")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let error = feed.errorMessage {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .help(error)
-                        }
+                    if let lastPolled = feed.lastPolledAt {
+                        Text("Polled \(lastPolled.relativeDisplay)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Never polled")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Text(feed.feedUrl)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
                 }
 
-                Spacer()
+                Text(feed.feedUrl)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
 
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
                 Text("\(feed.articles?.count ?? 0)")
                     .font(.headline.bold())
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .background(accentColor.opacity(0.10), in: Capsule())
-                    .overlay(Capsule().strokeBorder(accentColor.opacity(0.16)))
+                    .monospacedDigit()
+
+                if let error = feed.errorMessage {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .help(error)
+                }
             }
         }
     }

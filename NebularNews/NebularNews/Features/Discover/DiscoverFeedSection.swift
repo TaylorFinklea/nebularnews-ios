@@ -3,110 +3,121 @@ import SwiftData
 import NebularNewsKit
 
 /// Feed management section within the Discover tab.
-///
-/// Shows a compact list of feeds with an add button.
-/// Reuses `FeedListViewModel` and `AddFeedSheet` for feed operations.
 struct DiscoverFeedSection: View {
     @Bindable var viewModel: FeedListViewModel
 
     var body: some View {
-        DashboardSectionHeader(
-            title: "Your feeds",
-            subtitle: "\(viewModel.feeds.count) source\(viewModel.feeds.count == 1 ? "" : "s") configured."
-        )
-
-        ForEach(viewModel.feeds, id: \.id) { feed in
-            DiscoverFeedCard(
-                feed: feed,
-                onToggle: { Task { await viewModel.toggleEnabled(feed) } },
-                onDelete: { Task { await viewModel.deleteFeed(feed) } }
-            )
-        }
-
-        Button {
-            viewModel.showAddSheet = true
-        } label: {
-            GlassCard(cornerRadius: 18, style: .standard) {
-                HStack(spacing: 12) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.purple)
-
-                    Text("Add feed")
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Your feeds")
                         .font(.headline)
+                    Text("\(viewModel.feeds.count) source\(viewModel.feeds.count == 1 ? "" : "s") configured.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
 
-                    Spacer()
+                Spacer()
+
+                Button("Add Feed", systemImage: "plus") {
+                    viewModel.showAddSheet = true
+                }
+                .buttonStyle(.bordered)
+            }
+
+            GroupBox {
+                if viewModel.feeds.isEmpty {
+                    ContentUnavailableView(
+                        "No Feeds",
+                        systemImage: "antenna.radiowaves.left.and.right",
+                        description: Text("Add a feed to start building your reading universe.")
+                    )
+                    .padding(.vertical, 12)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(Array(viewModel.feeds.enumerated()), id: \.element.id) { index, feed in
+                            DiscoverFeedRow(
+                                feed: feed,
+                                onToggle: { Task { await viewModel.toggleEnabled(feed) } },
+                                onDelete: { Task { await viewModel.deleteFeed(feed) } }
+                            )
+
+                            if index < viewModel.feeds.count - 1 {
+                                Divider()
+                                    .padding(.leading, 40)
+                            }
+                        }
+                    }
                 }
             }
         }
-        .buttonStyle(.plain)
     }
 }
 
-// MARK: - Feed Card
-
-private struct DiscoverFeedCard: View {
+private struct DiscoverFeedRow: View {
     let feed: Feed
     let onToggle: () -> Void
     let onDelete: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        GlassCard(cornerRadius: 18, style: feed.isEnabled ? .raised : .standard, tintColor: accentColor) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(accentColor.opacity(0.12))
-                    .frame(width: 40, height: 40)
-                    .overlay {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .foregroundStyle(accentColor)
-                            .font(.system(size: 15, weight: .semibold))
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .foregroundStyle(accentColor)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+
+                HStack(spacing: 8) {
+                    Text("\(feed.articles?.count ?? 0) articles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if !feed.isEnabled {
+                        Text("Paused")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
                     }
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(feed.title.isEmpty ? feed.feedUrl : feed.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-
-                    HStack(spacing: 6) {
-                        Text("\(feed.articles?.count ?? 0) articles")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        if !feed.isEnabled {
-                            Text("Paused")
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.orange)
-                        }
-
-                        if feed.errorMessage != nil {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.red)
-                        }
+                    if feed.errorMessage != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
                     }
                 }
-
-                Spacer()
             }
+
+            Spacer()
+
+            Toggle("Enabled", isOn: enabledBinding)
+                .labelsHidden()
+
+            Menu {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.title3)
+            }
+            .buttonStyle(.plain)
         }
-        .contextMenu {
-            Button {
+        .padding(.vertical, 10)
+    }
+
+    private var enabledBinding: Binding<Bool> {
+        Binding(
+            get: { feed.isEnabled },
+            set: { newValue in
+                guard newValue != feed.isEnabled else { return }
                 onToggle()
-            } label: {
-                Label(
-                    feed.isEnabled ? "Pause" : "Resume",
-                    systemImage: feed.isEnabled ? "pause.circle" : "play.circle"
-                )
             }
-
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-        }
+        )
     }
 
     private var accentColor: Color {

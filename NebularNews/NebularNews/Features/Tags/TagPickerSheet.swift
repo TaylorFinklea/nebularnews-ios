@@ -2,10 +2,7 @@ import SwiftUI
 import SwiftData
 import NebularNewsKit
 
-/// Sheet for assigning/removing tags on an article.
-///
-/// Shows all tags with checkmarks for currently assigned ones.
-/// Tap to toggle assignment. Includes inline "Create new tag" option.
+/// Sheet for assigning and managing tags on an article.
 struct TagPickerSheet: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
@@ -16,7 +13,7 @@ struct TagPickerSheet: View {
     private var allTags: [Tag]
     @Query private var tagSuggestions: [ArticleTagSuggestion]
 
-    @State private var showNewTagField = false
+    @State private var showCreateTagAlert = false
     @State private var newTagName = ""
 
     init(article: Article) {
@@ -30,94 +27,138 @@ struct TagPickerSheet: View {
         )
     }
 
+    private var attachedTags: [Tag] {
+        allTags.filter(isAssigned)
+    }
+
+    private var availableTags: [Tag] {
+        allTags.filter { !isAssigned($0) }
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 if !tagSuggestions.isEmpty {
-                    Section("Suggested") {
+                    Section {
                         ForEach(tagSuggestions, id: \.id) { suggestion in
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(suggestion.name)
-                                            .foregroundStyle(.primary)
-                                        if let confidence = suggestion.confidence {
-                                            Text("\(Int((confidence * 100).rounded()))% confidence")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-
-                                    Spacer()
-                                }
-
-                                HStack {
-                                    Button("Accept") {
-                                        acceptSuggestion(suggestion)
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .controlSize(.small)
-
-                                    Button("Dismiss", role: .destructive) {
-                                        dismissSuggestion(suggestion)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                }
-                            }
-                            .padding(.vertical, 2)
+                            suggestionRow(suggestion)
                         }
+                    } header: {
+                        Text("Suggested")
+                    } footer: {
+                        Text("Suggested tags stay separate until you accept them.")
                     }
                 }
 
-                ForEach(allTags, id: \.id) { tag in
-                    Button {
-                        toggleTag(tag)
-                    } label: {
-                        HStack {
-                            Circle()
-                                .fill(tagColor(for: tag))
-                                .frame(width: 10, height: 10)
-
-                            Text(tag.name)
-                                .foregroundStyle(.primary)
-
-                            Spacer()
-
-                            if isAssigned(tag) {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.tint)
-                            }
+                if !attachedTags.isEmpty {
+                    Section {
+                        ForEach(attachedTags, id: \.id) { tag in
+                            tagRow(tag, isAttached: true)
                         }
+                    } header: {
+                        Text("Attached")
                     }
                 }
 
-                // Create new tag inline
-                if showNewTagField {
-                    HStack {
-                        TextField("New tag name", text: $newTagName)
-                            .textFieldStyle(.roundedBorder)
-                        Button("Add") {
-                            createAndAssign()
+                Section {
+                    if availableTags.isEmpty {
+                        Text("No additional tags available yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(availableTags, id: \.id) { tag in
+                            tagRow(tag, isAttached: false)
                         }
-                        .disabled(newTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                } else {
-                    Button {
-                        showNewTagField = true
-                    } label: {
-                        Label("Create New Tag", systemImage: "plus")
+                } header: {
+                    Text(attachedTags.isEmpty ? "All Tags" : "Available Tags")
+                }
+            }
+            .navigationTitle("Tags")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button("New Tag", systemImage: "plus") {
+                        newTagName = ""
+                        showCreateTagAlert = true
                     }
                 }
             }
-            .navigationTitle("Manage Tags")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+            .alert("New Tag", isPresented: $showCreateTagAlert) {
+                TextField("Tag name", text: $newTagName)
+                Button("Cancel", role: .cancel) {}
+                Button("Add") {
+                    createAndAssign()
+                }
+            } message: {
+                Text("Create a tag and attach it to this article.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func suggestionRow(_ suggestion: ArticleTagSuggestion) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(suggestion.name)
+                .foregroundStyle(.primary)
+
+            HStack(spacing: 8) {
+                if let confidence = suggestion.confidence {
+                    Text("\(Int((confidence * 100).rounded()))% confidence")
+                }
+
+                if let sourceProvider = suggestion.sourceProvider, !sourceProvider.isEmpty {
+                    Text(sourceProvider.replacingOccurrences(of: "_", with: " ").capitalized)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button("Accept", systemImage: "checkmark") {
+                acceptSuggestion(suggestion)
+            }
+            .tint(.green)
+
+            Button("Dismiss", systemImage: "xmark", role: .destructive) {
+                dismissSuggestion(suggestion)
+            }
+        }
+        .contextMenu {
+            Button("Accept", systemImage: "checkmark") {
+                acceptSuggestion(suggestion)
+            }
+
+            Button("Dismiss", systemImage: "xmark", role: .destructive) {
+                dismissSuggestion(suggestion)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tagRow(_ tag: Tag, isAttached: Bool) -> some View {
+        Button {
+            toggleTag(tag)
+        } label: {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(tagColor(for: tag))
+                    .frame(width: 10, height: 10)
+
+                Text(tag.name)
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                if isAttached {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(.tint)
                 }
             }
         }
+        .buttonStyle(.plain)
     }
 
     private func isAssigned(_ tag: Tag) -> Bool {
@@ -160,9 +201,6 @@ struct TagPickerSheet: View {
         }
         try? modelContext.save()
         rescoreArticle()
-
-        newTagName = ""
-        showNewTagField = false
     }
 
     private func persistSystemTagIDs(_ tagIDs: [String]) {
