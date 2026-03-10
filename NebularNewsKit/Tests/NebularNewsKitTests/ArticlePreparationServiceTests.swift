@@ -142,6 +142,56 @@ struct ArticlePreparationServiceTests {
         #expect(stored.isPresentationReady)
         #expect(stored.presentationReadyAt != nil)
     }
+
+    @Test("Hidden migrated articles are backfilled into score jobs on warm paths")
+    func hiddenArticlesAreBackfilledIntoScoreJobs() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Migrated Hidden Article",
+            content: longContent("A detailed article body suitable for scoring."),
+            imageURL: "https://example.com/image.jpg"
+        )
+
+        article.scorePreparedRevision = currentPersonalizationVersion
+        article.queryIsVisible = false
+        article.presentationReadyAt = nil
+        try context.save()
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let backfilled = try await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 10)
+        let pending = await articleRepo.pendingVisibleArticleCount()
+        let claimed = await articleRepo.claimProcessingJobs(limit: 10, allowLowPriority: false)
+
+        #expect(backfilled == 1)
+        #expect(pending == 1)
+        #expect(claimed.contains(ArticleProcessingJob.makeKey(articleID: article.id, stage: .scoreAndTag)))
+    }
+
+    @Test("Pending visible count reflects active score jobs instead of all hidden rows")
+    func pendingVisibleCountTracksActiveJobsOnly() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+        _ = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Hidden Without Job",
+            content: longContent("A detailed article body suitable for scoring."),
+            imageURL: "https://example.com/image.jpg"
+        )
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let pendingBefore = await articleRepo.pendingVisibleArticleCount()
+        _ = try await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 10)
+        let pendingAfter = await articleRepo.pendingVisibleArticleCount()
+
+        #expect(pendingBefore == 0)
+        #expect(pendingAfter == 1)
+    }
 }
 
 private actor PreparationMockGenerationCoordinator: AIGenerationCoordinating {

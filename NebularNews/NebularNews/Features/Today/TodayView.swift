@@ -120,7 +120,7 @@ private struct TodayPreparingSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Preparing \(count) article\(count == 1 ? "" : "s")", systemImage: "sparkles")
+                Label(title, systemImage: "sparkles")
                     .font(.headline)
                 Spacer()
                 ProgressView()
@@ -131,6 +131,10 @@ private struct TodayPreparingSection: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var title: String {
+        count > 9 ? "Preparing fresh articles" : "Preparing \(count) article\(count == 1 ? "" : "s")"
     }
 }
 

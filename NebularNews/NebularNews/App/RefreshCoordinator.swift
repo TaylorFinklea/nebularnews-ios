@@ -19,16 +19,18 @@ actor RefreshCoordinator {
     static let shared = RefreshCoordinator()
 
     func runWarmStart(modelContainer: ModelContainer, keychainService: String) async {
-        await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
-            modelContainer: modelContainer,
-            keychainService: keychainService
-        )
         await refreshIfNeeded(
             modelContainer: modelContainer,
             keychainService: keychainService,
             allowLowPriority: false,
             bypassBackoff: false
         )
+        Task(priority: .background) {
+            await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
+                modelContainer: modelContainer,
+                keychainService: keychainService
+            )
+        }
     }
 
     func runManualRefresh(modelContainer: ModelContainer, keychainService: String) async -> (result: PollCycleResult, deleted: Int, trimmed: Int, prepared: Int) {
@@ -96,8 +98,12 @@ actor RefreshCoordinator {
             )
         }
 
+        _ = try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(
+            limit: allowLowPriority ? 80 : 40
+        )
+
         _ = await preparation.processPendingArticles(
-            batchSize: allowLowPriority ? 8 : 4,
+            batchSize: allowLowPriority ? 8 : 16,
             allowLowPriority: allowLowPriority
         )
     }

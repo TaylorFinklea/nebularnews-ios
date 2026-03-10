@@ -60,6 +60,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate?
     func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
     func pendingVisibleArticleCount() async -> Int
+    func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int
     func enqueueMissingProcessingJobs(for articleID: String) async throws
     func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String]
     func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob?
@@ -284,10 +285,53 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func pendingVisibleArticleCount() async -> Int {
-        let descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.queryIsVisible == false }
+        let descriptor = FetchDescriptor<ArticleProcessingJob>()
+        let jobs = ((try? modelContext.fetch(descriptor)) ?? []).filter { job in
+            job.stage == .scoreAndTag && (job.status == .queued || job.status == .running)
+        }
+
+        var count = 0
+        for job in jobs {
+            guard let article = await get(id: job.articleID),
+                  article.queryIsVisible == false else {
+                continue
+            }
+            count += 1
+        }
+
+        return count
+    }
+
+    public func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int {
+        var descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.queryIsVisible == false },
+            sortBy: [SortDescriptor(\.querySortDate, order: .reverse)]
         )
-        return (try? modelContext.fetchCount(descriptor)) ?? 0
+        descriptor.fetchLimit = max(limit, 0)
+
+        let hiddenArticles = try modelContext.fetch(descriptor)
+        var touched = 0
+
+        for article in hiddenArticles {
+            let previousQueuedJob = try existingProcessingJob(
+                articleID: article.id,
+                stage: .scoreAndTag
+            )
+
+            try await enqueueMissingProcessingJobs(for: article.id)
+
+            let refreshedJob = try existingProcessingJob(
+                articleID: article.id,
+                stage: .scoreAndTag
+            )
+
+            if previousQueuedJob?.status != .queued,
+               refreshedJob?.status == .queued {
+                touched += 1
+            }
+        }
+
+        return touched
     }
 
     public func enqueueMissingProcessingJobs(for articleID: String) async throws {
@@ -298,7 +342,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             stage: .scoreAndTag,
             priority: 300,
             inputRevision: max(article.contentRevision, currentPersonalizationVersion),
-            shouldQueue: article.scorePreparedRevision < max(article.contentRevision, currentPersonalizationVersion)
+            shouldQueue: article.scorePreparedRevision < max(article.contentRevision, currentPersonalizationVersion) ||
+                article.queryIsVisible == false
         )
 
         try ensureProcessingJobIfNeeded(
@@ -1145,5 +1190,17 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 inputRevision: inputRevision
             )
         )
+    }
+
+    private func existingProcessingJob(
+        articleID: String,
+        stage: ArticleProcessingStage
+    ) throws -> ArticleProcessingJob? {
+        let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
+        var descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
     }
 }
