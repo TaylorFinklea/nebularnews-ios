@@ -13,6 +13,9 @@ final class AppState {
     private enum DefaultsKey {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let appMode = "appMode"
+#if DEBUG
+        static let isDeveloperModeEnabled = "isDeveloperModeEnabled"
+#endif
     }
 
     private let defaults: UserDefaults
@@ -33,6 +36,14 @@ final class AppState {
         }
     }
 
+#if DEBUG
+    var isDeveloperModeEnabled: Bool {
+        didSet {
+            defaults.set(isDeveloperModeEnabled, forKey: DefaultsKey.isDeveloperModeEnabled)
+        }
+    }
+#endif
+
     init(configuration: AppConfiguration? = nil, defaults: UserDefaults = .standard) {
         let resolvedConfiguration = configuration ?? .shared
         let resolvedDefaults = defaults
@@ -42,6 +53,9 @@ final class AppState {
         self.configuration = resolvedConfiguration
         self.hasCompletedOnboarding = resolvedDefaults.bool(forKey: DefaultsKey.hasCompletedOnboarding)
         self.mode = persistedMode
+#if DEBUG
+        self.isDeveloperModeEnabled = resolvedDefaults.bool(forKey: DefaultsKey.isDeveloperModeEnabled)
+#endif
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
         self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
         self.mobileOAuthCoordinator = MobileOAuthCoordinator(configuration: resolvedConfiguration)

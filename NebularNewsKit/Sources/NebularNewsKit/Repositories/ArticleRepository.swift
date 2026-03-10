@@ -1301,3 +1301,73 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         }
     }
 }
+
+#if DEBUG
+extension LocalArticleRepository {
+    public func processingDebugSnapshot() async -> ArticleProcessingDebugSnapshot {
+        let jobs = allProcessingJobs()
+        let articleTitles = Dictionary(
+            uniqueKeysWithValues: (((try? modelContext.fetch(FetchDescriptor<Article>())) ?? []).map { article in
+                (article.id, article.title)
+            })
+        )
+
+        let runningJobs = jobs
+            .filter { $0.status == .running }
+            .sorted { $0.updatedAt > $1.updatedAt }
+
+        let queuedJobs = jobs
+            .filter { $0.status == .queued }
+            .sorted {
+                if $0.priority != $1.priority {
+                    return $0.priority > $1.priority
+                }
+                return $0.updatedAt < $1.updatedAt
+            }
+
+        let failedJobs = jobs
+            .filter { $0.status == .failed }
+            .sorted { $0.updatedAt > $1.updatedAt }
+
+        return ArticleProcessingDebugSnapshot(
+            runningCount: runningJobs.count,
+            queuedCount: queuedJobs.count,
+            failedCount: failedJobs.count,
+            pendingVisibleCount: await pendingVisibleArticleCount(),
+            runningStageCounts: stageCounts(for: runningJobs),
+            queuedStageCounts: stageCounts(for: queuedJobs),
+            failedStageCounts: stageCounts(for: failedJobs),
+            runningRows: runningJobs.map { debugRow(for: $0, articleTitles: articleTitles) },
+            queuedRows: Array(queuedJobs.prefix(100)).map { debugRow(for: $0, articleTitles: articleTitles) },
+            failedRows: Array(failedJobs.prefix(50)).map { debugRow(for: $0, articleTitles: articleTitles) }
+        )
+    }
+
+    private func debugRow(
+        for job: ArticleProcessingJob,
+        articleTitles: [String: String?]
+    ) -> ArticleProcessingDebugRow {
+        ArticleProcessingDebugRow(
+            id: job.key,
+            articleID: job.articleID,
+            articleTitle: articleTitles[job.articleID] ?? nil,
+            stage: job.stage,
+            status: job.status,
+            priority: job.priority,
+            attemptCount: job.attemptCount,
+            availableAt: job.availableAt,
+            updatedAt: job.updatedAt,
+            lastError: job.lastError
+        )
+    }
+
+    private func stageCounts(for jobs: [ArticleProcessingJob]) -> ArticleProcessingDebugStageCounts {
+        ArticleProcessingDebugStageCounts(
+            scoreAndTag: jobs.filter { $0.stage == .scoreAndTag }.count,
+            fetchContent: jobs.filter { $0.stage == .fetchContent }.count,
+            generateSummary: jobs.filter { $0.stage == .generateSummary }.count,
+            resolveImage: jobs.filter { $0.stage == .resolveImage }.count
+        )
+    }
+}
+#endif

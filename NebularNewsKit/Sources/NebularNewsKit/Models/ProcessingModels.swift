@@ -19,6 +19,101 @@ public enum ArticleProcessingJobStatus: String, Codable, CaseIterable, Sendable 
 public let currentSummaryPreparationRevision = 1
 public let currentImagePreparationRevision = 2
 
+#if DEBUG
+public struct ArticleProcessingDebugStageCounts: Sendable {
+    public let scoreAndTag: Int
+    public let fetchContent: Int
+    public let generateSummary: Int
+    public let resolveImage: Int
+
+    public init(
+        scoreAndTag: Int,
+        fetchContent: Int,
+        generateSummary: Int,
+        resolveImage: Int
+    ) {
+        self.scoreAndTag = scoreAndTag
+        self.fetchContent = fetchContent
+        self.generateSummary = generateSummary
+        self.resolveImage = resolveImage
+    }
+}
+
+public struct ArticleProcessingDebugRow: Identifiable, Sendable {
+    public let id: String
+    public let articleID: String
+    public let articleTitle: String?
+    public let stage: ArticleProcessingStage
+    public let status: ArticleProcessingJobStatus
+    public let priority: Int
+    public let attemptCount: Int
+    public let availableAt: Date
+    public let updatedAt: Date
+    public let lastError: String?
+
+    public init(
+        id: String,
+        articleID: String,
+        articleTitle: String?,
+        stage: ArticleProcessingStage,
+        status: ArticleProcessingJobStatus,
+        priority: Int,
+        attemptCount: Int,
+        availableAt: Date,
+        updatedAt: Date,
+        lastError: String?
+    ) {
+        self.id = id
+        self.articleID = articleID
+        self.articleTitle = articleTitle
+        self.stage = stage
+        self.status = status
+        self.priority = priority
+        self.attemptCount = attemptCount
+        self.availableAt = availableAt
+        self.updatedAt = updatedAt
+        self.lastError = lastError
+    }
+}
+
+public struct ArticleProcessingDebugSnapshot: Sendable {
+    public let runningCount: Int
+    public let queuedCount: Int
+    public let failedCount: Int
+    public let pendingVisibleCount: Int
+    public let runningStageCounts: ArticleProcessingDebugStageCounts
+    public let queuedStageCounts: ArticleProcessingDebugStageCounts
+    public let failedStageCounts: ArticleProcessingDebugStageCounts
+    public let runningRows: [ArticleProcessingDebugRow]
+    public let queuedRows: [ArticleProcessingDebugRow]
+    public let failedRows: [ArticleProcessingDebugRow]
+
+    public init(
+        runningCount: Int,
+        queuedCount: Int,
+        failedCount: Int,
+        pendingVisibleCount: Int,
+        runningStageCounts: ArticleProcessingDebugStageCounts,
+        queuedStageCounts: ArticleProcessingDebugStageCounts,
+        failedStageCounts: ArticleProcessingDebugStageCounts,
+        runningRows: [ArticleProcessingDebugRow],
+        queuedRows: [ArticleProcessingDebugRow],
+        failedRows: [ArticleProcessingDebugRow]
+    ) {
+        self.runningCount = runningCount
+        self.queuedCount = queuedCount
+        self.failedCount = failedCount
+        self.pendingVisibleCount = pendingVisibleCount
+        self.runningStageCounts = runningStageCounts
+        self.queuedStageCounts = queuedStageCounts
+        self.failedStageCounts = failedStageCounts
+        self.runningRows = runningRows
+        self.queuedRows = queuedRows
+        self.failedRows = failedRows
+    }
+}
+#endif
+
 @Model
 public final class ArticleProcessingJob: @unchecked Sendable {
     @Attribute(.unique) public var key: String

@@ -184,45 +184,63 @@ struct SettingsView: View {
 
 #if DEBUG
                 Section {
-                    if let snapshot = debugAuditSnapshot {
-                        LabeledContent("Migration progress", value: "\(snapshot.currentVersionArticles) / \(snapshot.totalArticles)")
-                        LabeledContent("Still stale", value: "\(snapshot.staleArticles)")
-                        LabeledContent("Ready scores", value: "\(snapshot.totalReadyScores)")
-                        LabeledContent("Recent ready", value: "\(snapshot.recentReadyScores)")
-                        LabeledContent("Pending prep", value: pendingPreparationCount.map(String.init) ?? "Loading")
-                        LabeledContent("Feed affinity rows", value: "\(snapshot.feedAffinityRows)")
-                        LabeledContent("Topic affinity rows", value: "\(snapshot.topicAffinityRows)")
-                        LabeledContent("Author affinity rows", value: "\(snapshot.authorAffinityRows)")
-                        LabeledContent("Learned weights", value: "\(snapshot.signalWeightRows)")
-                        LabeledContent("Over-tagged", value: "\(snapshot.overTaggedArticles)")
-                    } else {
-                        HStack(spacing: 12) {
-                            if isRefreshingDebug || isRebuildingDebug {
-                                ProgressView()
-                                    .controlSize(.small)
-                            }
-                            Text("Loading personalization diagnostics…")
-                                .foregroundStyle(.secondary)
+                    Toggle("Enable Developer Mode", isOn: developerModeBinding)
+
+                    if appState.isDeveloperModeEnabled {
+                        NavigationLink {
+                            DeveloperJobInspectorView()
+                        } label: {
+                            Label("Job Inspector", systemImage: "list.bullet.rectangle")
                         }
                     }
-
-                    Button {
-                        refreshDebugMetrics()
-                    } label: {
-                        Label("Refresh Diagnostics", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(isRefreshingDebug || isRebuildingDebug)
-
-                    Button {
-                        runDebugRebuild()
-                    } label: {
-                        Label("Force Rebuild History", systemImage: "hammer")
-                    }
-                    .disabled(isRefreshingDebug || isRebuildingDebug)
                 } header: {
-                    Label("Debug Personalization", systemImage: "ladybug")
+                    Label("Developer Mode", systemImage: "hammer")
                 } footer: {
-                    Text("Temporary on-device readout for V6 migration progress. Force rebuild replays historical reactions and dismissals for this device only.")
+                    Text("DEBUG-only tools for inspecting the article-processing queue and personalization state on this device.")
+                }
+
+                if appState.isDeveloperModeEnabled {
+                    Section {
+                        if let snapshot = debugAuditSnapshot {
+                            LabeledContent("Migration progress", value: "\(snapshot.currentVersionArticles) / \(snapshot.totalArticles)")
+                            LabeledContent("Still stale", value: "\(snapshot.staleArticles)")
+                            LabeledContent("Ready scores", value: "\(snapshot.totalReadyScores)")
+                            LabeledContent("Recent ready", value: "\(snapshot.recentReadyScores)")
+                            LabeledContent("Pending prep", value: pendingPreparationCount.map(String.init) ?? "Loading")
+                            LabeledContent("Feed affinity rows", value: "\(snapshot.feedAffinityRows)")
+                            LabeledContent("Topic affinity rows", value: "\(snapshot.topicAffinityRows)")
+                            LabeledContent("Author affinity rows", value: "\(snapshot.authorAffinityRows)")
+                            LabeledContent("Learned weights", value: "\(snapshot.signalWeightRows)")
+                            LabeledContent("Over-tagged", value: "\(snapshot.overTaggedArticles)")
+                        } else {
+                            HStack(spacing: 12) {
+                                if isRefreshingDebug || isRebuildingDebug {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Text("Loading personalization diagnostics…")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Button {
+                            refreshDebugMetrics()
+                        } label: {
+                            Label("Refresh Diagnostics", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(isRefreshingDebug || isRebuildingDebug)
+
+                        Button {
+                            runDebugRebuild()
+                        } label: {
+                            Label("Force Rebuild History", systemImage: "hammer")
+                        }
+                        .disabled(isRefreshingDebug || isRebuildingDebug)
+                    } header: {
+                        Label("Debug Personalization", systemImage: "ladybug")
+                    } footer: {
+                        Text("Temporary on-device readout for V6 migration progress. Force rebuild replays historical reactions and dismissals for this device only.")
+                    }
                 }
 #endif
             }
@@ -233,7 +251,9 @@ struct SettingsView: View {
         .task {
             await refreshAnthropicModelsIfNeeded()
 #if DEBUG
-            refreshDebugMetrics()
+            if appState.isDeveloperModeEnabled {
+                refreshDebugMetrics()
+            }
 #endif
         }
         .task(id: anthropicModelLoadKey) {
@@ -297,6 +317,25 @@ struct SettingsView: View {
     }
 
     // MARK: - Bindings that auto-save
+
+#if DEBUG
+    private var developerModeBinding: Binding<Bool> {
+        Binding(
+            get: { appState.isDeveloperModeEnabled },
+            set: { newValue in
+                appState.isDeveloperModeEnabled = newValue
+                if newValue {
+                    refreshDebugMetrics()
+                } else {
+                    debugAuditSnapshot = nil
+                    pendingPreparationCount = nil
+                    isRefreshingDebug = false
+                    isRebuildingDebug = false
+                }
+            }
+        )
+    }
+#endif
 
     private var pollIntervalBinding: Binding<Int> {
         Binding(
@@ -474,6 +513,7 @@ struct SettingsView: View {
 
 #if DEBUG
     private func refreshDebugMetrics() {
+        guard appState.isDeveloperModeEnabled else { return }
         guard !isRefreshingDebug else { return }
         isRefreshingDebug = true
 
@@ -500,6 +540,7 @@ struct SettingsView: View {
     }
 
     private func runDebugRebuild() {
+        guard appState.isDeveloperModeEnabled else { return }
         guard !isRebuildingDebug else { return }
         isRebuildingDebug = true
 
