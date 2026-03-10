@@ -61,6 +61,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
     func pendingVisibleArticleCount() async -> Int
     func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int
+    func backfillMissingImageJobsForVisibleArticles(limit: Int) async throws -> Int
     func enqueueMissingProcessingJobs(for articleID: String) async throws
     func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String]
     func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob?
@@ -103,6 +104,7 @@ public struct ArticleFallbackImageSnapshot: Sendable {
     public let contentText: String
     public let tags: [String]
     public let resolvedImageUrl: String?
+    public let fallbackImageProvider: String?
 
     public init(
         id: String,
@@ -111,7 +113,8 @@ public struct ArticleFallbackImageSnapshot: Sendable {
         feedTitle: String?,
         contentText: String,
         tags: [String],
-        resolvedImageUrl: String?
+        resolvedImageUrl: String?,
+        fallbackImageProvider: String?
     ) {
         self.id = id
         self.title = title
@@ -120,6 +123,7 @@ public struct ArticleFallbackImageSnapshot: Sendable {
         self.contentText = contentText
         self.tags = tags
         self.resolvedImageUrl = resolvedImageUrl
+        self.fallbackImageProvider = fallbackImageProvider
     }
 }
 
@@ -334,6 +338,50 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return touched
     }
 
+    public func backfillMissingImageJobsForVisibleArticles(limit: Int) async throws -> Int {
+        var descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> {
+                $0.queryIsVisible == true &&
+                $0.imageUrl == nil &&
+                $0.ogImageUrl == nil &&
+                $0.imagePreparedRevision < currentImagePreparationRevision
+            },
+            sortBy: [SortDescriptor(\.querySortDate, order: .reverse)]
+        )
+        descriptor.fetchLimit = max(limit, 0)
+
+        let visibleArticles = try modelContext.fetch(descriptor)
+        var touched = 0
+
+        for article in visibleArticles {
+            let previousQueuedJob = try existingProcessingJob(
+                articleID: article.id,
+                stage: .resolveImage
+            )
+
+            try ensureProcessingJobIfNeeded(
+                articleID: article.id,
+                stage: .resolveImage,
+                priority: 150,
+                inputRevision: currentImagePreparationRevision,
+                shouldQueue: true
+            )
+
+            let refreshedJob = try existingProcessingJob(
+                articleID: article.id,
+                stage: .resolveImage
+            )
+
+            if previousQueuedJob?.status != .queued,
+               refreshedJob?.status == .queued {
+                touched += 1
+            }
+        }
+
+        try modelContext.save()
+        return touched
+    }
+
     public func enqueueMissingProcessingJobs(for articleID: String) async throws {
         guard let article = await get(id: articleID) else { return }
 
@@ -365,9 +413,11 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         try ensureProcessingJobIfNeeded(
             articleID: article.id,
             stage: .resolveImage,
-            priority: 100,
+            priority: 150,
             inputRevision: currentImagePreparationRevision,
-            shouldQueue: article.resolvedImageUrl == nil && article.imagePreparedRevision < currentImagePreparationRevision
+            shouldQueue: article.imageUrl == nil &&
+                article.ogImageUrl == nil &&
+                article.imagePreparedRevision < currentImagePreparationRevision
         )
 
         try modelContext.save()
@@ -497,9 +547,27 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         guard let article = await get(id: id) else { return nil }
 
         let text = article.bestAvailableContentText
-        let tags = (article.tags ?? [])
+        let manualTags = (article.tags ?? [])
             .map(\.name)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let systemTagIDs = Set(article.systemTagIds)
+        let systemTags: [String]
+        if systemTagIDs.isEmpty {
+            systemTags = []
+        } else {
+            let descriptor = FetchDescriptor<Tag>()
+            let allTags = (try? modelContext.fetch(descriptor)) ?? []
+            systemTags = allTags
+                .filter { systemTagIDs.contains($0.id) }
+                .map(\.name)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+
+        var tags: [String] = []
+        for value in manualTags + systemTags {
+            guard !tags.contains(value) else { continue }
+            tags.append(value)
+        }
 
         return ArticleFallbackImageSnapshot(
             id: article.id,
@@ -508,7 +576,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             feedTitle: article.feed?.title,
             contentText: text,
             tags: tags,
-            resolvedImageUrl: article.resolvedImageUrl
+            resolvedImageUrl: article.resolvedImageUrl,
+            fallbackImageProvider: article.fallbackImageProvider
         )
     }
 
@@ -722,7 +791,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         id: String,
         url: String,
         provider: String,
-        themeKey: String
+        themeKey: String,
+        photographerName: String? = nil,
+        photographerProfileUrl: String? = nil,
+        photoPageUrl: String? = nil
     ) async throws {
         guard let article = await get(id: id) else { return }
         guard article.imageUrl == nil, article.ogImageUrl == nil else { return }
@@ -730,6 +802,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         article.fallbackImageUrl = url
         article.fallbackImageProvider = provider
         article.fallbackImageTheme = themeKey
+        article.fallbackImagePhotographerName = photographerName
+        article.fallbackImagePhotographerProfileUrl = photographerProfileUrl
+        article.fallbackImagePhotoPageUrl = photoPageUrl
         article.fallbackImageGeneratedAt = Date()
         article.imagePreparationStatusRaw = ArticlePreparationStageStatus.succeeded.rawValue
         article.markImagePrepared(revision: currentImagePreparationRevision)

@@ -16,6 +16,8 @@ struct SettingsView: View {
     @State private var anthropicModels: [AnthropicModelOption] = AnthropicModelCatalog.fallbackOptions
     @State private var isLoadingAnthropicModels = false
     @State private var anthropicModelsStatus: String?
+    @State private var editingAPIKey: EditableAPIKey?
+    @State private var apiKeyDraft = ""
 
 #if DEBUG
     @State private var debugAuditSnapshot: PersonalizationAuditSnapshot?
@@ -92,7 +94,10 @@ struct SettingsView: View {
                         apiKeyRow(
                             label: "Anthropic API Key",
                             hasKey: appState.hasAnthropicKey
-                        )
+                        ) {
+                            apiKeyDraft = ""
+                            editingAPIKey = .anthropic
+                        }
 
                         Picker("Anthropic model", selection: anthropicModelBinding) {
                             ForEach(anthropicModels) { model in
@@ -126,16 +131,30 @@ struct SettingsView: View {
                     apiKeyRow(
                         label: "Anthropic API Key",
                         hasKey: appState.hasAnthropicKey
-                    )
+                    ) {
+                        apiKeyDraft = ""
+                        editingAPIKey = .anthropic
+                    }
 
                     apiKeyRow(
                         label: "OpenAI API Key",
                         hasKey: appState.hasOpenAIKey
-                    )
+                    ) {
+                        apiKeyDraft = ""
+                        editingAPIKey = .openAI
+                    }
+
+                    apiKeyRow(
+                        label: "Unsplash Access Key",
+                        hasKey: appState.hasUnsplashKey
+                    ) {
+                        apiKeyDraft = ""
+                        editingAPIKey = .unsplash
+                    }
                 } header: {
-                    Label("External AI Keys", systemImage: "key")
+                    Label("External Service Keys", systemImage: "key")
                 } footer: {
-                    Text("API keys stay in your device Keychain. Anthropic powers automatic LLM mode. OpenAI remains available only for explicit regenerate actions from an article.")
+                    Text("API keys stay in your device Keychain. Anthropic powers automatic LLM mode. OpenAI remains available only for explicit regenerate actions from an article. Unsplash powers live background image search for articles missing feed or OG images.")
                 }
 
                 Section {
@@ -224,6 +243,54 @@ struct SettingsView: View {
             if showsDismissButton {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
+                }
+            }
+        }
+        .sheet(item: $editingAPIKey) { provider in
+            NavigationStack {
+                Form {
+                    Section {
+                        SecureField(provider.placeholder, text: $apiKeyDraft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textContentType(.password)
+                    } header: {
+                        Text(provider.label)
+                    } footer: {
+                        Text(provider.footer)
+                    }
+
+                    if appState.keychain.has(key: provider.keychainKey) {
+                        Section {
+                            Button("Remove Key", role: .destructive) {
+                                appState.keychain.delete(forKey: provider.keychainKey)
+                                apiKeyDraft = ""
+                                editingAPIKey = nil
+                            }
+                        }
+                    }
+                }
+                .navigationTitle(provider.label)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") {
+                            apiKeyDraft = ""
+                            editingAPIKey = nil
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            let trimmed = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else {
+                                editingAPIKey = nil
+                                return
+                            }
+                            try? appState.keychain.set(trimmed, forKey: provider.keychainKey)
+                            apiKeyDraft = ""
+                            editingAPIKey = nil
+                        }
+                    }
                 }
             }
         }
@@ -325,18 +392,25 @@ struct SettingsView: View {
     // MARK: - API Key Row
 
     @ViewBuilder
-    private func apiKeyRow(label: String, hasKey: Bool) -> some View {
-        HStack {
-            Text(label)
-            Spacer()
-            if hasKey {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
-                Text("Not set")
+    private func apiKeyRow(label: String, hasKey: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if hasKey {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else {
+                    Text("Not set")
+                        .foregroundStyle(.tertiary)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
         }
+        .buttonStyle(.plain)
     }
 
     private var anthropicModelLoadKey: String {
@@ -453,4 +527,51 @@ struct SettingsView: View {
         }
     }
 #endif
+}
+
+private enum EditableAPIKey: String, Identifiable {
+    case anthropic
+    case openAI
+    case unsplash
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .anthropic:
+            return "Anthropic API Key"
+        case .openAI:
+            return "OpenAI API Key"
+        case .unsplash:
+            return "Unsplash Access Key"
+        }
+    }
+
+    var keychainKey: String {
+        switch self {
+        case .anthropic: KeychainManager.Key.anthropicApiKey
+        case .openAI: KeychainManager.Key.openaiApiKey
+        case .unsplash: KeychainManager.Key.unsplashAccessKey
+        }
+    }
+
+    var placeholder: String {
+        switch self {
+        case .unsplash:
+            return "Paste your Unsplash access key"
+        case .anthropic, .openAI:
+            return "Paste your API key"
+        }
+    }
+
+    var footer: String {
+        switch self {
+        case .anthropic:
+            return "Used for automatic Anthropic mode and explicit regenerate actions."
+        case .openAI:
+            return "Used only for explicit regenerate actions from an article."
+        case .unsplash:
+            return "Used to search Unsplash in the background for articles that do not have a feed or OG image."
+        }
+    }
 }

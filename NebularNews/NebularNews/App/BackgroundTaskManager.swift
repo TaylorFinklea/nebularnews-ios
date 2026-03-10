@@ -95,11 +95,27 @@ enum BackgroundTaskManager {
                 modelContainer: modelContainer,
                 keychainService: AppConfiguration.shared.keychainService
             )
+            let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
             let preparation = ArticlePreparationService(
                 modelContainer: modelContainer,
                 keychainService: AppConfiguration.shared.keychainService
             )
-            _ = await preparation.processPendingArticles(batchSize: 12, allowLowPriority: true)
+
+            for _ in 0..<20 {
+                let backfilled = (try? await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 120)) ?? 0
+                let processed = await preparation.processPendingArticles(
+                    batchSize: 12,
+                    allowLowPriority: true
+                )
+
+                if processed == 0 && backfilled == 0 {
+                    break
+                }
+
+                if Task.isCancelled {
+                    break
+                }
+            }
         }
 
         task.expirationHandler = {

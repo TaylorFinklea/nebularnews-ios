@@ -146,6 +146,16 @@ struct ArticleDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                if let creditLine = article.fallbackImageCreditLine,
+                   let profileURLString = article.fallbackImagePhotographerProfileUrl,
+                   let profileURL = URL(string: profileURLString) {
+                    Link(destination: profileURL) {
+                        Label(creditLine, systemImage: "camera")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .background(alignment: .topTrailing) {
                 NebularHeaderHalo(color: headerAccentColor(for: article))

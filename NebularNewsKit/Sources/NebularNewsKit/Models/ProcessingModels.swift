@@ -17,7 +17,7 @@ public enum ArticleProcessingJobStatus: String, Codable, CaseIterable, Sendable 
 }
 
 public let currentSummaryPreparationRevision = 1
-public let currentImagePreparationRevision = 1
+public let currentImagePreparationRevision = 2
 
 @Model
 public final class ArticleProcessingJob: @unchecked Sendable {

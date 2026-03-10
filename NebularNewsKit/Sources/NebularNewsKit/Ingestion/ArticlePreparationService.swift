@@ -19,7 +19,10 @@ public actor ArticlePreparationService {
         self.settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
         self.contentFetcher = ArticleContentFetcher(modelContainer: modelContainer)
         self.ogImageFetcher = OGImageFetcher(modelContainer: modelContainer)
-        self.fallbackImageService = ArticleFallbackImageService(modelContainer: modelContainer)
+        self.fallbackImageService = ArticleFallbackImageService(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
         self.personalization = LocalStandalonePersonalizationService(
             modelContainer: modelContainer,
             keychainService: keychainService,
@@ -279,8 +282,9 @@ private func processImageJob(
     dependencies: PreparationDependencies
 ) async {
     guard let article = await dependencies.articleRepo.get(id: articleID) else { return }
+    let existingFallback = article.fallbackImageUrl
 
-    if article.resolvedImageUrl != nil {
+    if article.imageUrl != nil || article.ogImageUrl != nil {
         try? await dependencies.articleRepo.markImageAttempt(
             id: articleID,
             status: .succeeded,
@@ -309,6 +313,22 @@ private func processImageJob(
     }
 
     if await dependencies.fallbackImageService.ensureFallbackImage(articleID: articleID) != nil {
+        try? await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .resolveImage,
+            status: .done,
+            inputRevision: currentImagePreparationRevision,
+            error: nil
+        )
+        return
+    }
+
+    if existingFallback != nil {
+        try? await dependencies.articleRepo.markImageAttempt(
+            id: articleID,
+            status: .succeeded,
+            revision: currentImagePreparationRevision
+        )
         try? await dependencies.articleRepo.completeProcessingJob(
             articleID: articleID,
             stage: .resolveImage,

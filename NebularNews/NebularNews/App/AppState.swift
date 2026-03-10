@@ -58,6 +58,10 @@ final class AppState {
         keychain.has(key: KeychainManager.Key.openaiApiKey)
     }
 
+    var hasUnsplashKey: Bool {
+        keychain.has(key: KeychainManager.Key.unsplashAccessKey)
+    }
+
     var hasAnyAIKey: Bool {
         hasAnthropicKey || hasOpenAIKey
     }
@@ -76,9 +80,15 @@ final class AppState {
     func saveStandaloneApiKey(provider: String, key: String) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let keychainKey = provider == "anthropic"
-            ? KeychainManager.Key.anthropicApiKey
-            : KeychainManager.Key.openaiApiKey
+        let keychainKey: String
+        switch provider {
+        case "anthropic":
+            keychainKey = KeychainManager.Key.anthropicApiKey
+        case "unsplash":
+            keychainKey = KeychainManager.Key.unsplashAccessKey
+        default:
+            keychainKey = KeychainManager.Key.openaiApiKey
+        }
         try keychain.set(trimmed, forKey: keychainKey)
     }
 

@@ -35,6 +35,12 @@ actor RefreshCoordinator {
                 keychainService: keychainService
             )
         }
+        Task(priority: .background) {
+            await drainLowPriorityBacklog(
+                modelContainer: modelContainer,
+                keychainService: keychainService
+            )
+        }
     }
 
     func runManualRefresh(modelContainer: ModelContainer, keychainService: String) async -> (result: PollCycleResult, deleted: Int, trimmed: Int, prepared: Int) {
@@ -133,6 +139,31 @@ actor RefreshCoordinator {
             if pending == 0 || prepared == 0 {
                 break
             }
+        }
+    }
+
+    private func drainLowPriorityBacklog(
+        modelContainer: ModelContainer,
+        keychainService: String
+    ) async {
+        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
+        let preparation = ArticlePreparationService(
+            modelContainer: modelContainer,
+            keychainService: keychainService
+        )
+
+        for _ in 0..<20 {
+            let backfilled = (try? await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 120)) ?? 0
+            let processed = await preparation.processPendingArticles(
+                batchSize: 12,
+                allowLowPriority: true
+            )
+
+            if processed == 0 && backfilled == 0 {
+                break
+            }
+
+            try? await Task.sleep(for: .milliseconds(250))
         }
     }
 

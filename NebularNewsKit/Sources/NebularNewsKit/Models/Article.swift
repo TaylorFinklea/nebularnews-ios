@@ -31,6 +31,9 @@ public final class Article: @unchecked Sendable {
     public var fallbackImageUrl: String?
     public var fallbackImageProvider: String?
     public var fallbackImageTheme: String?
+    public var fallbackImagePhotographerName: String?
+    public var fallbackImagePhotographerProfileUrl: String?
+    public var fallbackImagePhotoPageUrl: String?
     public var fallbackImageGeneratedAt: Date?
     public var contentHash: String?
     public var contentFetchAttemptedAt: Date?
@@ -101,6 +104,17 @@ public final class Article: @unchecked Sendable {
     /// Best available image URL: RSS-provided imageUrl, then cached OG image.
     public var resolvedImageUrl: String? {
         imageUrl ?? ogImageUrl ?? fallbackImageUrl
+    }
+
+    public var fallbackImageCreditLine: String? {
+        guard let photographer = fallbackImagePhotographerName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !photographer.isEmpty,
+              fallbackImageProvider == "unsplash_search"
+        else {
+            return nil
+        }
+
+        return "Photo by \(photographer) on Unsplash"
     }
 
     /// Decoded key points from the JSON string.

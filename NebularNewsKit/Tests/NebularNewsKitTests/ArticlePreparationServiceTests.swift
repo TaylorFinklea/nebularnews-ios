@@ -223,6 +223,41 @@ struct ArticlePreparationServiceTests {
         #expect(pendingAfter == 1)
     }
 
+    @Test("Visible articles missing images are backfilled and prioritized ahead of summaries")
+    func visibleMissingImagesBackfillAndClaimFirst() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Visible Missing Image",
+            content: longContent("A detailed article body suitable for summaries."),
+            imageURL: nil
+        )
+
+        article.contentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        article.imagePreparationStatusRaw = ArticlePreparationStageStatus.failed.rawValue
+        article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        article.markScorePrepared(revision: currentPersonalizationVersion)
+        article.imagePreparedRevision = currentImagePreparationRevision - 1
+        article.queryIsVisible = true
+        article.presentationReadyAt = Date()
+        try context.save()
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let backfilled = try await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 10)
+        try await articleRepo.enqueueMissingProcessingJobs(for: article.id)
+
+        let claimed = await articleRepo.claimProcessingJobs(limit: 1, allowLowPriority: true)
+        let resolveJob = await articleRepo.processingJob(articleID: article.id, stage: .resolveImage)
+
+        #expect(backfilled == 1)
+        #expect(resolveJob?.status == .running)
+        #expect(resolveJob?.priority == 150)
+        #expect(claimed == [ArticleProcessingJob.makeKey(articleID: article.id, stage: .resolveImage)])
+    }
+
     @Test("Claiming jobs reclaims stale running score jobs for live hidden articles")
     func claimProcessingJobsReclaimsStaleRunningJobs() async throws {
         let container = try makeContainer()

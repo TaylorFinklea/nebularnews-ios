@@ -76,6 +76,7 @@ extension KeychainManager {
     public enum Key {
         public static let anthropicApiKey = "anthropic_api_key"
         public static let openaiApiKey = "openai_api_key"
+        public static let unsplashAccessKey = "unsplash_access_key"
 
         // v2: backend sync credentials
         public static let syncAccessToken = "sync_access_token"
