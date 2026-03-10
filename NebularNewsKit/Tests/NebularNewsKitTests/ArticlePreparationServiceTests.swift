@@ -223,6 +223,63 @@ struct ArticlePreparationServiceTests {
         #expect(pendingAfter == 1)
     }
 
+    @Test("Processing queue health reports pending hidden score jobs and running workers separately")
+    func processingQueueHealthSeparatesQueuedAndRunningScoreJobs() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+
+        let hiddenArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Hidden Queued Article",
+            canonicalURL: "https://example.com/hidden",
+            content: longContent("A detailed article body suitable for scoring."),
+            imageURL: "https://example.com/image.jpg"
+        )
+        hiddenArticle.queryIsVisible = false
+        hiddenArticle.presentationReadyAt = nil
+
+        let visibleArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Visible Running Article",
+            canonicalURL: "https://example.com/visible",
+            content: longContent("A detailed article body suitable for scoring."),
+            imageURL: "https://example.com/image.jpg"
+        )
+        visibleArticle.queryIsVisible = true
+        visibleArticle.presentationReadyAt = Date()
+        try context.save()
+
+        context.insert(
+            ArticleProcessingJob(
+                articleID: hiddenArticle.id,
+                stage: .scoreAndTag,
+                status: .queued,
+                priority: 300,
+                inputRevision: currentPersonalizationVersion
+            )
+        )
+        context.insert(
+            ArticleProcessingJob(
+                articleID: visibleArticle.id,
+                stage: .scoreAndTag,
+                status: .running,
+                priority: 300,
+                inputRevision: currentPersonalizationVersion
+            )
+        )
+        try context.save()
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let health = await articleRepo.processingQueueHealth()
+
+        #expect(health.pendingVisibleCount == 1)
+        #expect(health.queuedScoreJobCount == 1)
+        #expect(health.runningScoreJobCount == 1)
+    }
+
     @Test("Visible articles missing images are backfilled and prioritized ahead of summaries")
     func visibleMissingImagesBackfillAndClaimFirst() async throws {
         let container = try makeContainer()

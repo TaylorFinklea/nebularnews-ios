@@ -25,18 +25,12 @@ actor RefreshCoordinator {
             allowLowPriority: false,
             bypassBackoff: false
         )
-        await drainWarmStartVisibilityBacklog(
-            modelContainer: modelContainer,
-            keychainService: keychainService
+        await ProcessingQueueSupervisor.shared.kick(
+            reason: "warm_start_refresh",
+            allowLowPriority: true
         )
         Task(priority: .background) {
             await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
-                modelContainer: modelContainer,
-                keychainService: keychainService
-            )
-        }
-        Task(priority: .background) {
-            await drainLowPriorityBacklog(
                 modelContainer: modelContainer,
                 keychainService: keychainService
             )
@@ -67,6 +61,10 @@ actor RefreshCoordinator {
             maxArticlesPerFeed: maxArticlesPerFeed
         )
         let prepared = await preparation.processPendingArticles(batchSize: 10, allowLowPriority: true)
+        await ProcessingQueueSupervisor.shared.kick(
+            reason: "manual_refresh",
+            allowLowPriority: true
+        )
         return (result, storage.deleted, storage.trimmed, prepared)
     }
 
@@ -178,54 +176,12 @@ actor RefreshCoordinator {
             batchSize: allowLowPriority ? 8 : 16,
             allowLowPriority: allowLowPriority
         )
-    }
 
-    private func drainWarmStartVisibilityBacklog(
-        modelContainer: ModelContainer,
-        keychainService: String
-    ) async {
-        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
-        let preparation = ArticlePreparationService(
-            modelContainer: modelContainer,
-            keychainService: keychainService
-        )
-
-        for _ in 0..<8 {
-            _ = try? await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 200)
-            let prepared = await preparation.processPendingArticles(
-                batchSize: 16,
+        if allowLowPriority == false {
+            await ProcessingQueueSupervisor.shared.kick(
+                reason: "refresh_if_needed",
                 allowLowPriority: false
             )
-            let pending = await articleRepo.pendingVisibleArticleCount()
-
-            if pending == 0 || prepared == 0 {
-                break
-            }
-        }
-    }
-
-    private func drainLowPriorityBacklog(
-        modelContainer: ModelContainer,
-        keychainService: String
-    ) async {
-        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
-        let preparation = ArticlePreparationService(
-            modelContainer: modelContainer,
-            keychainService: keychainService
-        )
-
-        for _ in 0..<20 {
-            let backfilled = (try? await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 120)) ?? 0
-            let processed = await preparation.processPendingArticles(
-                batchSize: 12,
-                allowLowPriority: true
-            )
-
-            if processed == 0 && backfilled == 0 {
-                break
-            }
-
-            try? await Task.sleep(for: .milliseconds(250))
         }
     }
 
@@ -255,6 +211,13 @@ enum WarmStartCoordinator {
         modelContainer: ModelContainer,
         keychainService: String
     ) {
+        Task(priority: .utility) {
+            await ProcessingQueueSupervisor.shared.activate(
+                modelContainer: modelContainer,
+                keychainService: keychainService
+            )
+        }
+
         Task(priority: .utility) {
             await RefreshCoordinator.shared.runWarmStart(
                 modelContainer: modelContainer,

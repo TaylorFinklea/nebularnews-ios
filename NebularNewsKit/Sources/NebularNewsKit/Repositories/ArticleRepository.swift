@@ -60,6 +60,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate?
     func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
     func pendingVisibleArticleCount() async -> Int
+    func processingQueueHealth() async -> ArticleProcessingQueueHealth
     func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int
     func backfillMissingImageJobsForVisibleArticles(limit: Int) async throws -> Int
     func enqueueMissingProcessingJobs(for articleID: String) async throws
@@ -289,21 +290,32 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func pendingVisibleArticleCount() async -> Int {
-        let descriptor = FetchDescriptor<ArticleProcessingJob>()
-        let jobs = ((try? modelContext.fetch(descriptor)) ?? []).filter { job in
-            job.stage == .scoreAndTag && (job.status == .queued || job.status == .running)
-        }
+        await processingQueueHealth().pendingVisibleCount
+    }
 
-        var count = 0
-        for job in jobs {
-            guard let article = await get(id: job.articleID),
-                  article.queryIsVisible == false else {
-                continue
-            }
-            count += 1
-        }
+    public func processingQueueHealth() async -> ArticleProcessingQueueHealth {
+        let hiddenArticleIDs = Set(
+            (((try? modelContext.fetch(FetchDescriptor<Article>())) ?? [])
+                .filter { $0.queryIsVisible == false }
+                .map(\.id))
+        )
+        let jobs = allProcessingJobs()
 
-        return count
+        let queuedScoreJobs = jobs.filter {
+            $0.stage == .scoreAndTag && $0.status == .queued
+        }
+        let runningScoreJobs = jobs.filter {
+            $0.stage == .scoreAndTag && $0.status == .running
+        }
+        let pendingVisibleCount =
+            queuedScoreJobs.count(where: { hiddenArticleIDs.contains($0.articleID) }) +
+            runningScoreJobs.count(where: { hiddenArticleIDs.contains($0.articleID) })
+
+        return ArticleProcessingQueueHealth(
+            pendingVisibleCount: pendingVisibleCount,
+            queuedScoreJobCount: queuedScoreJobs.count,
+            runningScoreJobCount: runningScoreJobs.count
+        )
     }
 
     public func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int {
@@ -359,7 +371,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 stage: .resolveImage
             )
 
-            try ensureProcessingJobIfNeeded(
+            let changed = try ensureProcessingJobIfNeeded(
                 articleID: article.id,
                 stage: .resolveImage,
                 priority: 150,
@@ -372,20 +384,24 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 stage: .resolveImage
             )
 
-            if previousQueuedJob?.status != .queued,
+            if changed,
+               previousQueuedJob?.status != .queued,
                refreshedJob?.status == .queued {
                 touched += 1
             }
         }
 
         try modelContext.save()
+        if touched > 0 {
+            ArticleChangeBus.postProcessingQueueChanged()
+        }
         return touched
     }
 
     public func enqueueMissingProcessingJobs(for articleID: String) async throws {
         guard let article = await get(id: articleID) else { return }
 
-        try ensureProcessingJobIfNeeded(
+        let scoreChanged = try ensureProcessingJobIfNeeded(
             articleID: article.id,
             stage: .scoreAndTag,
             priority: 300,
@@ -394,7 +410,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 article.queryIsVisible == false
         )
 
-        try ensureProcessingJobIfNeeded(
+        let contentChanged = try ensureProcessingJobIfNeeded(
             articleID: article.id,
             stage: .fetchContent,
             priority: 200,
@@ -402,7 +418,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             shouldQueue: article.contentFetchAttemptedAt == nil && article.needsContentFetch()
         )
 
-        try ensureProcessingJobIfNeeded(
+        let summaryChanged = try ensureProcessingJobIfNeeded(
             articleID: article.id,
             stage: .generateSummary,
             priority: 100,
@@ -410,7 +426,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             shouldQueue: article.summaryPreparedRevision < article.contentRevision
         )
 
-        try ensureProcessingJobIfNeeded(
+        let imageChanged = try ensureProcessingJobIfNeeded(
             articleID: article.id,
             stage: .resolveImage,
             priority: 150,
@@ -421,11 +437,14 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         )
 
         try modelContext.save()
+        if scoreChanged || contentChanged || summaryChanged || imageChanged {
+            ArticleChangeBus.postProcessingQueueChanged()
+        }
     }
 
     public func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String] {
         cleanupOrphanedProcessingJobs()
-        reclaimStaleRunningProcessingJobs()
+        let reclaimed = reclaimStaleRunningProcessingJobs()
 
         let descriptor = FetchDescriptor<ArticleProcessingJob>(
             sortBy: [
@@ -451,6 +470,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             claimed.append(job.key)
         }
         try? modelContext.save()
+        if reclaimed {
+            ArticleChangeBus.postProcessingQueueChanged()
+        }
         return claimed
     }
 
@@ -476,6 +498,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             job.availableAt = Date().addingTimeInterval(60)
         }
         try modelContext.save()
+        if stage == .scoreAndTag {
+            ArticleChangeBus.postProcessingQueueChanged()
+        }
     }
 
     public func markSummaryAttempt(
@@ -1226,7 +1251,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         priority: Int,
         inputRevision: Int,
         shouldQueue: Bool
-    ) throws {
+    ) throws -> Bool {
         let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
         let existing = allProcessingJobs().first { $0.key == key }
 
@@ -1235,13 +1260,14 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 existing.status = .skipped
                 existing.inputRevision = inputRevision
                 existing.updatedAt = Date()
+                return true
             }
-            return
+            return false
         }
 
         if let existing {
             guard existing.status != .queued || existing.inputRevision != inputRevision else {
-                return
+                return false
             }
             existing.status = .queued
             existing.priority = priority
@@ -1249,7 +1275,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             existing.inputRevision = inputRevision
             existing.lastError = nil
             existing.updatedAt = Date()
-            return
+            return true
         }
 
         modelContext.insert(
@@ -1260,6 +1286,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 inputRevision: inputRevision
             )
         )
+        return true
     }
 
     private func existingProcessingJob(
@@ -1288,9 +1315,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     private func reclaimStaleRunningProcessingJobs(
         timeout: TimeInterval = 120
-    ) {
+    ) -> Bool {
         let cutoff = Date().addingTimeInterval(-timeout)
         let jobs = allProcessingJobs()
+        var reclaimed = false
 
         for job in jobs
         where job.status == .running && job.updatedAt < cutoff {
@@ -1298,7 +1326,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             job.updatedAt = Date()
             job.availableAt = Date()
             job.lastError = nil
+            reclaimed = true
         }
+
+        return reclaimed
     }
 }
 

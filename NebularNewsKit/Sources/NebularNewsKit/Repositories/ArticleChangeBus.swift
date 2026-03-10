@@ -5,6 +5,7 @@ public enum ArticleChangeBus {
     public static let feedPageMightChange = Notification.Name("NebularNews.feedPageMightChange")
     public static let readingListChanged = Notification.Name("NebularNews.readingListChanged")
     public static let articleChanged = Notification.Name("NebularNews.articleChanged")
+    public static let processingQueueChanged = Notification.Name("NebularNews.processingQueueChanged")
 
     public static func postTodaySnapshotChanged() {
         NotificationCenter.default.post(name: todaySnapshotChanged, object: nil)
@@ -24,5 +25,9 @@ public enum ArticleChangeBus {
             object: nil,
             userInfo: ["articleID": id]
         )
+    }
+
+    public static func postProcessingQueueChanged() {
+        NotificationCenter.default.post(name: processingQueueChanged, object: nil)
     }
 }

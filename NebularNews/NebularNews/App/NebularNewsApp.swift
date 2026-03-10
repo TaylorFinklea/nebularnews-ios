@@ -44,7 +44,10 @@ struct NebularNewsApp: App {
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .task(id: appState.mode) {
-                guard appState.isStandaloneMode else { return }
+                guard appState.isStandaloneMode else {
+                    await ProcessingQueueSupervisor.shared.deactivate()
+                    return
+                }
                 let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)
                 let service = LocalStandalonePersonalizationService(
                     modelContainer: modelContainer,
@@ -68,12 +71,21 @@ struct NebularNewsApp: App {
             switch newPhase {
             case .background:
                 if appState.isStandaloneMode {
+                    Task {
+                        await ProcessingQueueSupervisor.shared.deactivate()
+                    }
                     BackgroundTaskManager.scheduleNextRefresh()
                     BackgroundTaskManager.scheduleNextProcessing()
                 }
             case .active:
-                // Could trigger foreground poll-if-stale here in the future
-                break
+                if appState.isStandaloneMode {
+                    Task {
+                        await ProcessingQueueSupervisor.shared.activate(
+                            modelContainer: modelContainer,
+                            keychainService: appState.configuration.keychainService
+                        )
+                    }
+                }
             default:
                 break
             }

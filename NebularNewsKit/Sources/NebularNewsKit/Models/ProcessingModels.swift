@@ -19,6 +19,22 @@ public enum ArticleProcessingJobStatus: String, Codable, CaseIterable, Sendable 
 public let currentSummaryPreparationRevision = 1
 public let currentImagePreparationRevision = 2
 
+public struct ArticleProcessingQueueHealth: Sendable {
+    public let pendingVisibleCount: Int
+    public let queuedScoreJobCount: Int
+    public let runningScoreJobCount: Int
+
+    public init(
+        pendingVisibleCount: Int,
+        queuedScoreJobCount: Int,
+        runningScoreJobCount: Int
+    ) {
+        self.pendingVisibleCount = pendingVisibleCount
+        self.queuedScoreJobCount = queuedScoreJobCount
+        self.runningScoreJobCount = runningScoreJobCount
+    }
+}
+
 #if DEBUG
 public struct ArticleProcessingDebugStageCounts: Sendable {
     public let scoreAndTag: Int
