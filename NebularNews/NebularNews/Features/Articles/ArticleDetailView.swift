@@ -231,7 +231,7 @@ struct ArticleDetailView: View {
                             .font(.subheadline)
                             .lineSpacing(3)
                     } else {
-                        pendingSummaryPlaceholder
+                        pendingSummaryPlaceholder(article)
                     }
                 }
             }
@@ -528,7 +528,7 @@ struct ArticleDetailView: View {
     // MARK: - Helpers
 
     @ViewBuilder
-    private var pendingSummaryPlaceholder: some View {
+    private func pendingSummaryPlaceholder(_ article: Article) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Generating automatically with on-device AI when available.")
                 .font(.subheadline)
@@ -542,6 +542,18 @@ struct ArticleDetailView: View {
             .font(.subheadline)
             .lineSpacing(3)
             .redacted(reason: .placeholder)
+
+            HStack {
+                Spacer()
+                Button {
+                    Task { await enrichArticle(articleId: article.id, target: .automatic) }
+                } label: {
+                    Label(isEnriching ? "Generating…" : "Generate Now", systemImage: "sparkles")
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isEnriching)
+            }
         }
     }
 
