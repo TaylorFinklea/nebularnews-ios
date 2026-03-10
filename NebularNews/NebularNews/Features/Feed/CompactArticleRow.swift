@@ -8,6 +8,8 @@ struct CompactArticleRow: View {
     var body: some View {
         GlassCard(cornerRadius: 16, style: .compact, tintColor: Color.forScore(article.displayedScore)) {
             HStack(spacing: 12) {
+                ScoreAccentBar(score: article.displayedScore, isRead: article.isRead || article.isDismissed)
+
                 ArticleImageView(article: article, size: .thumbnail)
                     .frame(width: 60, height: 60)
                     .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))

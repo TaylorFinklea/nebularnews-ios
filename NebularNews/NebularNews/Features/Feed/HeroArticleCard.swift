@@ -29,6 +29,14 @@ struct HeroArticleCard: View {
                             endPoint: .bottom
                         )
                     }
+                    .overlay(alignment: .leading) {
+                        ScoreAccentBar(
+                            score: article.displayedScore,
+                            isRead: article.isRead || article.isDismissed
+                        )
+                        .padding(.leading, 10)
+                        .padding(.vertical, 14)
+                    }
                     .overlay(alignment: .bottom) {
                         VStack(alignment: .leading, spacing: 6) {
                             if let feedTitle = article.feed?.title {
