@@ -534,11 +534,15 @@ struct OnboardingView: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
                         .multilineTextAlignment(.leading)
+                        .lineLimit(3)
 
                     Text(interest.description)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
+                        .lineLimit(5)
+
+                    Spacer(minLength: 0)
 
                     Text("\(interest.starterFeedCount) starter feeds")
                         .font(.caption.weight(.semibold))
@@ -546,7 +550,7 @@ struct OnboardingView: View {
                 }
             }
             .padding(18)
-            .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 220, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(.ultraThinMaterial)
