@@ -21,6 +21,7 @@ func iconForTag(_ name: String) -> String {
         (["devops", "ci/cd", "kubernetes", "docker", "deployment"], "gearshape.2"),
         (["science", "research", "physics", "biology"], "atom"),
         (["space", "astronomy", "nasa", "rocket"], "sparkles"),
+        (["photography", "camera", "photo", "photos"], "camera"),
         (["design", "ui", "ux", "figma"], "paintbrush"),
         (["crypto", "blockchain", "bitcoin", "ethereum"], "bitcoinsign.circle"),
         (["startup", "venture", "funding", "business"], "chart.line.uptrend.xyaxis"),

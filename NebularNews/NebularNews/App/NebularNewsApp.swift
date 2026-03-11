@@ -35,7 +35,11 @@ struct NebularNewsApp: App {
         WindowGroup {
             Group {
                 if appState.hasCompletedOnboarding {
-                    MainTabView()
+                    if appState.isStandaloneMode && appState.isPreparingFirstBriefing {
+                        FirstBriefingPreparationView()
+                    } else {
+                        MainTabView()
+                    }
                 } else {
                     OnboardingView()
                 }

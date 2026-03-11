@@ -13,6 +13,8 @@ final class AppState {
     private enum DefaultsKey {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let appMode = "appMode"
+        static let isPreparingFirstBriefing = "isPreparingFirstBriefing"
+        static let firstBriefingFeedIDs = "firstBriefingFeedIDs"
 #if DEBUG
         static let isDeveloperModeEnabled = "isDeveloperModeEnabled"
 #endif
@@ -36,6 +38,18 @@ final class AppState {
         }
     }
 
+    var isPreparingFirstBriefing: Bool {
+        didSet {
+            defaults.set(isPreparingFirstBriefing, forKey: DefaultsKey.isPreparingFirstBriefing)
+        }
+    }
+
+    var firstBriefingFeedIDs: [String] {
+        didSet {
+            defaults.set(firstBriefingFeedIDs, forKey: DefaultsKey.firstBriefingFeedIDs)
+        }
+    }
+
 #if DEBUG
     var isDeveloperModeEnabled: Bool {
         didSet {
@@ -53,6 +67,8 @@ final class AppState {
         self.configuration = resolvedConfiguration
         self.hasCompletedOnboarding = resolvedDefaults.bool(forKey: DefaultsKey.hasCompletedOnboarding)
         self.mode = persistedMode
+        self.isPreparingFirstBriefing = resolvedDefaults.bool(forKey: DefaultsKey.isPreparingFirstBriefing)
+        self.firstBriefingFeedIDs = resolvedDefaults.stringArray(forKey: DefaultsKey.firstBriefingFeedIDs) ?? []
 #if DEBUG
         self.isDeveloperModeEnabled = resolvedDefaults.bool(forKey: DefaultsKey.isDeveloperModeEnabled)
 #endif
@@ -111,11 +127,23 @@ final class AppState {
         hasCompletedOnboarding = true
     }
 
+    func beginStandaloneFirstBriefing(feedIDs: [String]) {
+        mode = .standalone
+        firstBriefingFeedIDs = feedIDs
+        isPreparingFirstBriefing = !feedIDs.isEmpty
+    }
+
+    func finishStandaloneFirstBriefingWarmup() {
+        isPreparingFirstBriefing = false
+        firstBriefingFeedIDs = []
+    }
+
     func completeCompanionOnboarding(serverURL: URL, accessToken: String, refreshToken: String) throws {
         mode = .companion
         try keychain.set(serverURL.absoluteString, forKey: KeychainManager.Key.syncServerUrl)
         try keychain.set(accessToken, forKey: KeychainManager.Key.syncAccessToken)
         try keychain.set(refreshToken, forKey: KeychainManager.Key.syncRefreshToken)
+        finishStandaloneFirstBriefingWarmup()
         hasCompletedOnboarding = true
     }
 
@@ -123,6 +151,7 @@ final class AppState {
         keychain.delete(forKey: KeychainManager.Key.syncAccessToken)
         keychain.delete(forKey: KeychainManager.Key.syncRefreshToken)
         keychain.delete(forKey: KeychainManager.Key.syncServerUrl)
+        finishStandaloneFirstBriefingWarmup()
         if isCompanionMode {
             mode = .standalone
             hasCompletedOnboarding = false

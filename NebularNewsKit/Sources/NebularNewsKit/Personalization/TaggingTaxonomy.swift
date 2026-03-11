@@ -41,6 +41,8 @@ public let starterCanonicalTags: [StarterCanonicalTag] = [
     .init(id: "tag-wildlife", name: "Wildlife", slug: "wildlife"),
     .init(id: "tag-conservation", name: "Conservation", slug: "conservation"),
     .init(id: "tag-nature", name: "Nature", slug: "nature"),
+    .init(id: "tag-photography", name: "Photography", slug: "photography"),
+    .init(id: "tag-space", name: "Space", slug: "space"),
     .init(id: "tag-local-news", name: "Local News", slug: "local-news"),
     .init(id: "tag-kansas-city", name: "Kansas City", slug: "kansas-city"),
     .init(id: "tag-civics", name: "Civics", slug: "civics"),
@@ -279,6 +281,51 @@ public let personalizationTargetFeedFamilies: [PersonalizationTargetFeedFamily] 
         siteHosts: ["grafana.com"],
         baselineTagSlugs: ["cybersecurity"],
         bonusTagSlugs: ["observability", "developer-tools"]
+    ),
+    .init(
+        name: "KrebsOnSecurity",
+        feedTitleAliases: ["Krebs on Security", "KrebsOnSecurity"],
+        siteHosts: ["krebsonsecurity.com"],
+        baselineTagSlugs: ["cybersecurity"],
+        bonusTagSlugs: ["privacy"]
+    ),
+    .init(
+        name: "FRBSF Research & Insights",
+        feedTitleAliases: ["FRBSF Research & Insights"],
+        siteHosts: ["frbsf.org"],
+        baselineTagSlugs: ["economics"],
+        bonusTagSlugs: ["monetary-policy", "banking"]
+    ),
+    .init(
+        name: "NASA JPL News",
+        feedTitleAliases: ["NASA JPL News"],
+        siteHosts: ["jpl.nasa.gov"],
+        baselineTagSlugs: ["space"],
+        bonusTagSlugs: ["research"]
+    ),
+    .init(
+        name: "NASA News Releases",
+        feedTitleAliases: ["NASA News Releases", "News Releases"],
+        siteHosts: ["nasa.gov"],
+        baselineTagSlugs: ["space"]
+    ),
+    .init(
+        name: "Admiring Light",
+        feedTitleAliases: ["Admiring Light"],
+        siteHosts: ["admiringlight.com"],
+        baselineTagSlugs: ["photography"]
+    ),
+    .init(
+        name: "PetaPixel",
+        feedTitleAliases: ["PetaPixel"],
+        siteHosts: ["petapixel.com"],
+        baselineTagSlugs: ["photography"]
+    ),
+    .init(
+        name: "DPReview News",
+        feedTitleAliases: ["DPReview News", "DPReview"],
+        siteHosts: ["dpreview.com"],
+        baselineTagSlugs: ["photography"]
     )
 ]
 
@@ -358,6 +405,8 @@ public let deterministicTagKeywordsBySlug: [String: [String]] = [
     "wildlife": ["wildlife", "species", "habitat", "poaching", "migration", "migratory", "tarantula", "tarantulas", "snake", "snakes"],
     "conservation": ["conservation", "habitat", "restoration", "endangered", "protected area", "poaching"],
     "nature": ["nature", "ecosystem", "meadow", "prairie", "outdoors", "biodiversity"],
+    "photography": ["photography", "photo", "photos", "camera", "cameras", "lens", "lenses", "imaging", "photographer"],
+    "space": ["space", "astronomy", "nasa", "rocket", "rockets", "telescope", "telescopes", "mars", "moon", "lunar", "orbiter", "rover", "satellite", "spacecraft"],
     "civics": ["city council", "mayor", "ordinance", "ballot", "election", "id invalidated"],
     "transportation": ["bus fare", "transit", "kcata", "transportation", "public transit"],
     "housing": ["housing", "zoning", "rent", "affordable housing", "development"],

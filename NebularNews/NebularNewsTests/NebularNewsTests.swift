@@ -53,6 +53,32 @@ struct NebularNewsTests {
         defaults.removePersistentDomain(forName: suiteName)
     }
 
+    @MainActor
+    @Test func appStatePersistsFirstBriefingWarmupState() async throws {
+        let bundle = Bundle(for: BundleProbe.self)
+        let configuration = AppConfiguration(bundle: bundle)
+        let suiteName = "NebularNewsTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let appState = AppState(configuration: configuration, defaults: defaults)
+        appState.beginStandaloneFirstBriefing(feedIDs: ["feed-1", "feed-2"])
+
+        #expect(appState.isPreparingFirstBriefing)
+        #expect(appState.firstBriefingFeedIDs == ["feed-1", "feed-2"])
+        #expect(defaults.bool(forKey: "isPreparingFirstBriefing"))
+        #expect(defaults.stringArray(forKey: "firstBriefingFeedIDs") == ["feed-1", "feed-2"])
+
+        appState.finishStandaloneFirstBriefingWarmup()
+
+        #expect(appState.isPreparingFirstBriefing == false)
+        #expect(appState.firstBriefingFeedIDs.isEmpty)
+        #expect(defaults.bool(forKey: "isPreparingFirstBriefing") == false)
+        #expect(defaults.stringArray(forKey: "firstBriefingFeedIDs") == [])
+
+        defaults.removePersistentDomain(forName: suiteName)
+    }
+
     @Test func articleScoreHelpersReflectReadyAndLearningStates() async throws {
         let readyArticle = Article(canonicalUrl: "https://example.com/a", title: "Ready")
         readyArticle.score = 4
