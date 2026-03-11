@@ -38,7 +38,7 @@ public final class AppSettings: @unchecked Sendable {
     public var maxArticlesPerFeed: Int = 50
 
     // Legacy retention setting retained for lightweight migration to archive storage.
-    public var retentionDays: Int = 90
+    public var retentionDays: Int = 13
     public var archiveAfterDays: Int = 0
     public var deleteArchivedAfterDays: Int = 30
     public var searchArchivedByDefault: Bool = false
