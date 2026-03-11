@@ -44,13 +44,22 @@ public struct DeterministicTagCandidate: Sendable, Hashable {
     public let normalizedName: String
     public let slug: String
     public let articleCount: Int
+    public let isCanonical: Bool
 
-    public init(id: String, name: String, normalizedName: String, slug: String, articleCount: Int) {
+    public init(
+        id: String,
+        name: String,
+        normalizedName: String,
+        slug: String,
+        articleCount: Int,
+        isCanonical: Bool = true
+    ) {
         self.id = id
         self.name = name
         self.normalizedName = normalizedName
         self.slug = slug
         self.articleCount = articleCount
+        self.isCanonical = isCanonical
     }
 }
 

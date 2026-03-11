@@ -57,6 +57,18 @@ struct AIFeaturesTests {
         return article
     }
 
+    @discardableResult
+    private func insertTag(
+        in context: ModelContext,
+        name: String,
+        isCanonical: Bool
+    ) throws -> NebularNewsKit.Tag {
+        let tag = NebularNewsKit.Tag(name: name, isCanonical: isCanonical)
+        context.insert(tag)
+        try context.save()
+        return tag
+    }
+
     private func fetchArticle(_ articleID: String, in context: ModelContext) throws -> Article {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { $0.id == articleID }
@@ -293,10 +305,10 @@ struct AIFeaturesTests {
                 tagSuggestionOutput: TagSuggestionOutput(
                     suggestions: [
                         SuggestedTagCandidate(name: "News", confidence: 0.99),
-                        SuggestedTagCandidate(name: "General Interest", confidence: 0.99),
+                        SuggestedTagCandidate(name: "Regional Desk", confidence: 0.99),
                         SuggestedTagCandidate(name: "Artificial Intelligence", confidence: 0.99),
-                        SuggestedTagCandidate(name: "Supply Chain", confidence: 0.93),
-                        SuggestedTagCandidate(name: "Policy Debate", confidence: 0.95),
+                        SuggestedTagCandidate(name: "Foster Care", confidence: 0.93),
+                        SuggestedTagCandidate(name: "Family Stability", confidence: 0.95),
                         SuggestedTagCandidate(name: "Weak Idea", confidence: 0.40)
                     ],
                     provider: .foundationModels,
@@ -306,13 +318,13 @@ struct AIFeaturesTests {
         )
 
         await service.bootstrap()
-        let feed = try insertFeed(in: context, title: "General Interest")
+        let feed = try insertFeed(in: context, title: "Regional Desk")
         let article = try insertArticle(
             in: context,
             feed: feed,
-            title: "A plain briefing",
-            canonicalURL: "https://example.com/plain-briefing",
-            content: longContent("This article covers supply chains, regulation, and policy arguments."),
+            title: "How one family navigated a fragile support system",
+            canonicalURL: "https://example.com/family-support-system",
+            content: longContent("This article covers foster care placements, adoption support, and family stability programs."),
             publishedAt: .now
         )
 
@@ -324,29 +336,110 @@ struct AIFeaturesTests {
         let names = suggestions.map(\.name)
         let tags = try context.fetch(FetchDescriptor<NebularNewsKit.Tag>())
 
-        #expect(names == ["Policy Debate", "Supply Chain"])
+        #expect(names == ["Family Stability", "Foster Care"])
         #expect(tags.count == starterCanonicalTags.count)
         #expect(suggestions.allSatisfy { $0.sourceProvider == AIGenerationProvider.foundationModels.rawValue })
         #expect(suggestions.allSatisfy { $0.sourceModel == "system" })
+    }
+
+    @Test("Articles with two strong existing candidates skip new suggestion generation")
+    func strongExistingCandidatesSkipSuggestionGeneration() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let coordinator = MockGenerationCoordinator(
+            tagSuggestionOutput: TagSuggestionOutput(
+                suggestions: [
+                    SuggestedTagCandidate(name: "Invented Topic", confidence: 0.99)
+                ],
+                provider: .foundationModels,
+                modelIdentifier: "system"
+            )
+        )
+        let service = LocalStandalonePersonalizationService(
+            modelContainer: container,
+            generationCoordinator: coordinator
+        )
+
+        await service.bootstrap()
+        let feed = try insertFeed(in: context, title: "AI Weekly")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Artificial Intelligence and Generative AI deployment patterns",
+            canonicalURL: "https://example.com/ai-deployment",
+            content: longContent("Artificial intelligence and generative AI deployment patterns reshape product teams."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let suggestions = try fetchSuggestions(articleID: article.id, in: context)
+        let stored = try fetchArticle(article.id, in: context)
+        let tagNames = Set((stored.tags ?? []).map(\.name))
+
+        #expect(await coordinator.tagSuggestionCallCount() == 0)
+        #expect(suggestions.isEmpty)
+        #expect(tagNames.contains("Artificial Intelligence"))
+        #expect(tagNames.contains("Generative AI"))
+    }
+
+    @Test("Second suggestion requires higher confidence and near-duplicates are rejected")
+    func strictSuggestionFilteringRejectsWeakSecondSuggestionsAndDuplicates() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let service = LocalStandalonePersonalizationService(
+            modelContainer: container,
+            generationCoordinator: MockGenerationCoordinator(
+                tagSuggestionOutput: TagSuggestionOutput(
+                    suggestions: [
+                        SuggestedTagCandidate(name: "Foster Care", confidence: 0.92),
+                        SuggestedTagCandidate(name: "Foster Care Support", confidence: 0.99),
+                        SuggestedTagCandidate(name: "Family Stability", confidence: 0.94),
+                        SuggestedTagCandidate(name: "Regional Desk", confidence: 0.99)
+                    ],
+                    provider: .foundationModels,
+                    modelIdentifier: "system"
+                )
+            )
+        )
+
+        await service.bootstrap()
+        let feed = try insertFeed(in: context, title: "Regional Desk")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "How one family navigated a fragile support system",
+            canonicalURL: "https://example.com/family-support-system",
+            content: longContent("This article covers foster care placements, adoption support, and family stability programs."),
+            publishedAt: .now
+        )
+
+        _ = await service.processPendingArticles(limit: 10)
+
+        let suggestions = try fetchSuggestions(articleID: article.id, in: context)
+            .filter { $0.dismissedAt == nil }
+            .sorted { $0.name < $1.name }
+
+        #expect(suggestions.map(\.name) == ["Foster Care"])
     }
 
     @Test("Unavailable suggestion providers do not wipe previously stored suggestions")
     func unavailableSuggestionProviderDoesNotClearStoredSuggestions() async throws {
         let container = try makeContainer()
         let context = makeContext(container)
-        let feed = try insertFeed(in: context, title: "General Interest")
+        let feed = try insertFeed(in: context, title: "Regional Desk")
         let article = try insertArticle(
             in: context,
             feed: feed,
-            title: "A plain briefing",
-            canonicalURL: "https://example.com/plain-briefing",
-            content: longContent("This article covers supply chains, regulation, and policy arguments."),
+            title: "How one family navigated a fragile support system",
+            canonicalURL: "https://example.com/family-support-system",
+            content: longContent("This article covers foster care placements, adoption support, and family stability programs."),
             publishedAt: .now
         )
         context.insert(
             ArticleTagSuggestion(
                 articleId: article.id,
-                name: "Existing Suggestion",
+                name: "Foster Care",
                 confidence: 0.91,
                 sourceProvider: AIGenerationProvider.foundationModels.rawValue,
                 sourceModel: "system"
@@ -363,7 +456,7 @@ struct AIFeaturesTests {
         _ = await service.processPendingArticles(limit: 10)
 
         let suggestions = try fetchSuggestions(articleID: article.id, in: context)
-        #expect(suggestions.contains(where: { $0.name == "Existing Suggestion" && $0.dismissedAt == nil }))
+        #expect(suggestions.contains(where: { $0.name == "Foster Care" && $0.dismissedAt == nil }))
     }
 
     @Test("Accepting and dismissing suggestions create one non-canonical tag and suppress dismissed reruns")
@@ -373,8 +466,8 @@ struct AIFeaturesTests {
         let coordinator = MockGenerationCoordinator(
             tagSuggestionOutput: TagSuggestionOutput(
                 suggestions: [
-                    SuggestedTagCandidate(name: "Supply Chain", confidence: 0.93),
-                    SuggestedTagCandidate(name: "Policy Debate", confidence: 0.95)
+                    SuggestedTagCandidate(name: "Foster Care", confidence: 0.93),
+                    SuggestedTagCandidate(name: "Family Stability", confidence: 0.95)
                 ],
                 provider: .foundationModels,
                 modelIdentifier: "system"
@@ -386,13 +479,13 @@ struct AIFeaturesTests {
         )
 
         await service.bootstrap()
-        let feed = try insertFeed(in: context, title: "General Interest")
+        let feed = try insertFeed(in: context, title: "Regional Desk")
         let article = try insertArticle(
             in: context,
             feed: feed,
-            title: "A plain briefing",
-            canonicalURL: "https://example.com/plain-briefing",
-            content: longContent("This article covers supply chains, regulation, and policy arguments."),
+            title: "How one family navigated a fragile support system",
+            canonicalURL: "https://example.com/family-support-system",
+            content: longContent("This article covers foster care placements, adoption support, and family stability programs."),
             publishedAt: .now
         )
 
@@ -401,15 +494,15 @@ struct AIFeaturesTests {
         var activeSuggestions = try fetchSuggestions(articleID: article.id, in: context)
             .filter { $0.dismissedAt == nil }
             .sorted { $0.name < $1.name }
-        let accepted = try #require(activeSuggestions.first(where: { $0.name == "Supply Chain" }))
-        let dismissed = try #require(activeSuggestions.first(where: { $0.name == "Policy Debate" }))
+        let accepted = try #require(activeSuggestions.first(where: { $0.name == "Foster Care" }))
+        let dismissed = try #require(activeSuggestions.first(where: { $0.name == "Family Stability" }))
 
         await service.acceptTagSuggestion(articleID: article.id, suggestionID: accepted.id)
         await service.dismissTagSuggestion(articleID: article.id, suggestionID: dismissed.id)
 
         let storedAfterActions = try fetchArticle(article.id, in: context)
         let tags = try context.fetch(FetchDescriptor<NebularNewsKit.Tag>())
-        let createdTag = try #require(tags.first(where: { $0.name == "Supply Chain" }))
+        let createdTag = try #require(tags.first(where: { $0.name == "Foster Care" }))
         #expect(createdTag.isCanonical == false)
         #expect((storedAfterActions.tags ?? []).contains(where: { $0.id == createdTag.id }))
 
@@ -423,7 +516,57 @@ struct AIFeaturesTests {
         #expect(activeSuggestions.isEmpty)
 
         let allSuggestions = try fetchSuggestions(articleID: article.id, in: context)
-        #expect(allSuggestions.contains(where: { $0.name == "Policy Debate" && $0.dismissedAt != nil }))
+        #expect(allSuggestions.contains(where: { $0.name == "Family Stability" && $0.dismissedAt != nil }))
+    }
+
+    @Test("Accepted provisional tags are reusable existing candidates but never auto-attached deterministically")
+    func acceptedProvisionalTagsAreReusableOnlyInAIMatchingLane() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let service = LocalStandalonePersonalizationService(
+            modelContainer: container,
+            generationCoordinator: MockGenerationCoordinator(tagSuggestionOutput: nil)
+        )
+        let repository = LocalPersonalizationRepository(modelContainer: container)
+
+        await service.bootstrap()
+        let provisionalTag = try insertTag(in: context, name: "Foster Care", isCanonical: false)
+
+        let firstFeed = try insertFeed(in: context, title: "General Interest")
+        let taggedArticle = try insertArticle(
+            in: context,
+            feed: firstFeed,
+            title: "Seed article",
+            canonicalURL: "https://example.com/seed-article",
+            content: longContent("A seed article about foster care policy and adoption."),
+            publishedAt: .now
+        )
+        taggedArticle.tags = [provisionalTag]
+        taggedArticle.personalizationVersion = 999
+        try context.save()
+
+        let secondFeed = try insertFeed(in: context, title: "General Interest", feedURL: "https://example.com/other.xml")
+        let underfitArticle = try insertArticle(
+            in: context,
+            feed: secondFeed,
+            title: "A local case study",
+            canonicalURL: "https://example.com/foster-care-case-study",
+            content: longContent("This local case study covers foster care outcomes and adoption support systems."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let candidates = await repository.rankedExistingTagSuggestionCandidates(
+            title: underfitArticle.title,
+            contentText: longContent("This local case study covers foster care outcomes and adoption support systems."),
+            limit: 20
+        )
+        let stored = try fetchArticle(underfitArticle.id, in: context)
+        let tagNames = Set((stored.tags ?? []).map(\.name))
+
+        #expect(candidates.contains(where: { $0.name == "Foster Care" && $0.isCanonical == false }))
+        #expect(tagNames.contains("Foster Care") == false)
     }
 
     @Test("Explain-only score assist stores explanation without changing the displayed score")
@@ -650,6 +793,7 @@ private actor MockGenerationCoordinator: AIGenerationCoordinating {
     private(set) var summaryCalls = 0
     private(set) var tagSuggestionCalls = 0
     private(set) var scoreAssistCalls = 0
+    private var mostRecentTagSuggestionInput: TagSuggestionInput?
 
     let foundationModelsAvailable: Bool
     let summaryOutput: SummaryGenerationOutput?
@@ -685,6 +829,7 @@ private actor MockGenerationCoordinator: AIGenerationCoordinating {
         input: TagSuggestionInput
     ) async throws -> TagSuggestionOutput? {
         tagSuggestionCalls += 1
+        mostRecentTagSuggestionInput = input
         return tagSuggestionOutput
     }
 
@@ -697,5 +842,13 @@ private actor MockGenerationCoordinator: AIGenerationCoordinating {
 
     func scoreAssistCallCount() -> Int {
         scoreAssistCalls
+    }
+
+    func tagSuggestionCallCount() -> Int {
+        tagSuggestionCalls
+    }
+
+    func lastTagSuggestionInput() -> TagSuggestionInput? {
+        mostRecentTagSuggestionInput
     }
 }

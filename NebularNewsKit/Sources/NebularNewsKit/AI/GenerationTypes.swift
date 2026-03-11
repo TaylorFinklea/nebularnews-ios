@@ -65,12 +65,26 @@ public struct ExistingTagSuggestionCandidate: Sendable, Hashable {
     public let name: String
     public let matchScore: Double
     public let articleCount: Int
+    public let isCanonical: Bool
+    public let phraseHit: Bool
+    public let tokenOverlapCount: Int
 
-    public init(id: String, name: String, matchScore: Double, articleCount: Int) {
+    public init(
+        id: String,
+        name: String,
+        matchScore: Double,
+        articleCount: Int,
+        isCanonical: Bool = false,
+        phraseHit: Bool = false,
+        tokenOverlapCount: Int = 0
+    ) {
         self.id = id
         self.name = name
         self.matchScore = matchScore
         self.articleCount = articleCount
+        self.isCanonical = isCanonical
+        self.phraseHit = phraseHit
+        self.tokenOverlapCount = tokenOverlapCount
     }
 }
 
@@ -79,6 +93,7 @@ public struct TagSuggestionInput: Sendable {
     public let title: String?
     public let canonicalURL: String?
     public let contentText: String?
+    public let author: String?
     public let feedTitle: String?
     public let siteHostname: String?
     public let attachedTags: [String]
@@ -90,6 +105,7 @@ public struct TagSuggestionInput: Sendable {
         title: String?,
         canonicalURL: String?,
         contentText: String?,
+        author: String? = nil,
         feedTitle: String?,
         siteHostname: String?,
         attachedTags: [String],
@@ -100,6 +116,7 @@ public struct TagSuggestionInput: Sendable {
         self.title = title
         self.canonicalURL = canonicalURL
         self.contentText = contentText
+        self.author = author
         self.feedTitle = feedTitle
         self.siteHostname = siteHostname
         self.attachedTags = attachedTags

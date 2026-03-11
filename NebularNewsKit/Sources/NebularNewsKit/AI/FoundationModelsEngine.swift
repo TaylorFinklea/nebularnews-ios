@@ -69,8 +69,8 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
         input: TagSuggestionInput
     ) async throws -> TagSuggestionOutput {
         let candidateList = input.existingCandidates
-            .prefix(24)
-            .map { "- \($0.name)" }
+            .prefix(20)
+            .map { "- \($0.name) [\($0.isCanonical ? "canonical" : "provisional")]" }
             .joined(separator: "\n")
 
         let prompt = """
@@ -78,6 +78,7 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
 
         Title: \(input.title ?? "Untitled")
         URL: \(input.canonicalURL ?? "Unknown")
+        Author: \(input.author ?? "Unknown")
         Feed: \(input.feedTitle ?? "Unknown")
         Current attached tags: \(input.attachedTags.joined(separator: ", "))
 
