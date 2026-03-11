@@ -365,7 +365,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func processingQueueHealth() async -> ArticleProcessingQueueHealth {
         let hiddenArticleIDs = Set(
             (((try? modelContext.fetch(FetchDescriptor<Article>())) ?? [])
-                .filter { $0.queryIsVisible == false }
+                .filter { $0.queryIsVisible == false && $0.queryIsArchived == false }
                 .map(\.id))
         )
         let jobs = allProcessingJobs()
@@ -389,7 +389,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int {
         var descriptor = FetchDescriptor<Article>(
-            predicate: #Predicate<Article> { $0.queryIsVisible == false },
+            predicate: #Predicate<Article> {
+                $0.queryIsVisible == false &&
+                $0.queryIsArchived == false
+            },
             sortBy: [SortDescriptor(\.querySortDate, order: .reverse)]
         )
         descriptor.fetchLimit = max(limit, 0)
@@ -423,6 +426,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         var descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> {
                 $0.queryIsVisible == true &&
+                $0.queryIsArchived == false &&
                 $0.imageUrl == nil &&
                 $0.ogImageUrl == nil &&
                 $0.imagePreparedRevision < currentImagePreparationRevision
@@ -469,50 +473,16 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func enqueueMissingProcessingJobs(for articleID: String) async throws {
         guard let article = await get(id: articleID) else { return }
-
-        let scoreChanged = try ensureProcessingJobIfNeeded(
-            articleID: article.id,
-            stage: .scoreAndTag,
-            priority: 300,
-            inputRevision: max(article.contentRevision, currentPersonalizationVersion),
-            shouldQueue: article.scorePreparedRevision < max(article.contentRevision, currentPersonalizationVersion) ||
-                article.queryIsVisible == false
-        )
-
-        let contentChanged = try ensureProcessingJobIfNeeded(
-            articleID: article.id,
-            stage: .fetchContent,
-            priority: 200,
-            inputRevision: article.contentRevision,
-            shouldQueue: article.contentFetchAttemptedAt == nil && article.needsContentFetch()
-        )
-
-        let summaryChanged = try ensureProcessingJobIfNeeded(
-            articleID: article.id,
-            stage: .generateSummary,
-            priority: 100,
-            inputRevision: article.contentRevision,
-            shouldQueue: article.summaryPreparedRevision < article.contentRevision
-        )
-
-        let imageChanged = try ensureProcessingJobIfNeeded(
-            articleID: article.id,
-            stage: .resolveImage,
-            priority: 150,
-            inputRevision: currentImagePreparationRevision,
-            shouldQueue: article.imageUrl == nil &&
-                article.ogImageUrl == nil &&
-                article.imagePreparedRevision < currentImagePreparationRevision
-        )
-
+        let changed = try syncProcessingJobs(for: article)
         try modelContext.save()
-        if scoreChanged || contentChanged || summaryChanged || imageChanged {
+        if changed {
             ArticleChangeBus.postProcessingQueueChanged()
         }
     }
 
     public func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String] {
         cleanupOrphanedProcessingJobs()
+        let removedArchived = cleanupArchivedProcessingJobs()
         let reclaimed = reclaimStaleRunningProcessingJobs()
 
         let descriptor = FetchDescriptor<ArticleProcessingJob>(
@@ -539,7 +509,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             claimed.append(job.key)
         }
         try? modelContext.save()
-        if reclaimed {
+        if reclaimed || removedArchived || !claimed.isEmpty {
             ArticleChangeBus.postProcessingQueueChanged()
         }
         return claimed
@@ -684,7 +654,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         return articles
             .filter { article in
-                !recentOnly || article.retentionReferenceDate >= recentCutoff
+                !article.isArchived &&
+                (!recentOnly || article.retentionReferenceDate >= recentCutoff)
             }
             .compactMap { article in
                 articleContentFetchCandidate(from: article)
@@ -916,6 +887,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         guard let articles = try? modelContext.fetch(descriptor) else { return [] }
 
         return articles.compactMap { article in
+            guard !article.isArchived else { return nil }
             let needsAI = article.aiProcessedAt == nil ||
                 (article.cardSummaryText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
                 (article.summaryText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) ||
@@ -994,11 +966,13 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         for article in allArticles where article.isArchived && article.retentionReferenceDate >= archiveCutoff {
             article.restoreFromArchive()
+            _ = try syncProcessingJobs(for: article)
             restored += 1
         }
 
         for article in allArticles where !article.isArchived && article.retentionReferenceDate < archiveCutoff {
             article.archive(reason: .ageLimit, at: now)
+            _ = try syncProcessingJobs(for: article)
             archivedByAge += 1
         }
 
@@ -1022,6 +996,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
             for article in unsavedArticles.dropFirst(feedLimit) where !article.isArchived {
                 article.archive(reason: .feedLimit, at: now)
+                _ = try syncProcessingJobs(for: article)
                 archivedByFeedLimit += 1
             }
         }
@@ -1029,6 +1004,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         for article in allArticles where article.isArchived && !article.isInReadingList {
             let archiveAnchor = article.archivedAt ?? now
             guard archiveAnchor <= deleteCutoff else { continue }
+            _ = removeProcessingJobs(for: article.id)
             modelContext.delete(article)
             deleted += 1
         }
@@ -1038,6 +1014,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             try modelContext.save()
             await rebuildTodaySnapshot()
             ArticleChangeBus.postFeedPageMightChange()
+            ArticleChangeBus.postProcessingQueueChanged()
         }
 
         return ArticleStorageEnforcementResult(
@@ -1574,6 +1551,49 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return true
     }
 
+    private func syncProcessingJobs(for article: Article) throws -> Bool {
+        if article.isArchived {
+            return removeProcessingJobs(for: article.id)
+        }
+
+        let scoreChanged = try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .scoreAndTag,
+            priority: 300,
+            inputRevision: max(article.contentRevision, currentPersonalizationVersion),
+            shouldQueue: article.scorePreparedRevision < max(article.contentRevision, currentPersonalizationVersion) ||
+                article.queryIsVisible == false
+        )
+
+        let contentChanged = try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .fetchContent,
+            priority: 200,
+            inputRevision: article.contentRevision,
+            shouldQueue: article.contentFetchAttemptedAt == nil && article.needsContentFetch()
+        )
+
+        let summaryChanged = try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .generateSummary,
+            priority: 100,
+            inputRevision: article.contentRevision,
+            shouldQueue: article.summaryPreparedRevision < article.contentRevision
+        )
+
+        let imageChanged = try ensureProcessingJobIfNeeded(
+            articleID: article.id,
+            stage: .resolveImage,
+            priority: 150,
+            inputRevision: currentImagePreparationRevision,
+            shouldQueue: article.imageUrl == nil &&
+                article.ogImageUrl == nil &&
+                article.imagePreparedRevision < currentImagePreparationRevision
+        )
+
+        return scoreChanged || contentChanged || summaryChanged || imageChanged
+    }
+
     private func existingProcessingJob(
         articleID: String,
         stage: ArticleProcessingStage
@@ -1587,6 +1607,16 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    @discardableResult
+    private func removeProcessingJobs(for articleID: String) -> Bool {
+        let jobs = allProcessingJobs().filter { $0.articleID == articleID }
+        guard !jobs.isEmpty else { return false }
+        for job in jobs {
+            modelContext.delete(job)
+        }
+        return true
+    }
+
     private func cleanupOrphanedProcessingJobs() {
         let articleDescriptor = FetchDescriptor<Article>()
         let liveArticleIDs = Set(((try? modelContext.fetch(articleDescriptor)) ?? []).map(\.id))
@@ -1596,6 +1626,25 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         for job in jobs where !liveArticleIDs.contains(job.articleID) {
             modelContext.delete(job)
         }
+    }
+
+    private func cleanupArchivedProcessingJobs() -> Bool {
+        let articleDescriptor = FetchDescriptor<Article>()
+        let archivedArticleIDs = Set(
+            ((try? modelContext.fetch(articleDescriptor)) ?? [])
+                .filter(\.isArchived)
+                .map(\.id)
+        )
+
+        guard !archivedArticleIDs.isEmpty else { return false }
+
+        let jobs = allProcessingJobs()
+        var removed = false
+        for job in jobs where archivedArticleIDs.contains(job.articleID) {
+            modelContext.delete(job)
+            removed = true
+        }
+        return removed
     }
 
     private func reclaimStaleRunningProcessingJobs(

@@ -223,6 +223,36 @@ struct ArticlePreparationServiceTests {
         #expect(pendingAfter == 1)
     }
 
+    @Test("Archived hidden articles do not count toward pending backlog or score backfill")
+    func archivedHiddenArticlesAreExcludedFromVisibilityBacklog() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Archived Hidden Article",
+            canonicalURL: "https://example.com/archived-hidden",
+            content: longContent("A detailed article body suitable for scoring."),
+            imageURL: "https://example.com/image.jpg"
+        )
+
+        article.queryIsVisible = false
+        article.presentationReadyAt = nil
+        article.archive(reason: .ageLimit, at: .now)
+        try context.save()
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let backfilled = try await articleRepo.backfillMissingProcessingJobsForInvisibleArticles(limit: 10)
+        let pending = await articleRepo.pendingVisibleArticleCount()
+        let health = await articleRepo.processingQueueHealth()
+
+        #expect(backfilled == 0)
+        #expect(pending == 0)
+        #expect(health.pendingVisibleCount == 0)
+        #expect(await articleRepo.processingJob(articleID: article.id, stage: .scoreAndTag) == nil)
+    }
+
     @Test("Processing queue health reports pending hidden score jobs and running workers separately")
     func processingQueueHealthSeparatesQueuedAndRunningScoreJobs() async throws {
         let container = try makeContainer()
@@ -313,6 +343,37 @@ struct ArticlePreparationServiceTests {
         #expect(resolveJob?.status == .running)
         #expect(resolveJob?.priority == 150)
         #expect(claimed == [ArticleProcessingJob.makeKey(articleID: article.id, stage: .resolveImage)])
+    }
+
+    @Test("Archived visible articles do not receive image backfill jobs")
+    func archivedVisibleArticlesDoNotBackfillImageJobs() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Example Feed")
+        let article = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Archived Visible Article",
+            canonicalURL: "https://example.com/archived-visible",
+            content: longContent("A detailed article body suitable for summaries."),
+            imageURL: nil
+        )
+
+        article.contentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        article.imagePreparationStatusRaw = ArticlePreparationStageStatus.failed.rawValue
+        article.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.skipped.rawValue
+        article.markScorePrepared(revision: currentPersonalizationVersion)
+        article.imagePreparedRevision = currentImagePreparationRevision - 1
+        article.queryIsVisible = true
+        article.presentationReadyAt = Date()
+        article.archive(reason: .feedLimit, at: .now)
+        try context.save()
+
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let backfilled = try await articleRepo.backfillMissingImageJobsForVisibleArticles(limit: 10)
+
+        #expect(backfilled == 0)
+        #expect(await articleRepo.processingJob(articleID: article.id, stage: .resolveImage) == nil)
     }
 
     @Test("Claiming jobs reclaims stale running score jobs for live hidden articles")
