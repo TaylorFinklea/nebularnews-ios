@@ -99,11 +99,26 @@ private struct DiscoverFeedRow: View {
                             .foregroundStyle(.orange)
                     }
 
-                    if feed.errorMessage != nil {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.red)
+                    if let errorMessage = feed.errorMessage, !errorMessage.isEmpty {
+                        Button {
+                            onShowIssue()
+                        } label: {
+                            Label("Issue", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View feed issue")
+                        .accessibilityHint(errorMessage)
                     }
+                }
+
+                if let errorMessage = feed.errorMessage, !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 

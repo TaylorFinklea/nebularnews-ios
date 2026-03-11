@@ -221,6 +221,14 @@ private struct FeedRow: View {
                     }
                 }
 
+                if let error = feed.errorMessage, !error.isEmpty {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+
                 Text(feed.feedUrl)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
