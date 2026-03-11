@@ -130,13 +130,17 @@ CloudKit sync lets standalone-mode data (feeds, articles, read state, tags) stay
 
 ### How it works
 
-SwiftData's `.automatic` CloudKit mode handles everything:
+SwiftData's `.automatic` CloudKit mode handles everything for the synced store:
 - Schema mirroring: SwiftData models are automatically mapped to CloudKit record types
 - Conflict resolution: last-writer-wins with automatic merge for non-conflicting fields
 - Push sync: changes propagate to other devices within seconds when online
 - Offline support: changes queue locally and sync when connectivity returns
 
-The infrastructure is already built into the codebase — `ModelContainerSetup.swift` accepts a `cloudKitEnabled` flag and `AppConfiguration` reads it from your xcconfig. Enabling sync is purely a configuration step.
+The infrastructure is already built into the codebase — `ModelContainerSetup.swift` accepts a `cloudKitEnabled` flag and `AppConfiguration` reads it from your xcconfig.
+
+NebularNews uses two SwiftData configurations:
+- a CloudKit-synced store for user data such as feeds, articles, read state, tags, chat threads, and app settings
+- a local-only store for operational/read-model data such as article processing jobs, Today snapshots, and personalization tables that rely on uniqueness constraints unsupported by CloudKit
 
 ### Setup steps
 
