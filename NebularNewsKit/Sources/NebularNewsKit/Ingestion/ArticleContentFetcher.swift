@@ -135,6 +135,11 @@ public actor ArticleContentFetcher {
     }
 
     private func fetch(candidate: ArticleContentFetchCandidate) async -> ArticleContentFetchResult {
+        if Self.isKnownPreviewOnlySource(urlString: candidate.canonicalUrl) {
+            try? await articleRepo.recordContentFetchAttempt(id: candidate.id)
+            return ArticleContentFetchResult(articleId: candidate.id, status: .blocked)
+        }
+
         do {
             let html = try await pageFetcher.fetchHTML(url: candidate.canonicalUrl)
 
@@ -169,6 +174,17 @@ public actor ArticleContentFetcher {
             try? await articleRepo.recordContentFetchAttempt(id: candidate.id)
             return ArticleContentFetchResult(articleId: candidate.id, status: .failed)
         }
+    }
+
+    private static func isKnownPreviewOnlySource(urlString: String) -> Bool {
+        guard let url = URL(string: urlString),
+              let host = url.host?.lowercased()
+        else {
+            return false
+        }
+
+        let normalizedHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return normalizedHost == "openai.com" || normalizedHost.hasSuffix(".openai.com")
     }
 }
 

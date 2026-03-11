@@ -14,6 +14,13 @@ private struct MockArticlePageFetcher: ArticlePageFetching, @unchecked Sendable 
     }
 }
 
+private struct ShouldNotBeCalledPageFetcher: ArticlePageFetching, @unchecked Sendable {
+    func fetchHTML(url: String) async throws -> String {
+        Issue.record("Expected preview-only source to skip direct HTML fetch for \(url)")
+        throw FeedFetchError.networkError(underlying: "Should not be called")
+    }
+}
+
 @Suite("ArticleContentFetcher")
 struct ArticleContentFetcherTests {
     private func makeContainer() throws -> ModelContainer {
@@ -147,5 +154,61 @@ struct ArticleContentFetcherTests {
         article.contentFetchAttemptedAt = Date(timeIntervalSinceNow: -4 * 86_400)
         let retriedCandidate = await articleRepo.contentFetchCandidate(id: article.id)
         #expect(retriedCandidate?.id == article.id)
+    }
+
+    @Test("Known preview-only sources are blocked without fetching HTML")
+    func previewOnlySourcesAreBlockedWithoutNetworkFetch() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let feed = try await feedRepo.add(feedUrl: "https://openai.com/news/rss.xml", title: "OpenAI News")
+
+        let parsed = ParsedArticle(
+            url: "https://openai.com/index/rakuten",
+            title: "Rakuten fixes issues twice as fast with Codex",
+            excerpt: "Short RSS preview only.",
+            contentHash: "openai-preview-article"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: parsed)
+
+        let insertedArticles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)
+        let article = try #require(insertedArticles.first)
+
+        let fetcher = ArticleContentFetcher(
+            modelContainer: container,
+            pageFetcher: ShouldNotBeCalledPageFetcher()
+        )
+
+        let result = await fetcher.fetchMissingContent(articleId: article.id)
+
+        #expect(result.status == .blocked)
+
+        let refreshedArticle = try #require(await articleRepo.get(id: article.id))
+        #expect(refreshedArticle.contentFetchAttemptedAt != nil)
+        #expect(refreshedArticle.contentFetchedAt == nil)
+        #expect(refreshedArticle.contentHtml == nil)
+    }
+
+    @Test("Blocked content sources stop re-queueing fetch candidates")
+    func blockedSourcesDoNotRetryAutomatically() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Example Feed")
+
+        let parsed = ParsedArticle(
+            url: "https://example.com/blocked-forever",
+            title: "Blocked Forever",
+            excerpt: "Short preview.",
+            contentHash: "blocked-forever"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: parsed)
+
+        let article = try #require((await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)).first)
+        article.contentPreparationStatusRaw = ArticlePreparationStageStatus.blocked.rawValue
+        article.contentFetchAttemptedAt = Date(timeIntervalSinceNow: -10 * 86_400)
+
+        let candidate = await articleRepo.contentFetchCandidate(id: article.id)
+        #expect(candidate == nil)
     }
 }

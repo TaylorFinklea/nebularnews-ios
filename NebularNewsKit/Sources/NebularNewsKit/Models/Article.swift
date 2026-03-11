@@ -235,6 +235,22 @@ public final class Article: @unchecked Sendable {
         bestAvailableContentText.count
     }
 
+    public var canonicalHost: String? {
+        guard let canonicalUrl,
+              let url = URL(string: canonicalUrl),
+              let host = url.host?.lowercased()
+        else {
+            return nil
+        }
+
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    public var isKnownPreviewOnlySource: Bool {
+        guard let canonicalHost else { return false }
+        return canonicalHost == "openai.com" || canonicalHost.hasSuffix(".openai.com")
+    }
+
     public var preferredCardSummaryText: String? {
         let candidates = [
             normalizedSummary(cardSummaryText),
@@ -378,6 +394,10 @@ public final class Article: @unchecked Sendable {
         }
 
         if contentFetchedAt != nil {
+            return false
+        }
+
+        if contentPreparationStatusValue == .blocked {
             return false
         }
 

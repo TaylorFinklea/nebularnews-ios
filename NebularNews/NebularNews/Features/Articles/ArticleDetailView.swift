@@ -285,7 +285,7 @@ struct ArticleDetailView: View {
         GlassCard(cornerRadius: 22, style: .standard, tintColor: palette.primary) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
-                    Label("Article text", systemImage: "doc.text")
+                    Label(article.isKnownPreviewOnlySource ? "Article preview" : "Article text", systemImage: "doc.text")
                         .font(.caption.bold())
                         .foregroundStyle(.secondary)
                 }
@@ -305,7 +305,7 @@ struct ArticleDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if article.contentPreparationStatusValue == .failed || article.contentPreparationStatusValue == .blocked {
-                    Text("This article is showing the feed-provided version because full-text extraction wasn't available.")
+                    Text(contentFallbackMessage(for: article, excerptOnly: false))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -318,7 +318,7 @@ struct ArticleDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if article.contentPreparationStatusValue == .failed || article.contentPreparationStatusValue == .blocked {
-                    Text("This article is showing the feed excerpt because full-text extraction wasn't available.")
+                    Text(contentFallbackMessage(for: article, excerptOnly: true))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -420,6 +420,18 @@ struct ArticleDetailView: View {
                 .controlSize(.small)
             }
         }
+    }
+
+    private func contentFallbackMessage(for article: Article, excerptOnly: Bool) -> String {
+        if article.isKnownPreviewOnlySource {
+            return excerptOnly
+                ? "This publisher only exposes a short RSS preview here. Open in browser to read the full article."
+                : "This publisher only exposes the feed-provided preview here. Open in browser to read the full article."
+        }
+
+        return excerptOnly
+            ? "This article is showing the feed excerpt because full-text extraction wasn't available."
+            : "This article is showing the feed-provided version because full-text extraction wasn't available."
     }
 
     // MARK: - Bottom Action Tray
