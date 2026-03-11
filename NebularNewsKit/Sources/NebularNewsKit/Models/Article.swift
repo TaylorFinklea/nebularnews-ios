@@ -9,6 +9,11 @@ public enum ArticlePreparationStageStatus: String, Codable, Sendable {
     case skipped
 }
 
+public enum ArticleArchiveReason: String, Codable, Sendable {
+    case ageLimit = "age_limit"
+    case feedLimit = "feed_limit"
+}
+
 /// A single article fetched from an RSS feed.
 ///
 /// Articles hold both the raw content (HTML) and AI-generated enrichments
@@ -43,6 +48,7 @@ public final class Article: @unchecked Sendable {
     public var enrichmentPreparationStatusRaw: String?
     public var presentationReadyAt: Date?
     public var queryIsVisible: Bool = false
+    public var queryIsArchived: Bool = false
     public var queryIsUnreadQueueCandidate: Bool = true
     public var querySortDate: Date = Date()
     public var queryDisplayedScore: Int = 0
@@ -78,6 +84,8 @@ public final class Article: @unchecked Sendable {
     public var isRead: Bool = false
     public var readAt: Date?
     public var dismissedAt: Date?
+    public var archivedAt: Date?
+    public var archiveReasonRaw: String?
     public var readingListAddedAt: Date?
     public var reactionValue: Int?
     public var reactionUpdatedAt: Date?
@@ -195,6 +203,15 @@ public final class Article: @unchecked Sendable {
         dismissedAt != nil
     }
 
+    public var isArchived: Bool {
+        archivedAt != nil
+    }
+
+    public var archiveReason: ArticleArchiveReason? {
+        guard let archiveReasonRaw else { return nil }
+        return ArticleArchiveReason(rawValue: archiveReasonRaw)
+    }
+
     public var isInReadingList: Bool {
         readingListAddedAt != nil
     }
@@ -271,6 +288,21 @@ public final class Article: @unchecked Sendable {
         refreshQueryState()
     }
 
+    public func archive(
+        reason: ArticleArchiveReason,
+        at date: Date = Date()
+    ) {
+        archivedAt = date
+        archiveReasonRaw = reason.rawValue
+        refreshQueryState()
+    }
+
+    public func restoreFromArchive() {
+        archivedAt = nil
+        archiveReasonRaw = nil
+        refreshQueryState()
+    }
+
     public func addToReadingList(at date: Date = Date()) {
         readingListAddedAt = date
         refreshQueryState()
@@ -309,7 +341,7 @@ public final class Article: @unchecked Sendable {
         scorePreparedRevision = revision ?? max(contentRevision, currentPersonalizationVersion)
         if makeVisible {
             queryIsVisible = true
-            if presentationReadyAt == nil {
+            if presentationReadyAt == nil && !isArchived {
                 presentationReadyAt = Date()
             }
         }
@@ -329,7 +361,8 @@ public final class Article: @unchecked Sendable {
     public func refreshQueryState() {
         querySortDate = publishedAt ?? fetchedAt
         queryDisplayedScore = displayedScore ?? 0
-        queryIsUnreadQueueCandidate = !isRead && !isDismissed
+        queryIsArchived = isArchived
+        queryIsUnreadQueueCandidate = !isRead && !isDismissed && !isArchived
         queryFeedID = feed?.id
     }
 

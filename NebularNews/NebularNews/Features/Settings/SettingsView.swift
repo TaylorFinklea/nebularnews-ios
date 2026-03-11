@@ -28,10 +28,15 @@ struct SettingsView: View {
 
     private var settings: AppSettings {
         if let existing = settingsResults.first {
+            if existing.normalizeStorageSettings() {
+                existing.updatedAt = Date()
+                try? modelContext.save()
+            }
             return existing
         }
         // Create singleton on first access
         let newSettings = AppSettings()
+        _ = newSettings.normalizeStorageSettings()
         modelContext.insert(newSettings)
         try? modelContext.save()
         return newSettings
@@ -70,17 +75,32 @@ struct SettingsView: View {
                         in: 10...200,
                         step: 10
                     )
-
-                    Stepper(
-                        "Retention: \(settings.retentionDays) days",
-                        value: retentionBinding,
-                        in: 7...365,
-                        step: 7
-                    )
                 } header: {
                     Label("Feed Polling", systemImage: "antenna.radiowaves.left.and.right")
                 } footer: {
                     Text("Background refresh runs approximately every poll interval. iOS may adjust timing based on usage patterns.")
+                }
+
+                Section {
+                    Stepper(
+                        "Archive after: \(settings.archiveAfterDays > 0 ? settings.archiveAfterDays : settings.retentionDays) days",
+                        value: archiveAfterBinding,
+                        in: 7...365,
+                        step: 7
+                    )
+
+                    Stepper(
+                        "Delete archived after: \(settings.deleteArchivedAfterDays) days",
+                        value: deleteArchivedAfterBinding,
+                        in: 7...365,
+                        step: 7
+                    )
+
+                    Toggle("Include archived in search", isOn: searchArchivedByDefaultBinding)
+                } header: {
+                    Label("Storage Policy", systemImage: "archivebox")
+                } footer: {
+                    Text("Older articles leave the main reading surfaces after the archive window. Archived articles are deleted later unless they are saved to Reading List.")
                 }
 
                 Section {
@@ -353,32 +373,73 @@ struct SettingsView: View {
             get: { settings.maxArticlesPerFeed },
             set: { newValue in
                 settings.maxArticlesPerFeed = newValue
+                _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
                 enforceArticleStoragePolicies(
-                    retentionDays: settings.retentionDays,
+                    archiveAfterDays: settings.archiveAfterDays,
+                    deleteArchivedAfterDays: settings.deleteArchivedAfterDays,
                     maxArticlesPerFeed: newValue
                 )
             }
         )
     }
 
-    private var retentionBinding: Binding<Int> {
+    private var archiveAfterBinding: Binding<Int> {
         Binding(
-            get: { settings.retentionDays },
+            get: {
+                let current = settings.archiveAfterDays > 0 ? settings.archiveAfterDays : settings.retentionDays
+                return max(current, 1)
+            },
             set: { newValue in
+                settings.archiveAfterDays = newValue
                 settings.retentionDays = newValue
+                _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
                 enforceArticleStoragePolicies(
-                    retentionDays: newValue,
+                    archiveAfterDays: newValue,
+                    deleteArchivedAfterDays: settings.deleteArchivedAfterDays,
                     maxArticlesPerFeed: settings.maxArticlesPerFeed
                 )
             }
         )
     }
 
-    private func enforceArticleStoragePolicies(retentionDays: Int, maxArticlesPerFeed: Int) {
+    private var deleteArchivedAfterBinding: Binding<Int> {
+        Binding(
+            get: { max(settings.deleteArchivedAfterDays, 1) },
+            set: { newValue in
+                settings.deleteArchivedAfterDays = newValue
+                _ = settings.normalizeStorageSettings()
+                settings.updatedAt = Date()
+                try? modelContext.save()
+                enforceArticleStoragePolicies(
+                    archiveAfterDays: settings.archiveAfterDays,
+                    deleteArchivedAfterDays: newValue,
+                    maxArticlesPerFeed: settings.maxArticlesPerFeed
+                )
+            }
+        )
+    }
+
+    private var searchArchivedByDefaultBinding: Binding<Bool> {
+        Binding(
+            get: { settings.searchArchivedByDefault },
+            set: { newValue in
+                settings.searchArchivedByDefault = newValue
+                _ = settings.normalizeStorageSettings()
+                settings.updatedAt = Date()
+                try? modelContext.save()
+            }
+        )
+    }
+
+    private func enforceArticleStoragePolicies(
+        archiveAfterDays: Int,
+        deleteArchivedAfterDays: Int,
+        maxArticlesPerFeed: Int
+    ) {
         let container = modelContext.container
 
         Task {
@@ -386,7 +447,8 @@ struct SettingsView: View {
             let articleRepo = LocalArticleRepository(modelContainer: container)
             let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
             _ = await poller.enforceArticleStoragePolicies(
-                retentionDays: retentionDays,
+                archiveAfterDays: archiveAfterDays,
+                deleteArchivedAfterDays: deleteArchivedAfterDays,
                 maxArticlesPerFeed: maxArticlesPerFeed
             )
 #if DEBUG

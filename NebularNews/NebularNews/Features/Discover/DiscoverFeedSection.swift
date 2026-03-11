@@ -38,6 +38,7 @@ struct DiscoverFeedSection: View {
                         ForEach(Array(viewModel.feeds.enumerated()), id: \.element.id) { index, feed in
                             DiscoverFeedRow(
                                 feed: feed,
+                                activeArticleCount: viewModel.activeArticleCount(for: feed.id),
                                 onToggle: { Task { await viewModel.toggleEnabled(feed) } },
                                 onDelete: { Task { await viewModel.deleteFeed(feed) } }
                             )
@@ -56,6 +57,7 @@ struct DiscoverFeedSection: View {
 
 private struct DiscoverFeedRow: View {
     let feed: Feed
+    let activeArticleCount: Int
     let onToggle: () -> Void
     let onDelete: () -> Void
 
@@ -71,7 +73,7 @@ private struct DiscoverFeedRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    Text("\(feed.articles?.count ?? 0) articles")
+                    Text("\(activeArticleCount) articles")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

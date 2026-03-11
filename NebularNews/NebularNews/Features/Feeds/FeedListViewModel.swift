@@ -11,6 +11,7 @@ final class FeedListViewModel {
     private let settingsRepo: LocalSettingsRepository
     private let modelContainer: ModelContainer
     private var poller: FeedPoller?
+    private(set) var activeArticleCountsByFeed: [String: Int] = [:]
 
     var feeds: [Feed] = []
     var isLoading = false
@@ -38,6 +39,7 @@ final class FeedListViewModel {
     func loadFeeds() async {
         isLoading = true
         feeds = await feedRepo.list()
+        activeArticleCountsByFeed = await articleRepo.activeArticleCountsByFeed()
         isLoading = false
     }
 
@@ -51,11 +53,7 @@ final class FeedListViewModel {
             keychainService: AppConfiguration.shared.keychainService
         )
 
-        lastPollMessage = formatPollResult(
-            refreshResult.result,
-            deleted: refreshResult.deleted,
-            trimmed: refreshResult.trimmed
-        )
+        lastPollMessage = formatPollResult(refreshResult.result, storage: refreshResult.storage)
         if refreshResult.prepared > 0 {
             lastPollMessage = (lastPollMessage ?? "") + " · \(refreshResult.prepared) prepared"
         }
@@ -68,11 +66,13 @@ final class FeedListViewModel {
     /// Poll a single feed (e.g., right after adding it for title auto-detection).
     func pollSingleFeed(id: String) async {
         let poller = getPoller()
-        let retentionDays = await settingsRepo.retentionDays()
+        let archiveAfterDays = await settingsRepo.archiveAfterDays()
+        let deleteArchivedAfterDays = await settingsRepo.deleteArchivedAfterDays()
         let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
-        _ = await poller.pollFeed(id: id)
+        _ = await poller.pollFeed(id: id, archiveAfterDays: archiveAfterDays)
         _ = await poller.enforceArticleStoragePolicies(
-            retentionDays: retentionDays,
+            archiveAfterDays: archiveAfterDays,
+            deleteArchivedAfterDays: deleteArchivedAfterDays,
             maxArticlesPerFeed: maxArticlesPerFeed
         )
         await loadFeeds()
@@ -148,7 +148,11 @@ final class FeedListViewModel {
 
     // TODO: User contribution opportunity — customize how poll results are displayed.
     // Consider: toast vs. subtitle, level of detail, auto-dismiss timing.
-    private func formatPollResult(_ result: PollCycleResult, deleted: Int, trimmed: Int) -> String {
+    func activeArticleCount(for feedID: String) -> Int {
+        activeArticleCountsByFeed[feedID] ?? 0
+    }
+
+    private func formatPollResult(_ result: PollCycleResult, storage: ArticleStoragePolicyResult) -> String {
         var parts: [String] = []
 
         if result.newArticles > 0 {
@@ -160,11 +164,17 @@ final class FeedListViewModel {
         if result.feedsSkipped > 0 {
             parts.append("\(result.feedsSkipped) skipped")
         }
-        if deleted > 0 {
-            parts.append("\(deleted) old removed")
+        if storage.archivedByAge > 0 {
+            parts.append("\(storage.archivedByAge) aged archived")
         }
-        if trimmed > 0 {
-            parts.append("\(trimmed) over limit removed")
+        if storage.archivedByFeedLimit > 0 {
+            parts.append("\(storage.archivedByFeedLimit) over limit archived")
+        }
+        if storage.restored > 0 {
+            parts.append("\(storage.restored) restored")
+        }
+        if storage.deleted > 0 {
+            parts.append("\(storage.deleted) archived deleted")
         }
 
         if parts.isEmpty {

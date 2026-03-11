@@ -10,6 +10,7 @@ import NebularNewsKit
 /// filtering by read state and full-text search.
 struct FeedTabView: View {
     @Environment(\.modelContext) private var modelContext
+    @Query private var settingsResults: [AppSettings]
 
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
@@ -26,7 +27,10 @@ struct FeedTabView: View {
                         FeedFilterBar(
                             filterMode: $filterMode,
                             count: viewModel.visibleCount,
-                            activeSummary: advancedFilter.summaryText(),
+                            activeSummary: advancedFilter.summaryText(
+                                searchText: searchText,
+                                searchArchivedByDefault: searchArchivedByDefault
+                            ),
                             onClearAdvancedFilters: clearAdvancedFilters
                         )
                     }
@@ -93,7 +97,8 @@ struct FeedTabView: View {
                 FeedAdvancedFilterSheet(
                     state: advancedFilter,
                     quickFilterMode: filterMode,
-                    searchText: searchText
+                    searchText: searchText,
+                    searchArchivedByDefault: searchArchivedByDefault
                 ) { updatedState in
                     advancedFilter = updatedState
                 }
@@ -111,7 +116,8 @@ struct FeedTabView: View {
                     container: modelContext.container,
                     filterMode: filterMode,
                     searchText: searchText,
-                    advancedFilter: advancedFilter
+                    advancedFilter: advancedFilter,
+                    searchArchivedByDefault: searchArchivedByDefault
                 )
             }
             .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
@@ -119,7 +125,8 @@ struct FeedTabView: View {
                     container: modelContext.container,
                     filterMode: filterMode,
                     searchText: searchText,
-                    advancedFilter: advancedFilter
+                    advancedFilter: advancedFilter,
+                    searchArchivedByDefault: searchArchivedByDefault
                 )
             }
         }
@@ -129,8 +136,13 @@ struct FeedTabView: View {
         FeedReloadKey(
             filterMode: filterMode,
             searchText: searchText,
-            advancedFilter: advancedFilter
+            advancedFilter: advancedFilter,
+            searchArchivedByDefault: searchArchivedByDefault
         )
+    }
+
+    private var searchArchivedByDefault: Bool {
+        settingsResults.first?.searchArchivedByDefault ?? false
     }
 
     private var selectedReactionArticle: Article? {
@@ -170,7 +182,8 @@ struct FeedTabView: View {
                 container: modelContext.container,
                 filterMode: filterMode,
                 searchText: searchText,
-                advancedFilter: advancedFilter
+                advancedFilter: advancedFilter,
+                searchArchivedByDefault: searchArchivedByDefault
             )
         }
     }
@@ -202,7 +215,10 @@ struct FeedTabView: View {
     }
 
     private var emptyStateDescription: String {
-        let activeSummary = advancedFilter.summaryText() ?? "your selected filters"
+        let activeSummary = advancedFilter.summaryText(
+            searchText: searchText,
+            searchArchivedByDefault: searchArchivedByDefault
+        ) ?? "your selected filters"
         if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return "Try widening \(activeSummary) or clear the filter to see more stories."
         }
@@ -277,6 +293,7 @@ private struct FeedReloadKey: Equatable {
     let filterMode: FeedFilterMode
     let searchText: String
     let advancedFilter: FeedAdvancedFilterState
+    let searchArchivedByDefault: Bool
 }
 
 private struct FeedPreparingSection: View {
@@ -399,7 +416,8 @@ private final class FeedBrowseViewModel {
         container: ModelContainer,
         filterMode: FeedFilterMode,
         searchText: String,
-        advancedFilter: FeedAdvancedFilterState
+        advancedFilter: FeedAdvancedFilterState,
+        searchArchivedByDefault: Bool
     ) async {
         let articleRepo = repository(for: container)
         requestToken += 1
@@ -409,7 +427,8 @@ private final class FeedBrowseViewModel {
         let filter = makeFilter(
             filterMode: filterMode,
             searchText: searchText,
-            advancedFilter: advancedFilter
+            advancedFilter: advancedFilter,
+            searchArchivedByDefault: searchArchivedByDefault
         )
         let sort = advancedFilter.articleSort
 
@@ -448,7 +467,8 @@ private final class FeedBrowseViewModel {
         container: ModelContainer,
         filterMode: FeedFilterMode,
         searchText: String,
-        advancedFilter: FeedAdvancedFilterState
+        advancedFilter: FeedAdvancedFilterState,
+        searchArchivedByDefault: Bool
     ) async {
         guard hasMoreArticles,
               !isLoadingMore,
@@ -462,7 +482,8 @@ private final class FeedBrowseViewModel {
         let filter = makeFilter(
             filterMode: filterMode,
             searchText: searchText,
-            advancedFilter: advancedFilter
+            advancedFilter: advancedFilter,
+            searchArchivedByDefault: searchArchivedByDefault
         )
         let nextBatch = await articleRepo.listFeedPage(
             filter: filter,
@@ -511,7 +532,8 @@ private final class FeedBrowseViewModel {
         container: ModelContainer,
         filterMode: FeedFilterMode,
         searchText: String,
-        advancedFilter: FeedAdvancedFilterState
+        advancedFilter: FeedAdvancedFilterState,
+        searchArchivedByDefault: Bool
     ) {
         reloadTask?.cancel()
         reloadTask = Task { [weak self] in
@@ -521,7 +543,8 @@ private final class FeedBrowseViewModel {
                 container: container,
                 filterMode: filterMode,
                 searchText: searchText,
-                advancedFilter: advancedFilter
+                advancedFilter: advancedFilter,
+                searchArchivedByDefault: searchArchivedByDefault
             )
         }
     }
@@ -529,7 +552,8 @@ private final class FeedBrowseViewModel {
     private func makeFilter(
         filterMode: FeedFilterMode,
         searchText: String,
-        advancedFilter: FeedAdvancedFilterState
+        advancedFilter: FeedAdvancedFilterState,
+        searchArchivedByDefault: Bool
     ) -> ArticleFilter {
         var filter = ArticleFilter()
         filter.searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -545,7 +569,11 @@ private final class FeedBrowseViewModel {
             filter.readFilter = .read
         }
 
-        advancedFilter.apply(to: &filter)
+        advancedFilter.apply(
+            to: &filter,
+            searchText: searchText,
+            searchArchivedByDefault: searchArchivedByDefault
+        )
 
         return filter
     }

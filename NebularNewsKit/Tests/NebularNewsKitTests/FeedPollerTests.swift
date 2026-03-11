@@ -229,8 +229,8 @@ struct FeedPollerTests {
         #expect(result.feedsPolled == 0)
     }
 
-    @Test("Cleanup deletes old articles by fetched date when published date is missing")
-    func cleanupOldArticlesByFetchedDateFallback() async throws {
+    @Test("Storage policy archives old undated articles by fetched date")
+    func storagePolicyArchivesOldArticlesByFetchedDateFallback() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -249,41 +249,101 @@ struct FeedPollerTests {
         let articles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         if let article = articles.first {
             article.fetchedAt = Date(timeIntervalSinceNow: -100 * 86400)
+            article.refreshQueryState()
         }
 
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+        let result = await poller.enforceArticleStoragePolicies(
+            archiveAfterDays: 90,
+            deleteArchivedAfterDays: 30,
+            maxArticlesPerFeed: 50
+        )
 
-        #expect(deleted == 1)
+        #expect(result.archivedByAge == 1)
+        #expect(result.deleted == 0)
+
+        var archivedFilter = ArticleFilter()
+        archivedFilter.storageScope = .archived
+        let archived = await articleRepo.list(filter: archivedFilter, sort: .newest, limit: 100, offset: 0)
+        #expect(archived.count == 1)
+        #expect(archived.first?.title == "Old Article")
+        #expect(archived.first?.isArchived == true)
     }
 
-    @Test("Cleanup deletes newly fetched articles when their published date is outside retention")
-    func cleanupOldArticlesByPublishedDate() async throws {
+    @Test("Poller skips items outside the archive window before insert")
+    func pollerSkipsArticlesOutsideArchiveWindow() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
 
         let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
 
-        let oldArticle = ParsedArticle(
-            url: "https://example.com/archive",
-            title: "Archive Article",
-            publishedAt: Date(timeIntervalSinceNow: -120 * 86400),
-            contentHash: "archivehash123"
-        )
-        try await articleRepo.insertForFeed(feedId: feed.id, article: oldArticle)
+        let now = Date()
+        var mockFetcher = MockFeedFetcher()
+        mockFetcher.responses["https://example.com/feed.xml"] = .success(FeedFetchResult(
+            data: makeRSSXMLWithDates(title: "Test", items: [
+                (title: "Recent", link: "https://example.com/recent", publishedAt: now.addingTimeInterval(-3 * 86400)),
+                (title: "Archive Article", link: "https://example.com/archive", publishedAt: now.addingTimeInterval(-120 * 86400))
+            ]),
+            httpStatus: 200
+        ))
 
-        let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+        let poller = FeedPoller(fetcher: mockFetcher, feedRepo: feedRepo, articleRepo: articleRepo)
+        let result = try #require(await poller.pollFeed(id: feed.id, archiveAfterDays: 90))
 
-        #expect(deleted == 1)
+        #expect(result.newArticles == 1)
 
         let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
-        #expect(remaining.isEmpty)
+        #expect(remaining.count == 1)
+        #expect(remaining.first?.title == "Recent")
     }
 
-    @Test("Cleanup keeps articles when published date is still within retention")
-    func cleanupKeepsRecentlyPublishedArticles() async throws {
+    @Test("Poller still inserts undated items while skipping dated articles outside the archive window")
+    func pollerStillInsertsUndatedItems() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+            <channel>
+                <title>Test Feed</title>
+                <link>https://example.com</link>
+                <item>
+                    <title>Undated Story</title>
+                    <link>https://example.com/undated</link>
+                    <description>Undated item should still insert.</description>
+                </item>
+                <item>
+                    <title>Old Dated Story</title>
+                    <link>https://example.com/old-dated</link>
+                    <description>Old dated item should be skipped.</description>
+                    <pubDate>Mon, 01 Jan 2012 00:00:00 +0000</pubDate>
+                </item>
+            </channel>
+        </rss>
+        """
+
+        var mockFetcher = MockFeedFetcher()
+        mockFetcher.responses["https://example.com/feed.xml"] = .success(FeedFetchResult(
+            data: Data(xml.utf8),
+            httpStatus: 200
+        ))
+
+        let poller = FeedPoller(fetcher: mockFetcher, feedRepo: feedRepo, articleRepo: articleRepo)
+        let result = try #require(await poller.pollFeed(id: feed.id, archiveAfterDays: 90))
+
+        #expect(result.newArticles == 1)
+
+        let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
+        #expect(remaining.compactMap(\.title) == ["Undated Story"])
+    }
+
+    @Test("Storage policy keeps recently published articles active even if fetched long ago")
+    func storagePolicyKeepsRecentlyPublishedArticles() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -301,19 +361,26 @@ struct FeedPollerTests {
         let articles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         if let article = articles.first {
             article.fetchedAt = Date(timeIntervalSinceNow: -100 * 86400)
+            article.refreshQueryState()
         }
 
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+        let result = await poller.enforceArticleStoragePolicies(
+            archiveAfterDays: 90,
+            deleteArchivedAfterDays: 30,
+            maxArticlesPerFeed: 50
+        )
 
-        #expect(deleted == 0)
+        #expect(result.archived == 0)
+        #expect(result.deleted == 0)
 
         let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         #expect(remaining.count == 1)
+        #expect(remaining.first?.isArchived == false)
     }
 
-    @Test("Cleanup keeps saved articles even when they are older than retention")
-    func cleanupKeepsSavedArticles() async throws {
+    @Test("Archived saved articles are preserved and not auto-deleted")
+    func archivedSavedArticlesArePreserved() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -331,19 +398,97 @@ struct FeedPollerTests {
         let articles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         let article = try #require(articles.first)
         article.addToReadingList(at: Date())
+        article.archive(reason: .ageLimit, at: Date(timeIntervalSinceNow: -45 * 86400))
 
         let poller = FeedPoller(feedRepo: feedRepo, articleRepo: articleRepo)
-        let deleted = await poller.cleanupOldArticles(retentionDays: 90)
+        let result = await poller.enforceArticleStoragePolicies(
+            archiveAfterDays: 90,
+            deleteArchivedAfterDays: 30,
+            maxArticlesPerFeed: 50
+        )
 
-        #expect(deleted == 0)
+        #expect(result.deleted == 0)
 
         let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 100, offset: 0)
         #expect(remaining.count == 1)
         #expect(remaining.first?.isInReadingList == true)
+        #expect(remaining.first?.isArchived == true)
     }
 
-    @Test("Per-feed trimming keeps the newest unsaved articles and preserves saved ones")
-    func trimExcessArticlesPerFeedKeepsNewestAndSaved() async throws {
+    @Test("Archived unsaved articles delete after the archived retention window")
+    func archivedUnsavedArticlesDeleteAfterArchiveRetentionWindow() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+        let article = ParsedArticle(
+            url: "https://example.com/old-archive",
+            title: "Old Archive",
+            publishedAt: Date(timeIntervalSinceNow: -120 * 86400),
+            contentHash: "old-archive-hash"
+        )
+        try await articleRepo.insertForFeed(feedId: feed.id, article: article)
+
+        let stored = try #require((await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)).first)
+        stored.archive(reason: .ageLimit, at: Date(timeIntervalSinceNow: -45 * 86400))
+
+        let result = try await articleRepo.enforceStoragePolicy(
+            archiveAfterDays: 90,
+            deleteArchivedAfterDays: 30,
+            maxActiveUnsavedPerFeed: 50
+        )
+
+        #expect(result.deleted == 1)
+        let remaining = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)
+        #expect(remaining.isEmpty)
+    }
+
+    @Test("Increasing the archive window restores local archived articles before feed limits reapply")
+    func increasingArchiveWindowRestoresArchivedArticlesBeforeCapReapplies() async throws {
+        let container = try makeContainer()
+        let feedRepo = LocalFeedRepository(modelContainer: container)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
+
+        let feed = try await feedRepo.add(feedUrl: "https://example.com/feed.xml", title: "Test")
+
+        for index in 0..<4 {
+            let article = ParsedArticle(
+                url: "https://example.com/restore-\(index)",
+                title: "Restore \(index)",
+                publishedAt: Date(timeIntervalSinceNow: -Double(index + 20) * 86400),
+                contentHash: "restore-hash-\(index)"
+            )
+            try await articleRepo.insertForFeed(feedId: feed.id, article: article)
+        }
+
+        let inserted = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 20, offset: 0)
+        inserted[2].archive(reason: .ageLimit, at: Date(timeIntervalSinceNow: -5 * 86400))
+        inserted[3].archive(reason: .ageLimit, at: Date(timeIntervalSinceNow: -5 * 86400))
+
+        let result = try await articleRepo.enforceStoragePolicy(
+            archiveAfterDays: 30,
+            deleteArchivedAfterDays: 30,
+            maxActiveUnsavedPerFeed: 3
+        )
+
+        #expect(result.restored == 2)
+        #expect(result.archivedByFeedLimit == 1)
+
+        var activeFilter = ArticleFilter()
+        activeFilter.feedId = feed.id
+        activeFilter.storageScope = .active
+        let active = await articleRepo.list(filter: activeFilter, sort: .newest, limit: 20, offset: 0)
+        #expect(active.count == 3)
+
+        var archivedFilter = activeFilter
+        archivedFilter.storageScope = .archived
+        let archived = await articleRepo.list(filter: archivedFilter, sort: .newest, limit: 20, offset: 0)
+        #expect(archived.count == 1)
+    }
+
+    @Test("Per-feed limits archive the oldest active unsaved articles and preserve saved ones")
+    func feedLimitArchivesOldestUnsavedArticlesAndPreservesSavedOnes() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -364,17 +509,28 @@ struct FeedPollerTests {
         let savedArticle = try #require(allArticles.first(where: { $0.title == "Article 4" }))
         savedArticle.addToReadingList(at: Date())
 
-        let deleted = try await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: 2)
-        #expect(deleted == 2)
+        let result = try await articleRepo.enforceStoragePolicy(
+            archiveAfterDays: 365,
+            deleteArchivedAfterDays: 30,
+            maxActiveUnsavedPerFeed: 2
+        )
+        #expect(result.archivedByFeedLimit == 2)
+        #expect(result.deleted == 0)
 
-        var filter = ArticleFilter()
-        filter.feedId = feed.id
-        let remaining = await articleRepo.list(filter: filter, sort: .newest, limit: 100, offset: 0)
-        let titles = Set(remaining.compactMap(\.title))
+        var activeFilter = ArticleFilter()
+        activeFilter.feedId = feed.id
+        activeFilter.storageScope = .active
+        let activeArticles = await articleRepo.list(filter: activeFilter, sort: .newest, limit: 100, offset: 0)
+        let activeTitles = Set(activeArticles.compactMap(\.title))
 
-        #expect(remaining.count == 3)
-        #expect(titles == ["Article 0", "Article 1", "Article 4"])
-        #expect(remaining.contains(where: { $0.title == "Article 4" && $0.isInReadingList }))
+        var archivedFilter = activeFilter
+        archivedFilter.storageScope = .archived
+        let archivedArticles = await articleRepo.list(filter: archivedFilter, sort: .newest, limit: 100, offset: 0)
+
+        #expect(activeArticles.count == 3)
+        #expect(activeTitles == ["Article 0", "Article 1", "Article 4"])
+        #expect(activeArticles.contains(where: { $0.title == "Article 4" && $0.isInReadingList }))
+        #expect(Set(archivedArticles.compactMap(\.title)) == ["Article 2", "Article 3"])
     }
 
     @Test("Single-feed polls can enforce retention and per-feed limits immediately")
@@ -403,22 +559,30 @@ struct FeedPollerTests {
 
         let poller = FeedPoller(fetcher: mockFetcher, feedRepo: feedRepo, articleRepo: articleRepo)
 
-        let pollResult = try #require(await poller.pollFeed(id: feed.id))
-        #expect(pollResult.newArticles == 6)
+        let pollResult = try #require(await poller.pollFeed(id: feed.id, archiveAfterDays: 90))
+        #expect(pollResult.newArticles == 3)
 
         let storage = await poller.enforceArticleStoragePolicies(
-            retentionDays: 90,
+            archiveAfterDays: 90,
+            deleteArchivedAfterDays: 30,
             maxArticlesPerFeed: 2
         )
 
-        #expect(storage.deleted == 3)
-        #expect(storage.trimmed == 1)
+        #expect(storage.archivedByAge == 0)
+        #expect(storage.archivedByFeedLimit == 1)
+        #expect(storage.deleted == 0)
 
-        var filter = ArticleFilter()
-        filter.feedId = feed.id
-        let remaining = await articleRepo.list(filter: filter, sort: .newest, limit: 100, offset: 0)
+        var activeFilter = ArticleFilter()
+        activeFilter.feedId = feed.id
+        activeFilter.storageScope = .active
+        let remaining = await articleRepo.list(filter: activeFilter, sort: .newest, limit: 100, offset: 0)
+
+        var archivedFilter = activeFilter
+        archivedFilter.storageScope = .archived
+        let archived = await articleRepo.list(filter: archivedFilter, sort: .newest, limit: 100, offset: 0)
 
         #expect(remaining.count == 2)
         #expect(Set(remaining.compactMap(\.title)) == ["Recent 0", "Recent 1"])
+        #expect(Set(archived.compactMap(\.title)) == ["Recent 2"])
     }
 }

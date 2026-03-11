@@ -18,16 +18,30 @@ public actor LocalSettingsRepository {
 
     /// Fetch the singleton, creating one with defaults if it doesn't exist.
     public func getOrCreate() async -> AppSettings {
-        if let existing = await get() { return existing }
+        if let existing = await get() {
+            if existing.normalizeStorageSettings() {
+                existing.updatedAt = Date()
+                try? modelContext.save()
+            }
+            return existing
+        }
         let settings = AppSettings()
+        _ = settings.normalizeStorageSettings()
         modelContext.insert(settings)
         try? modelContext.save()
         return settings
     }
 
-    /// Return the configured retention window, falling back to a safe minimum.
-    public func retentionDays() async -> Int {
-        max(await getOrCreate().retentionDays, 1)
+    public func archiveAfterDays() async -> Int {
+        max(await getOrCreate().archiveAfterDays, 1)
+    }
+
+    public func deleteArchivedAfterDays() async -> Int {
+        max(await getOrCreate().deleteArchivedAfterDays, 1)
+    }
+
+    public func searchArchivedByDefault() async -> Bool {
+        await getOrCreate().searchArchivedByDefault
     }
 
     public func maxArticlesPerFeed() async -> Int {

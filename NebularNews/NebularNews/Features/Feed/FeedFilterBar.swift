@@ -124,9 +124,10 @@ struct FeedDateFilter: Hashable {
 struct FeedAdvancedFilterState: Hashable {
     var dateFilter = FeedDateFilter()
     var sortMode: FeedSortMode = .newest
+    var storageScopeOverride: ArticleStorageScope?
 
     var isActive: Bool {
-        dateFilter.isActive || sortMode != .newest
+        dateFilter.isActive || sortMode != .newest || storageScopeOverride != nil
     }
 
     var articleSort: ArticleSort {
@@ -136,17 +137,59 @@ struct FeedAdvancedFilterState: Hashable {
     mutating func clear(referenceDate: Date = Date()) {
         dateFilter = FeedDateFilter(startDate: referenceDate, endDate: referenceDate)
         sortMode = .newest
+        storageScopeOverride = nil
     }
 
-    func apply(to filter: inout ArticleFilter, calendar: Calendar = .current, referenceDate: Date = Date()) {
+    func effectiveStorageScope(
+        searchText: String,
+        searchArchivedByDefault: Bool
+    ) -> ArticleStorageScope {
+        if let storageScopeOverride {
+            return storageScopeOverride
+        }
+
+        if searchArchivedByDefault,
+           !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .all
+        }
+
+        return .active
+    }
+
+    func apply(
+        to filter: inout ArticleFilter,
+        calendar: Calendar = .current,
+        referenceDate: Date = Date(),
+        searchText: String = "",
+        searchArchivedByDefault: Bool = false
+    ) {
         let bounds = dateFilter.resolvedBounds(calendar: calendar, referenceDate: referenceDate)
         filter.publishedAfter = bounds.start
         filter.publishedBefore = bounds.end
+        filter.storageScope = effectiveStorageScope(
+            searchText: searchText,
+            searchArchivedByDefault: searchArchivedByDefault
+        )
     }
 
-    func summaryText(calendar: Calendar = .current, referenceDate: Date = Date()) -> String? {
-        let parts = [dateFilter.summaryText(calendar: calendar, referenceDate: referenceDate)] +
-            (sortMode == .newest ? [] : [sortMode.rawValue])
+    func summaryText(
+        calendar: Calendar = .current,
+        referenceDate: Date = Date(),
+        searchText: String = "",
+        searchArchivedByDefault: Bool = false
+    ) -> String? {
+        var parts = [dateFilter.summaryText(calendar: calendar, referenceDate: referenceDate)]
+        if sortMode != .newest {
+            parts.append(sortMode.rawValue)
+        }
+
+        let scope = effectiveStorageScope(
+            searchText: searchText,
+            searchArchivedByDefault: searchArchivedByDefault
+        )
+        if storageScopeOverride != nil {
+            parts.append(scope.feedFilterLabel)
+        }
 
         let activeParts = parts.compactMap { $0 }
         guard !activeParts.isEmpty else {
@@ -201,6 +244,7 @@ struct FeedAdvancedFilterSheet: View {
 
     let quickFilterMode: FeedFilterMode
     let searchText: String
+    let searchArchivedByDefault: Bool
     let onApply: (FeedAdvancedFilterState) -> Void
 
     @State private var draft: FeedAdvancedFilterState
@@ -209,10 +253,12 @@ struct FeedAdvancedFilterSheet: View {
         state: FeedAdvancedFilterState,
         quickFilterMode: FeedFilterMode,
         searchText: String,
+        searchArchivedByDefault: Bool,
         onApply: @escaping (FeedAdvancedFilterState) -> Void
     ) {
         self.quickFilterMode = quickFilterMode
         self.searchText = searchText
+        self.searchArchivedByDefault = searchArchivedByDefault
         self.onApply = onApply
         _draft = State(initialValue: state)
     }
@@ -273,6 +319,28 @@ struct FeedAdvancedFilterSheet: View {
                     }
                 }
 
+                Section("Scope") {
+                    Picker(
+                        "Articles",
+                        selection: Binding(
+                            get: {
+                                draft.effectiveStorageScope(
+                                    searchText: searchText,
+                                    searchArchivedByDefault: searchArchivedByDefault
+                                )
+                            },
+                            set: { newValue in
+                                draft.storageScopeOverride = newValue
+                            }
+                        )
+                    ) {
+                        ForEach(ArticleStorageScope.allCases, id: \.self) { scope in
+                            Text(scope.feedFilterLabel)
+                                .tag(scope)
+                        }
+                    }
+                }
+
                 Section("Match") {
                     LabeledContent("Status", value: quickFilterMode.rawValue)
 
@@ -308,5 +376,18 @@ struct FeedAdvancedFilterSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private extension ArticleStorageScope {
+    var feedFilterLabel: String {
+        switch self {
+        case .active:
+            return "Current"
+        case .archived:
+            return "Archived"
+        case .all:
+            return "All"
+        }
     }
 }

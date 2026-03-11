@@ -98,13 +98,16 @@ struct FirstBriefingPreparationView: View {
             if Date() >= deadline || visibleCount > 0 {
                 break
             }
-            _ = await poller.pollFeed(id: feedID)
+            let archiveAfterDays = await settingsRepo.archiveAfterDays()
+            _ = await poller.pollFeed(id: feedID, archiveAfterDays: archiveAfterDays)
         }
 
-        let retentionDays = await settingsRepo.retentionDays()
+        let archiveAfterDays = await settingsRepo.archiveAfterDays()
+        let deleteArchivedAfterDays = await settingsRepo.deleteArchivedAfterDays()
         let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
         _ = await poller.enforceArticleStoragePolicies(
-            retentionDays: retentionDays,
+            archiveAfterDays: archiveAfterDays,
+            deleteArchivedAfterDays: deleteArchivedAfterDays,
             maxArticlesPerFeed: maxArticlesPerFeed
         )
 

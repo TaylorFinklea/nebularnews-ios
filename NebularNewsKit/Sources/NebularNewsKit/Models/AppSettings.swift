@@ -37,8 +37,11 @@ public final class AppSettings: @unchecked Sendable {
     public var pollIntervalMinutes: Int = 30
     public var maxArticlesPerFeed: Int = 50
 
-    // Data retention
+    // Legacy retention setting retained for lightweight migration to archive storage.
     public var retentionDays: Int = 90
+    public var archiveAfterDays: Int = 0
+    public var deleteArchivedAfterDays: Int = 30
+    public var searchArchivedByDefault: Bool = false
 
     // Personalization migrations
     public var personalizationRebuildVersion: Int = 0
@@ -54,6 +57,28 @@ public final class AppSettings: @unchecked Sendable {
 
     public init() {
         self.id = "singleton"
+    }
+
+    @discardableResult
+    public func normalizeStorageSettings() -> Bool {
+        var didChange = false
+
+        if archiveAfterDays <= 0 {
+            archiveAfterDays = max(retentionDays, 1)
+            didChange = true
+        }
+
+        if deleteArchivedAfterDays <= 0 {
+            deleteArchivedAfterDays = 30
+            didChange = true
+        }
+
+        if retentionDays != archiveAfterDays {
+            retentionDays = archiveAfterDays
+            didChange = true
+        }
+
+        return didChange
     }
 
     public var scoreAssistMode: AIScoreAssistMode {

@@ -37,7 +37,7 @@ actor RefreshCoordinator {
         }
     }
 
-    func runManualRefresh(modelContainer: ModelContainer, keychainService: String) async -> (result: PollCycleResult, deleted: Int, trimmed: Int, prepared: Int) {
+    func runManualRefresh(modelContainer: ModelContainer, keychainService: String) async -> (result: PollCycleResult, storage: ArticleStoragePolicyResult, prepared: Int) {
         await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
             modelContainer: modelContainer,
             keychainService: keychainService
@@ -52,12 +52,17 @@ actor RefreshCoordinator {
             keychainService: keychainService
         )
 
-        let retentionDays = await settingsRepo.retentionDays()
+        let archiveAfterDays = await settingsRepo.archiveAfterDays()
+        let deleteArchivedAfterDays = await settingsRepo.deleteArchivedAfterDays()
         let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
 
-        let result = await poller.pollAllFeeds(bypassBackoff: true)
+        let result = await poller.pollAllFeeds(
+            bypassBackoff: true,
+            archiveAfterDays: archiveAfterDays
+        )
         let storage = await poller.enforceArticleStoragePolicies(
-            retentionDays: retentionDays,
+            archiveAfterDays: archiveAfterDays,
+            deleteArchivedAfterDays: deleteArchivedAfterDays,
             maxArticlesPerFeed: maxArticlesPerFeed
         )
         let prepared = await preparation.processPendingArticles(batchSize: 10, allowLowPriority: true)
@@ -65,7 +70,7 @@ actor RefreshCoordinator {
             reason: "manual_refresh",
             allowLowPriority: true
         )
-        return (result, storage.deleted, storage.trimmed, prepared)
+        return (result, storage, prepared)
     }
 
     func runBackgroundRefresh(modelContainer: ModelContainer, keychainService: String) async {
@@ -159,11 +164,16 @@ actor RefreshCoordinator {
         )
 
         if await feedsAreStale(feedRepo: feedRepo, settingsRepo: settingsRepo) {
-            let retentionDays = await settingsRepo.retentionDays()
+            let archiveAfterDays = await settingsRepo.archiveAfterDays()
+            let deleteArchivedAfterDays = await settingsRepo.deleteArchivedAfterDays()
             let maxArticlesPerFeed = await settingsRepo.maxArticlesPerFeed()
-            _ = await poller.pollAllFeeds(bypassBackoff: bypassBackoff)
+            _ = await poller.pollAllFeeds(
+                bypassBackoff: bypassBackoff,
+                archiveAfterDays: archiveAfterDays
+            )
             _ = await poller.enforceArticleStoragePolicies(
-                retentionDays: retentionDays,
+                archiveAfterDays: archiveAfterDays,
+                deleteArchivedAfterDays: deleteArchivedAfterDays,
                 maxArticlesPerFeed: maxArticlesPerFeed
             )
         }

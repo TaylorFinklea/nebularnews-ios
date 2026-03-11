@@ -13,6 +13,12 @@ public enum ArticlePresentationFilter: Sendable {
     case pendingOnly
 }
 
+public enum ArticleStorageScope: String, Sendable, CaseIterable, Hashable {
+    case active
+    case archived
+    case all
+}
+
 public enum ArticleSort: String, Sendable, CaseIterable {
     case newest, oldest, scoreDesc, scoreAsc, unreadFirst
 }
@@ -32,6 +38,7 @@ public struct ArticleListCursor: Codable, Hashable, Sendable {
 public struct ArticleFilter: Sendable {
     public var presentationFilter: ArticlePresentationFilter = .all
     public var readFilter: ArticleReadFilter = .all
+    public var storageScope: ArticleStorageScope = .all
     public var readingListOnly = false
     public var minScore: Int?
     public var maxScore: Int?
@@ -42,6 +49,29 @@ public struct ArticleFilter: Sendable {
     public var searchText: String?
 
     public init() {}
+}
+
+public struct ArticleStorageEnforcementResult: Sendable {
+    public let archivedByAge: Int
+    public let archivedByFeedLimit: Int
+    public let restored: Int
+    public let deleted: Int
+
+    public init(
+        archivedByAge: Int = 0,
+        archivedByFeedLimit: Int = 0,
+        restored: Int = 0,
+        deleted: Int = 0
+    ) {
+        self.archivedByAge = archivedByAge
+        self.archivedByFeedLimit = archivedByFeedLimit
+        self.restored = restored
+        self.deleted = deleted
+    }
+
+    public var archived: Int {
+        archivedByAge + archivedByFeedLimit
+    }
 }
 
 // MARK: - Protocol
@@ -57,6 +87,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func rebuildTodaySnapshot() async
     func fetchReadingListPage(filter: ArticleFilter, cursor: ArticleListCursor?, limit: Int) async -> [Article]
     func listArticles(ids: [String]) async -> [Article]
+    func activeArticleCountsByFeed() async -> [String: Int]
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
@@ -96,8 +127,11 @@ public protocol ArticleRepositoryProtocol: Sendable {
         image: ArticlePreparationStageStatus?,
         enrichment: ArticlePreparationStageStatus?
     ) async throws
-    func trimExcessArticlesPerFeed(maxPerFeed: Int) async throws -> Int
-    func deleteOlderThan(date: Date) async throws -> Int
+    func enforceStoragePolicy(
+        archiveAfterDays: Int,
+        deleteArchivedAfterDays: Int,
+        maxActiveUnsavedPerFeed: Int
+    ) async throws -> ArticleStorageEnforcementResult
 }
 
 public struct ArticleFallbackImageSnapshot: Sendable {
@@ -178,6 +212,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     ) async -> [Article] {
         var visibleFilter = filter
         visibleFilter.presentationFilter = .readyOnly
+        if visibleFilter.storageScope == .all {
+            visibleFilter.storageScope = .active
+        }
         return await list(filter: visibleFilter, sort: sort, limit: limit, offset: offset)
     }
 
@@ -195,6 +232,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         let baseDescriptor = baseCountDescriptor(
             presentationFilter: filter.presentationFilter,
+            storageScope: filter.storageScope,
             requireReadingList: filter.readingListOnly
         )
 
@@ -210,6 +248,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func countVisibleArticles(filter: ArticleFilter) async -> Int {
         var visibleFilter = filter
         visibleFilter.presentationFilter = .readyOnly
+        if visibleFilter.storageScope == .all {
+            visibleFilter.storageScope = .active
+        }
         return await count(filter: visibleFilter)
     }
 
@@ -221,6 +262,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     ) async -> [Article] {
         var feedFilter = filter
         feedFilter.presentationFilter = .readyOnly
+        if feedFilter.storageScope == .all {
+            feedFilter.storageScope = .active
+        }
         return await pagedArticles(
             filter: feedFilter,
             sort: sort,
@@ -233,6 +277,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func countFeed(filter: ArticleFilter) async -> Int {
         var feedFilter = filter
         feedFilter.presentationFilter = .readyOnly
+        if feedFilter.storageScope == .all {
+            feedFilter.storageScope = .active
+        }
         return await count(filter: feedFilter)
     }
 
@@ -294,6 +341,21 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let articles = (try? modelContext.fetch(descriptor)) ?? []
         let byID = Dictionary(uniqueKeysWithValues: articles.map { ($0.id, $0) })
         return ids.compactMap { byID[$0] }
+    }
+
+    public func activeArticleCountsByFeed() async -> [String: Int] {
+        let descriptor = FetchDescriptor<Article>()
+        let articles = (try? modelContext.fetch(descriptor)) ?? []
+
+        return Dictionary(
+            grouping: articles.filter { !$0.queryIsArchived }
+        ) { article in
+            article.queryFeedID
+        }
+        .reduce(into: [String: Int]()) { partial, element in
+            guard let feedID = element.key else { return }
+            partial[feedID] = element.value.count
+        }
     }
 
     public func pendingVisibleArticleCount() async -> Int {
@@ -909,66 +971,81 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         ArticleChangeBus.postArticleChanged(id: id)
     }
 
-    public func trimExcessArticlesPerFeed(maxPerFeed: Int) async throws -> Int {
-        let limit = max(maxPerFeed, 1)
+    public func enforceStoragePolicy(
+        archiveAfterDays: Int,
+        deleteArchivedAfterDays: Int,
+        maxActiveUnsavedPerFeed: Int
+    ) async throws -> ArticleStorageEnforcementResult {
+        let archiveWindow = max(archiveAfterDays, 1)
+        let deleteWindow = max(deleteArchivedAfterDays, 1)
+        let feedLimit = max(maxActiveUnsavedPerFeed, 1)
+        let now = Date()
+        let calendar = Calendar.current
+        let archiveCutoff = calendar.date(byAdding: .day, value: -archiveWindow, to: now) ?? now
+        let deleteCutoff = calendar.date(byAdding: .day, value: -deleteWindow, to: now) ?? now
+
         let descriptor = FetchDescriptor<Article>()
         let allArticles = try modelContext.fetch(descriptor)
 
-        let groupedByFeed = Dictionary(grouping: allArticles) { article in
-            article.feed?.id
-        }
-
+        var archivedByAge = 0
+        var archivedByFeedLimit = 0
+        var restored = 0
         var deleted = 0
 
-        for (feedID, articles) in groupedByFeed {
+        for article in allArticles where article.isArchived && article.retentionReferenceDate >= archiveCutoff {
+            article.restoreFromArchive()
+            restored += 1
+        }
+
+        for article in allArticles where !article.isArchived && article.retentionReferenceDate < archiveCutoff {
+            article.archive(reason: .ageLimit, at: now)
+            archivedByAge += 1
+        }
+
+        let activeByFeed = Dictionary(grouping: allArticles.filter { !$0.isArchived }) { article in
+            article.queryFeedID
+        }
+
+        for (feedID, articles) in activeByFeed {
             guard feedID != nil else { continue }
 
-            let sorted = articles.sorted { lhs, rhs in
-                if lhs.retentionReferenceDate != rhs.retentionReferenceDate {
-                    return lhs.retentionReferenceDate > rhs.retentionReferenceDate
-                }
-                return lhs.fetchedAt > rhs.fetchedAt
-            }
-
-            var keptUnsaved = 0
-
-            for article in sorted {
-                if article.isInReadingList {
-                    continue
+            let unsavedArticles = articles
+                .filter { !$0.isInReadingList }
+                .sorted { lhs, rhs in
+                    if lhs.retentionReferenceDate != rhs.retentionReferenceDate {
+                        return lhs.retentionReferenceDate > rhs.retentionReferenceDate
+                    }
+                    return lhs.fetchedAt > rhs.fetchedAt
                 }
 
-                if keptUnsaved < limit {
-                    keptUnsaved += 1
-                    continue
-                }
+            guard unsavedArticles.count > feedLimit else { continue }
 
-                modelContext.delete(article)
-                deleted += 1
+            for article in unsavedArticles.dropFirst(feedLimit) where !article.isArchived {
+                article.archive(reason: .feedLimit, at: now)
+                archivedByFeedLimit += 1
             }
         }
 
-        if deleted > 0 {
-            try modelContext.save()
-        }
-
-        return deleted
-    }
-
-    public func deleteOlderThan(date: Date) async throws -> Int {
-        let descriptor = FetchDescriptor<Article>()
-        let old = try modelContext.fetch(descriptor).filter { article in
-            !article.isInReadingList && article.retentionReferenceDate < date
-        }
-
-        guard !old.isEmpty else {
-            return 0
-        }
-
-        for article in old {
+        for article in allArticles where article.isArchived && !article.isInReadingList {
+            let archiveAnchor = article.archivedAt ?? now
+            guard archiveAnchor <= deleteCutoff else { continue }
             modelContext.delete(article)
+            deleted += 1
         }
-        try modelContext.save()
-        return old.count
+
+        let changed = archivedByAge > 0 || archivedByFeedLimit > 0 || restored > 0 || deleted > 0
+        if changed {
+            try modelContext.save()
+            await rebuildTodaySnapshot()
+            ArticleChangeBus.postFeedPageMightChange()
+        }
+
+        return ArticleStorageEnforcementResult(
+            archivedByAge: archivedByAge,
+            archivedByFeedLimit: archivedByFeedLimit,
+            restored: restored,
+            deleted: deleted
+        )
     }
 
     // MARK: - Private
@@ -1043,6 +1120,15 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         if filter.readingListOnly {
             result = result.filter(\.isInReadingList)
+        }
+
+        switch filter.storageScope {
+        case .active:
+            result = result.filter { !$0.queryIsArchived }
+        case .archived:
+            result = result.filter(\.queryIsArchived)
+        case .all:
+            break
         }
 
         if let feedId = filter.feedId {
@@ -1130,6 +1216,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         for _ in 0..<maxPasses {
             var descriptor = basePagedDescriptor(
                 presentationFilter: filter.presentationFilter,
+                storageScope: filter.storageScope,
                 requireReadingList: requireReadingList,
                 sort: sort
             )
@@ -1159,34 +1246,99 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     private func basePagedDescriptor(
         presentationFilter: ArticlePresentationFilter,
+        storageScope: ArticleStorageScope,
         requireReadingList: Bool,
         sort: ArticleSort
     ) -> FetchDescriptor<Article> {
         let sortBy = sortDescriptors(for: sort)
 
-        switch (presentationFilter, requireReadingList) {
-        case (.pendingOnly, true):
+        switch (presentationFilter, storageScope, requireReadingList) {
+        case (.pendingOnly, .active, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false &&
+                    article.queryIsArchived == false &&
+                    article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        case (.pendingOnly, .active, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false &&
+                    article.queryIsArchived == false
+                },
+                sortBy: sortBy
+            )
+        case (.pendingOnly, .archived, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        case (.pendingOnly, .archived, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true
+                },
+                sortBy: sortBy
+            )
+        case (.pendingOnly, .all, true):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.queryIsVisible == false && article.readingListAddedAt != nil
                 },
                 sortBy: sortBy
             )
-        case (.pendingOnly, false):
+        case (.pendingOnly, .all, false):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.queryIsVisible == false
                 },
                 sortBy: sortBy
             )
-        case (_, true):
+        case (_, .active, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == false &&
+                    article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        case (_, .active, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == true &&
+                    article.queryIsArchived == false
+                },
+                sortBy: sortBy
+            )
+        case (_, .archived, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.readingListAddedAt != nil
+                },
+                sortBy: sortBy
+            )
+        case (.all, .archived, false), (.readyOnly, .archived, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.queryIsVisible == true
+                },
+                sortBy: sortBy
+            )
+        case (_, .all, true):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.readingListAddedAt != nil
                 },
                 sortBy: sortBy
             )
-        default:
+        case (_, .all, false):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.queryIsVisible == true
@@ -1238,22 +1390,79 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     private func baseCountDescriptor(
         presentationFilter: ArticlePresentationFilter,
+        storageScope: ArticleStorageScope,
         requireReadingList: Bool
     ) -> FetchDescriptor<Article> {
-        switch (presentationFilter, requireReadingList) {
-        case (.pendingOnly, true):
+        switch (presentationFilter, storageScope, requireReadingList) {
+        case (.pendingOnly, .active, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false &&
+                    article.queryIsArchived == false &&
+                    article.readingListAddedAt != nil
+                }
+            )
+        case (.pendingOnly, .active, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == false &&
+                    article.queryIsArchived == false
+                }
+            )
+        case (.pendingOnly, .archived, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.readingListAddedAt != nil
+                }
+            )
+        case (.pendingOnly, .archived, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true
+                }
+            )
+        case (.pendingOnly, .all, true):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.queryIsVisible == false && article.readingListAddedAt != nil
                 }
             )
-        case (.pendingOnly, false):
+        case (.pendingOnly, .all, false):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.queryIsVisible == false
                 }
             )
-        case (_, true):
+        case (_, .active, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == false &&
+                    article.readingListAddedAt != nil
+                }
+            )
+        case (_, .active, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsVisible == true &&
+                    article.queryIsArchived == false
+                }
+            )
+        case (_, .archived, true):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.readingListAddedAt != nil
+                }
+            )
+        case (.all, .archived, false), (.readyOnly, .archived, false):
+            return FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { article in
+                    article.queryIsArchived == true &&
+                    article.queryIsVisible == true
+                }
+            )
+        case (_, .all, true):
             return FetchDescriptor<Article>(
                 predicate: #Predicate<Article> { article in
                     article.readingListAddedAt != nil
@@ -1274,6 +1483,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { article in
                 article.queryIsVisible == true &&
+                article.queryIsArchived == false &&
                 article.queryIsUnreadQueueCandidate == true &&
                 (!hasThreshold || article.querySortDate >= threshold)
             }
@@ -1285,6 +1495,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { article in
                 article.queryIsVisible == true &&
+                article.queryIsArchived == false &&
                 article.queryIsUnreadQueueCandidate == true &&
                 article.queryDisplayedScore >= 4
             }
@@ -1295,7 +1506,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     private func readyVisibleCount() -> Int {
         let descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { article in
-                article.queryIsVisible == true
+                article.queryIsVisible == true &&
+                article.queryIsArchived == false
             }
         )
         return (try? modelContext.fetchCount(descriptor)) ?? 0
@@ -1305,6 +1517,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         var descriptor = FetchDescriptor<Article>(
             predicate: #Predicate<Article> { article in
                 article.queryIsVisible == true &&
+                article.queryIsArchived == false &&
                 article.queryIsUnreadQueueCandidate == true &&
                 article.queryDisplayedScore >= 1
             },

@@ -213,6 +213,41 @@ struct NebularNewsTests {
         #expect(state.articleSort == .oldest)
     }
 
+    @Test func feedAdvancedFilterUsesArchivedSearchDefaultWhenConfigured() async throws {
+        var state = FeedAdvancedFilterState()
+        var filter = ArticleFilter()
+
+        state.apply(
+            to: &filter,
+            searchText: "deepmind",
+            searchArchivedByDefault: true
+        )
+
+        #expect(filter.storageScope == .all)
+        #expect(state.summaryText(
+            searchText: "deepmind",
+            searchArchivedByDefault: true
+        ) == nil)
+    }
+
+    @Test func feedAdvancedFilterScopeOverrideAppearsInSummary() async throws {
+        var state = FeedAdvancedFilterState()
+        state.storageScopeOverride = .archived
+
+        var filter = ArticleFilter()
+        state.apply(
+            to: &filter,
+            searchText: "deepmind",
+            searchArchivedByDefault: false
+        )
+
+        #expect(filter.storageScope == .archived)
+        #expect(state.summaryText(
+            searchText: "deepmind",
+            searchArchivedByDefault: false
+        ) == "Archived")
+    }
+
     @Test func feedAdvancedFilterClearRestoresDefaultState() async throws {
         var state = FeedAdvancedFilterState(
             dateFilter: FeedDateFilter(preset: .today),

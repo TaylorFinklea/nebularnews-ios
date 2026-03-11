@@ -70,7 +70,10 @@ private struct FeedListContent: View {
                                 feedTitle: feed.title.isEmpty ? feed.feedUrl : feed.title
                             )
                         } label: {
-                            FeedRow(feed: feed)
+                            FeedRow(
+                                feed: feed,
+                                activeArticleCount: viewModel.activeArticleCount(for: feed.id)
+                            )
                         }
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowBackground(Color.clear)
@@ -172,6 +175,7 @@ private struct StatusBanner: View {
 
 private struct FeedRow: View {
     let feed: Feed
+    let activeArticleCount: Int
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -212,7 +216,7 @@ private struct FeedRow: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 4) {
-                Text("\(feed.articles?.count ?? 0)")
+                Text("\(activeArticleCount)")
                     .font(.headline.bold())
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

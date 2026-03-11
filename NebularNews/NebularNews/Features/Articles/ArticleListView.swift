@@ -36,6 +36,8 @@ struct ArticleListView: View {
             result = result.filter { $0.feed?.id == feedId }
         }
 
+        result = result.filter { !$0.queryIsArchived }
+
         switch filterMode {
         case .all: break
         case .unread: result = result.filter(\.isUnreadQueueCandidate)

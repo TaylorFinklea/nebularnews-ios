@@ -38,16 +38,7 @@ public struct SingleFeedPollResult: Sendable {
     }
 }
 
-/// Result of enforcing article retention and per-feed limits.
-public struct ArticleStoragePolicyResult: Sendable {
-    public let deleted: Int
-    public let trimmed: Int
-
-    public init(deleted: Int = 0, trimmed: Int = 0) {
-        self.deleted = deleted
-        self.trimmed = trimmed
-    }
-}
+public typealias ArticleStoragePolicyResult = ArticleStorageEnforcementResult
 
 // MARK: - FeedPoller Actor
 
@@ -76,7 +67,10 @@ public actor FeedPoller {
     /// Poll all enabled feeds, returning aggregate stats.
     ///
     /// - Parameter bypassBackoff: If `true`, ignores error backoff (for user-initiated refresh).
-    public func pollAllFeeds(bypassBackoff: Bool = false) async -> PollCycleResult {
+    public func pollAllFeeds(
+        bypassBackoff: Bool = false,
+        archiveAfterDays: Int? = nil
+    ) async -> PollCycleResult {
         guard !isPolling else {
             return PollCycleResult()
         }
@@ -91,13 +85,15 @@ public actor FeedPoller {
         var totalNew = 0
         var totalErrors = 0
 
+        let archiveCutoff = archiveCutoffDate(days: archiveAfterDays)
+
         for snapshot in enabledFeeds {
             if !bypassBackoff && shouldSkipDueToBackoff(snapshot) {
                 totalSkipped += 1
                 continue
             }
 
-            let result = await pollSingleFeedInternal(snapshot)
+            let result = await pollSingleFeedInternal(snapshot, archiveCutoff: archiveCutoff)
             totalPolled += 1
 
             if result.error != nil {
@@ -115,33 +111,32 @@ public actor FeedPoller {
     }
 
     /// Poll a single feed by ID (e.g., after adding a new feed for title auto-detection).
-    public func pollFeed(id: String) async -> SingleFeedPollResult? {
+    public func pollFeed(id: String, archiveAfterDays: Int? = nil) async -> SingleFeedPollResult? {
         let snapshots = await feedRepo.listSnapshots()
         guard let snapshot = snapshots.first(where: { $0.id == id }) else {
             return nil
         }
-        return await pollSingleFeedInternal(snapshot)
-    }
-
-    /// Delete articles older than `retentionDays` days using `publishedAt`
-    /// when available, falling back to `fetchedAt`.
-    public func cleanupOldArticles(retentionDays: Int) async -> Int {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
-        return (try? await articleRepo.deleteOlderThan(date: cutoff)) ?? 0
+        return await pollSingleFeedInternal(snapshot, archiveCutoff: archiveCutoffDate(days: archiveAfterDays))
     }
 
     public func enforceArticleStoragePolicies(
-        retentionDays: Int,
+        archiveAfterDays: Int,
+        deleteArchivedAfterDays: Int,
         maxArticlesPerFeed: Int
     ) async -> ArticleStoragePolicyResult {
-        let deleted = await cleanupOldArticles(retentionDays: retentionDays)
-        let trimmed = (try? await articleRepo.trimExcessArticlesPerFeed(maxPerFeed: maxArticlesPerFeed)) ?? 0
-        return ArticleStoragePolicyResult(deleted: deleted, trimmed: trimmed)
+        (try? await articleRepo.enforceStoragePolicy(
+            archiveAfterDays: archiveAfterDays,
+            deleteArchivedAfterDays: deleteArchivedAfterDays,
+            maxActiveUnsavedPerFeed: maxArticlesPerFeed
+        )) ?? ArticleStoragePolicyResult()
     }
 
     // MARK: - Internal Pipeline
 
-    private func pollSingleFeedInternal(_ snapshot: FeedSnapshot) async -> SingleFeedPollResult {
+    private func pollSingleFeedInternal(
+        _ snapshot: FeedSnapshot,
+        archiveCutoff: Date?
+    ) async -> SingleFeedPollResult {
         // 1. Fetch
         let fetchResult: FeedFetchResult
         do {
@@ -193,6 +188,11 @@ public actor FeedPoller {
 
         // 5. Extract articles and deduplicate
         let articles = FeedItemMapper.extractArticles(from: parsed)
+            .filter { article in
+                guard let archiveCutoff else { return true }
+                guard let publishedAt = article.publishedAt else { return true }
+                return publishedAt >= archiveCutoff
+            }
         var newCount = 0
 
         for article in articles {
@@ -219,6 +219,11 @@ public actor FeedPoller {
 
         let displayTitle = metadata.title ?? snapshot.title
         return SingleFeedPollResult(feedId: snapshot.id, feedTitle: displayTitle, newArticles: newCount)
+    }
+
+    private func archiveCutoffDate(days: Int?) -> Date? {
+        guard let days, days > 0 else { return nil }
+        return Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
     }
 
     // MARK: - Backoff Logic
