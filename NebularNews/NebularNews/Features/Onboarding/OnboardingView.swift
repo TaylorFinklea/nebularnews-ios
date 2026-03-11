@@ -131,14 +131,14 @@ struct OnboardingView: View {
                         .font(.largeTitle.bold())
                         .tracking(-0.8)
 
-                    Text("Choose how you want to use the app. Companion mode signs into your existing Nebular News server and keeps the iPhone app in sync with the web app.")
+                    Text("Choose how you want to use the app. Standalone mode gets you reading quickly with curated feeds and local personalization. You can also connect to an existing Nebular News server and keep the iPhone app in sync with the web app.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
 
-                companionCard
                 standaloneCard
+                companionCard
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 48)
@@ -148,7 +148,7 @@ struct OnboardingView: View {
     private var companionCard: some View {
         GlassCard(cornerRadius: 30, style: .raised, tintColor: palette.primary) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Connect to existing Nebular News server", systemImage: "iphone.and.arrow.forward")
+                Label("Connect to a Nebular News server", systemImage: "iphone.and.arrow.forward")
                     .font(.headline)
 
                 Text("Use the public API hostname for your deployment, sign in once, and read the same dashboard, News Brief, articles, reactions, and tags as the web app.")
