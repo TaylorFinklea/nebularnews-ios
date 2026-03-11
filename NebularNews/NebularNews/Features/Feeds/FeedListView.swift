@@ -26,6 +26,7 @@ struct FeedListView: View {
 
 private struct FeedListContent: View {
     @Bindable var viewModel: FeedListViewModel
+    @State private var presentedIssue: FeedIssuePresentation?
 
     var body: some View {
         NebularScreen {
@@ -72,7 +73,10 @@ private struct FeedListContent: View {
                         } label: {
                             FeedRow(
                                 feed: feed,
-                                activeArticleCount: viewModel.activeArticleCount(for: feed.id)
+                                activeArticleCount: viewModel.activeArticleCount(for: feed.id),
+                                onShowIssue: {
+                                    presentedIssue = FeedIssuePresentation(feed: feed)
+                                }
                             )
                         }
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
@@ -130,6 +134,15 @@ private struct FeedListContent: View {
                 }
             }
         }
+        .sheet(item: $presentedIssue) { issue in
+            FeedIssueDetailsSheet(
+                issue: issue,
+                onRetry: {
+                    Task { await viewModel.pollSingleFeed(id: issue.feedID) }
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
         .task {
             await viewModel.loadFeeds()
         }
@@ -176,6 +189,7 @@ private struct StatusBanner: View {
 private struct FeedRow: View {
     let feed: Feed
     let activeArticleCount: Int
+    let onShowIssue: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -222,10 +236,16 @@ private struct FeedRow: View {
                     .monospacedDigit()
 
                 if let error = feed.errorMessage {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .help(error)
+                    Button {
+                        onShowIssue()
+                    } label: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("View feed issue")
+                    .accessibilityHint(error)
                 }
             }
         }

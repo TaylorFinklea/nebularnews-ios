@@ -5,6 +5,7 @@ import NebularNewsKit
 /// Feed management section within the Discover tab.
 struct DiscoverFeedSection: View {
     @Bindable var viewModel: FeedListViewModel
+    @State private var presentedIssue: FeedIssuePresentation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -40,7 +41,11 @@ struct DiscoverFeedSection: View {
                                 feed: feed,
                                 activeArticleCount: viewModel.activeArticleCount(for: feed.id),
                                 onToggle: { Task { await viewModel.toggleEnabled(feed) } },
-                                onDelete: { Task { await viewModel.deleteFeed(feed) } }
+                                onDelete: { Task { await viewModel.deleteFeed(feed) } },
+                                onShowIssue: {
+                                    presentedIssue = FeedIssuePresentation(feed: feed)
+                                },
+                                onRetry: { Task { await viewModel.pollSingleFeed(id: feed.id) } }
                             )
 
                             if index < viewModel.feeds.count - 1 {
@@ -52,6 +57,15 @@ struct DiscoverFeedSection: View {
                 }
             }
         }
+        .sheet(item: $presentedIssue) { issue in
+            FeedIssueDetailsSheet(
+                issue: issue,
+                onRetry: {
+                    Task { await viewModel.pollSingleFeed(id: issue.feedID) }
+                }
+            )
+            .presentationDetents([.medium, .large])
+        }
     }
 }
 
@@ -60,6 +74,8 @@ private struct DiscoverFeedRow: View {
     let activeArticleCount: Int
     let onToggle: () -> Void
     let onDelete: () -> Void
+    let onShowIssue: () -> Void
+    let onRetry: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -97,6 +113,20 @@ private struct DiscoverFeedRow: View {
                 .labelsHidden()
 
             Menu {
+                if feed.errorMessage != nil {
+                    Button {
+                        onShowIssue()
+                    } label: {
+                        Label("View Issue", systemImage: "exclamationmark.bubble")
+                    }
+
+                    Button {
+                        onRetry()
+                    } label: {
+                        Label("Retry Now", systemImage: "arrow.clockwise")
+                    }
+                }
+
                 Button(role: .destructive) {
                     onDelete()
                 } label: {
@@ -124,5 +154,94 @@ private struct DiscoverFeedRow: View {
 
     private var accentColor: Color {
         feed.isEnabled ? .cyan : .orange
+    }
+}
+
+struct FeedIssuePresentation: Identifiable {
+    let id: String
+    let feedID: String
+    let title: String
+    let feedURL: String
+    let errorMessage: String
+    let lastPolledAt: Date?
+    let consecutiveErrors: Int
+
+    init?(feed: Feed) {
+        guard let errorMessage = feed.errorMessage, !errorMessage.isEmpty else {
+            return nil
+        }
+
+        id = feed.id
+        feedID = feed.id
+        title = feed.title.isEmpty ? feed.feedUrl : feed.title
+        feedURL = feed.feedUrl
+        self.errorMessage = errorMessage
+        lastPolledAt = feed.lastPolledAt
+        consecutiveErrors = feed.consecutiveErrors
+    }
+}
+
+struct FeedIssueDetailsSheet: View {
+    let issue: FeedIssuePresentation
+    let onRetry: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Feed") {
+                    LabeledContent("Name") {
+                        Text(issue.title)
+                            .multilineTextAlignment(.trailing)
+                    }
+
+                    LabeledContent("URL") {
+                        Text(issue.feedURL)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let lastPolledAt = issue.lastPolledAt {
+                        LabeledContent("Last polled") {
+                            Text(lastPolledAt.formatted(date: .abbreviated, time: .shortened))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if issue.consecutiveErrors > 0 {
+                        LabeledContent("Consecutive failures") {
+                            Text("\(issue.consecutiveErrors)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Section("Last Error") {
+                    Text(issue.errorMessage)
+                        .font(.body)
+                        .textSelection(.enabled)
+                }
+
+                Section {
+                    Button {
+                        dismiss()
+                        onRetry()
+                    } label: {
+                        Label("Retry Feed", systemImage: "arrow.clockwise")
+                    }
+                }
+            }
+            .navigationTitle("Feed Issue")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
