@@ -264,6 +264,140 @@ struct StandalonePersonalizationTests {
         #expect(openAISnapshot.systemTagIDs.count == 1)
     }
 
+    @Test("Mainstream starter source profiles attach the expected baseline tags")
+    func mainstreamStarterSourceProfilesAttachBaselineTags() async throws {
+        struct Case: Sendable {
+            let feedTitle: String
+            let feedURL: String
+            let siteURL: String?
+            let expectedTag: String
+            let unexpectedBonus: String?
+        }
+
+        let cases: [Case] = [
+            .init(
+                feedTitle: "PBS NewsHour Headlines",
+                feedURL: "https://feeds.pbs.org/newshour/rss/headlines",
+                siteURL: "https://www.pbs.org/newshour",
+                expectedTag: "World News",
+                unexpectedBonus: "U.S. News"
+            ),
+            .init(
+                feedTitle: "PBS NewsHour Politics",
+                feedURL: "https://feeds.pbs.org/newshour/rss/politics",
+                siteURL: "https://www.pbs.org/newshour/politics",
+                expectedTag: "Politics",
+                unexpectedBonus: "Policy"
+            ),
+            .init(
+                feedTitle: "TechCrunch",
+                feedURL: "https://techcrunch.com/feed/",
+                siteURL: "https://techcrunch.com",
+                expectedTag: "Consumer Tech",
+                unexpectedBonus: "Startups"
+            ),
+            .init(
+                feedTitle: "MedlinePlus Health News",
+                feedURL: "https://medlineplus.gov/feeds/news_en.xml",
+                siteURL: "https://medlineplus.gov",
+                expectedTag: "Health",
+                unexpectedBonus: "Medicine"
+            ),
+            .init(
+                feedTitle: "ESPN Top Headlines",
+                feedURL: "https://www.espn.com/espn/rss/news",
+                siteURL: "https://www.espn.com",
+                expectedTag: "Sports",
+                unexpectedBonus: nil
+            ),
+            .init(
+                feedTitle: "Smitten Kitchen",
+                feedURL: "https://smittenkitchen.com/feed/",
+                siteURL: "https://smittenkitchen.com",
+                expectedTag: "Food",
+                unexpectedBonus: "Recipes"
+            )
+        ]
+
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+
+        for (index, item) in cases.enumerated() {
+            let feed = try insertFeed(
+                in: context,
+                title: item.feedTitle,
+                feedURL: item.feedURL,
+                siteURL: item.siteURL
+            )
+            _ = try insertArticle(
+                in: context,
+                feed: feed,
+                title: "Top story",
+                canonicalURL: "https://example.com/mainstream-\(index)",
+                content: "General update without category-specific lexical evidence.",
+                publishedAt: .now.addingTimeInterval(TimeInterval(index * 60))
+            )
+        }
+
+        _ = await service.processPendingArticles(limit: 50)
+
+        let articles = try context.fetch(FetchDescriptor<Article>())
+
+        for article in articles {
+            let item = try #require(cases.first(where: { $0.feedTitle == article.feed?.title }))
+            let tagNames = Set((article.tags ?? []).map(\.name))
+            #expect(tagNames.contains(item.expectedTag))
+            if let unexpectedBonus = item.unexpectedBonus {
+                #expect(tagNames.contains(unexpectedBonus) == false)
+            }
+        }
+    }
+
+    @Test("Broad starter keywords can attach new politics and food tags")
+    func broadStarterKeywordsAttachNewTags() async throws {
+        let container = try makeContainer()
+        let service = LocalStandalonePersonalizationService(modelContainer: container)
+        let context = makeContext(container)
+
+        await service.bootstrap()
+        let feed = try insertFeed(
+            in: context,
+            title: "General Digest",
+            feedURL: "https://example.com/general.xml",
+            siteURL: "https://example.com"
+        )
+
+        let politicsArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "White House campaign legislation update",
+            canonicalURL: "https://example.com/politics-keywords",
+            content: longContent("The White House campaign and legislation update covered government agencies and cabinet priorities."),
+            publishedAt: .now
+        )
+        let foodArticle = try insertArticle(
+            in: context,
+            feed: feed,
+            title: "Weeknight recipe to cook and bake at home",
+            canonicalURL: "https://example.com/food-keywords",
+            content: longContent("This recipe uses simple ingredients and kitchen prep to cook a great meal and bake dessert."),
+            publishedAt: .now.addingTimeInterval(60)
+        )
+
+        _ = await service.processPendingArticles(limit: 20)
+
+        let politicsTags = Set(try fetchArticle(politicsArticle.id, in: context).tags?.map(\.name) ?? [])
+        let foodTags = Set(try fetchArticle(foodArticle.id, in: context).tags?.map(\.name) ?? [])
+
+        #expect(politicsTags.contains("Politics"))
+        #expect(politicsTags.contains("Policy") || politicsTags.contains("Government"))
+        #expect(foodTags.contains("Food"))
+        #expect(foodTags.contains("Cooking") || foodTags.contains("Recipes"))
+    }
+
     @Test("The Berkeley AI Research feed gets tags from its source profile")
     func berkeleyAIResearchFeedGetsProfileTags() async throws {
         let container = try makeContainer()

@@ -107,6 +107,56 @@ public struct OnboardingSeedResult: Sendable, Hashable {
 
 public let starterFeedCatalog: [StarterFeedDefinition] = [
     .init(
+        id: "pbs-newshour-headlines",
+        title: "PBS NewsHour Headlines",
+        feedURL: "https://feeds.pbs.org/newshour/rss/headlines"
+    ),
+    .init(
+        id: "bbc-world-news",
+        title: "BBC World News",
+        feedURL: "https://feeds.bbci.co.uk/news/world/rss.xml"
+    ),
+    .init(
+        id: "pbs-newshour-politics",
+        title: "PBS NewsHour Politics",
+        feedURL: "https://feeds.pbs.org/newshour/rss/politics"
+    ),
+    .init(
+        id: "bbc-politics",
+        title: "BBC Politics",
+        feedURL: "https://feeds.bbci.co.uk/news/politics/rss.xml"
+    ),
+    .init(
+        id: "ars-technica",
+        title: "Ars Technica",
+        feedURL: "https://feeds.arstechnica.com/arstechnica/index"
+    ),
+    .init(
+        id: "techcrunch",
+        title: "TechCrunch",
+        feedURL: "https://techcrunch.com/feed/"
+    ),
+    .init(
+        id: "medlineplus-health-news",
+        title: "MedlinePlus Health News",
+        feedURL: "https://medlineplus.gov/feeds/news_en.xml"
+    ),
+    .init(
+        id: "medlineplus-health-topics",
+        title: "MedlinePlus Health Topics",
+        feedURL: "https://medlineplus.gov/feeds/healthtopics.xml"
+    ),
+    .init(
+        id: "espn-top-headlines",
+        title: "ESPN Top Headlines",
+        feedURL: "https://www.espn.com/espn/rss/news"
+    ),
+    .init(
+        id: "smitten-kitchen",
+        title: "Smitten Kitchen",
+        feedURL: "https://smittenkitchen.com/feed/"
+    ),
+    .init(
         id: "openai-news",
         title: "OpenAI News",
         feedURL: "https://openai.com/news/rss.xml",
@@ -243,6 +293,22 @@ public let starterFeedCatalog: [StarterFeedDefinition] = [
 
 public let starterInterestCatalog: [StarterInterest] = [
     .init(
+        id: "world-us-news",
+        title: "World & U.S. News",
+        description: "Major headlines, global context, and reliable general-news coverage.",
+        systemImage: "globe.americas",
+        seedTagSlugs: ["world-news", "us-news"],
+        defaultFeedIDs: ["pbs-newshour-headlines", "bbc-world-news"]
+    ),
+    .init(
+        id: "consumer-tech",
+        title: "Consumer Tech",
+        description: "Devices, platforms, apps, and the tech stories regular people actually follow.",
+        systemImage: "laptopcomputer.and.iphone",
+        seedTagSlugs: ["consumer-tech", "consumer-hardware", "software-engineering"],
+        defaultFeedIDs: ["ars-technica", "techcrunch"]
+    ),
+    .init(
         id: "ai-ml",
         title: "AI & ML",
         description: "Model launches, practical ML tools, and fast-moving AI product news.",
@@ -250,6 +316,39 @@ public let starterInterestCatalog: [StarterInterest] = [
         seedTagSlugs: ["artificial-intelligence", "generative-ai", "large-language-models"],
         defaultFeedIDs: ["openai-news", "deepmind-news", "hugging-face-blog"],
         optionalFeedIDs: ["mit-technology-review-ai", "berkeley-ai-research"]
+    ),
+    .init(
+        id: "health-wellness",
+        title: "Health & Wellness",
+        description: "Medical developments, public-health guidance, and practical health news.",
+        systemImage: "cross.case",
+        seedTagSlugs: ["health", "medicine", "wellness"],
+        defaultFeedIDs: ["medlineplus-health-news", "medlineplus-health-topics"]
+    ),
+    .init(
+        id: "sports",
+        title: "Sports",
+        description: "Big games, seasons, and major sports headlines without digging for them.",
+        systemImage: "sportscourt",
+        seedTagSlugs: ["sports"],
+        defaultFeedIDs: ["espn-top-headlines"]
+    ),
+    .init(
+        id: "food-cooking",
+        title: "Food & Cooking",
+        description: "Recipes, kitchen ideas, and approachable cooking inspiration.",
+        systemImage: "fork.knife",
+        seedTagSlugs: ["food", "cooking", "recipes"],
+        defaultFeedIDs: ["smitten-kitchen"]
+    ),
+    .init(
+        id: "politics-policy",
+        title: "Politics & Policy",
+        description: "Government, elections, and policy coverage with signal over noise.",
+        systemImage: "building.columns",
+        seedTagSlugs: ["politics", "policy", "government"],
+        defaultFeedIDs: ["pbs-newshour-politics"],
+        optionalFeedIDs: ["bbc-politics"]
     ),
     .init(
         id: "research-deep-dives",
@@ -312,6 +411,26 @@ public let starterInterestCatalog: [StarterInterest] = [
         seedTagSlugs: ["economics", "monetary-policy", "inflation", "banking"],
         defaultFeedIDs: ["frb-kansas-city", "frbsf-research-insights"]
     )
+]
+
+public let popularStarterInterestIDs: [String] = [
+    "world-us-news",
+    "consumer-tech",
+    "ai-ml",
+    "health-wellness",
+    "sports",
+    "food-cooking"
+]
+
+public let moreStarterInterestIDs: [String] = [
+    "politics-policy",
+    "research-deep-dives",
+    "cloud-devops",
+    "security-privacy",
+    "space-science",
+    "nature-wildlife",
+    "photography",
+    "economics-policy"
 ]
 
 public func starterInterest(id: String) -> StarterInterest? {

@@ -43,6 +43,19 @@ public let starterCanonicalTags: [StarterCanonicalTag] = [
     .init(id: "tag-nature", name: "Nature", slug: "nature"),
     .init(id: "tag-photography", name: "Photography", slug: "photography"),
     .init(id: "tag-space", name: "Space", slug: "space"),
+    .init(id: "tag-world-news", name: "World News", slug: "world-news"),
+    .init(id: "tag-us-news", name: "U.S. News", slug: "us-news"),
+    .init(id: "tag-politics", name: "Politics", slug: "politics"),
+    .init(id: "tag-policy", name: "Policy", slug: "policy"),
+    .init(id: "tag-government", name: "Government", slug: "government"),
+    .init(id: "tag-consumer-tech", name: "Consumer Tech", slug: "consumer-tech"),
+    .init(id: "tag-health", name: "Health", slug: "health"),
+    .init(id: "tag-medicine", name: "Medicine", slug: "medicine"),
+    .init(id: "tag-wellness", name: "Wellness", slug: "wellness"),
+    .init(id: "tag-sports", name: "Sports", slug: "sports"),
+    .init(id: "tag-food", name: "Food", slug: "food"),
+    .init(id: "tag-cooking", name: "Cooking", slug: "cooking"),
+    .init(id: "tag-recipes", name: "Recipes", slug: "recipes"),
     .init(id: "tag-local-news", name: "Local News", slug: "local-news"),
     .init(id: "tag-kansas-city", name: "Kansas City", slug: "kansas-city"),
     .init(id: "tag-civics", name: "Civics", slug: "civics"),
@@ -111,6 +124,74 @@ public struct DeterministicTagSourceProfile: Sendable, Hashable {
 }
 
 public let personalizationTargetFeedFamilies: [PersonalizationTargetFeedFamily] = [
+    .init(
+        name: "PBS NewsHour Headlines",
+        feedTitleAliases: ["PBS NewsHour Headlines", "Headlines"],
+        siteHosts: ["pbs.org"],
+        baselineTagSlugs: ["world-news"],
+        bonusTagSlugs: ["us-news"]
+    ),
+    .init(
+        name: "BBC World News",
+        feedTitleAliases: ["BBC World News", "BBC News - World"],
+        siteHosts: ["bbc.com", "bbc.co.uk", "bbci.co.uk"],
+        baselineTagSlugs: ["world-news"]
+    ),
+    .init(
+        name: "PBS NewsHour Politics",
+        feedTitleAliases: ["PBS NewsHour Politics", "Politics"],
+        siteHosts: ["pbs.org"],
+        baselineTagSlugs: ["politics"],
+        bonusTagSlugs: ["policy", "government", "us-news"]
+    ),
+    .init(
+        name: "BBC Politics",
+        feedTitleAliases: ["BBC Politics", "BBC News - Politics"],
+        siteHosts: ["bbc.com", "bbc.co.uk", "bbci.co.uk"],
+        baselineTagSlugs: ["politics"],
+        bonusTagSlugs: ["policy", "government"]
+    ),
+    .init(
+        name: "Ars Technica",
+        feedTitleAliases: ["Ars Technica"],
+        siteHosts: ["arstechnica.com"],
+        baselineTagSlugs: ["consumer-tech"],
+        bonusTagSlugs: ["consumer-hardware", "software-engineering"]
+    ),
+    .init(
+        name: "TechCrunch",
+        feedTitleAliases: ["TechCrunch"],
+        siteHosts: ["techcrunch.com"],
+        baselineTagSlugs: ["consumer-tech"],
+        bonusTagSlugs: ["startups", "enterprise-software"]
+    ),
+    .init(
+        name: "MedlinePlus Health News",
+        feedTitleAliases: ["MedlinePlus Health News", "MedlinePlus: Health News"],
+        siteHosts: ["medlineplus.gov"],
+        baselineTagSlugs: ["health"],
+        bonusTagSlugs: ["medicine", "wellness"]
+    ),
+    .init(
+        name: "MedlinePlus Health Topics",
+        feedTitleAliases: ["MedlinePlus Health Topics", "Health Topics"],
+        siteHosts: ["medlineplus.gov"],
+        baselineTagSlugs: ["health"],
+        bonusTagSlugs: ["medicine", "wellness"]
+    ),
+    .init(
+        name: "ESPN Top Headlines",
+        feedTitleAliases: ["ESPN Top Headlines", "ESPN.com"],
+        siteHosts: ["espn.com"],
+        baselineTagSlugs: ["sports"]
+    ),
+    .init(
+        name: "Smitten Kitchen",
+        feedTitleAliases: ["Smitten Kitchen"],
+        siteHosts: ["smittenkitchen.com"],
+        baselineTagSlugs: ["food"],
+        bonusTagSlugs: ["cooking", "recipes"]
+    ),
     .init(
         name: "OpenAI News",
         feedTitleAliases: ["OpenAI News"],
@@ -407,6 +488,19 @@ public let deterministicTagKeywordsBySlug: [String: [String]] = [
     "nature": ["nature", "ecosystem", "meadow", "prairie", "outdoors", "biodiversity"],
     "photography": ["photography", "photo", "photos", "camera", "cameras", "lens", "lenses", "imaging", "photographer"],
     "space": ["space", "astronomy", "nasa", "rocket", "rockets", "telescope", "telescopes", "mars", "moon", "lunar", "orbiter", "rover", "satellite", "spacecraft"],
+    "world-news": ["world news", "global", "international", "foreign affairs", "breaking news"],
+    "us-news": ["u s news", "us news", "united states", "national news", "federal"],
+    "politics": ["politics", "election", "congress", "senate", "house", "white house", "campaign", "parliament", "cabinet", "legislation"],
+    "policy": ["policy", "policies", "public policy", "legislation", "rulemaking", "regulatory"],
+    "government": ["government", "administration", "agency", "department", "governor", "minister"],
+    "consumer-tech": ["consumer tech", "gadgets", "device", "devices", "app update", "platform update", "personal tech"],
+    "health": ["health", "healthcare", "public health", "health news", "symptom", "symptoms"],
+    "medicine": ["medicine", "medical", "clinical trial", "diagnosis", "treatment", "fda", "cdc"],
+    "wellness": ["wellness", "healthy living", "mental health", "fitness", "sleep", "nutrition"],
+    "sports": ["sports", "playoff", "season", "coach", "athlete", "athletes", "tournament", "draft", "matchup"],
+    "food": ["food", "dining", "dish", "meal", "ingredient", "ingredients"],
+    "cooking": ["cooking", "cook", "cooks", "bake", "baking", "kitchen"],
+    "recipes": ["recipe", "recipes", "how to make", "weeknight dinner", "dessert"],
     "civics": ["city council", "mayor", "ordinance", "ballot", "election", "id invalidated"],
     "transportation": ["bus fare", "transit", "kcata", "transportation", "public transit"],
     "housing": ["housing", "zoning", "rent", "affordable housing", "development"],

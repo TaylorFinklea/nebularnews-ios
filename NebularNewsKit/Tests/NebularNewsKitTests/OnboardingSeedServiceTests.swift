@@ -37,6 +37,51 @@ struct OnboardingSeedServiceTests {
         }
     }
 
+    @Test("Popular and more interest sections use the intended catalog order")
+    func starterInterestSectionsMatchProductOrder() {
+        #expect(popularStarterInterestIDs == [
+            "world-us-news",
+            "consumer-tech",
+            "ai-ml",
+            "health-wellness",
+            "sports",
+            "food-cooking"
+        ])
+        #expect(moreStarterInterestIDs == [
+            "politics-policy",
+            "research-deep-dives",
+            "cloud-devops",
+            "security-privacy",
+            "space-science",
+            "nature-wildlife",
+            "photography",
+            "economics-policy"
+        ])
+        #expect(Set(popularStarterInterestIDs).isDisjoint(with: Set(moreStarterInterestIDs)))
+        #expect(popularStarterInterestIDs.count + moreStarterInterestIDs.count == starterInterestCatalog.count)
+    }
+
+    @Test("New mainstream interests resolve the expected starter feed bundle")
+    func mainstreamInterestBundlesMatchCatalog() throws {
+        let expectations: [(String, [String])] = [
+            ("world-us-news", ["pbs-newshour-headlines", "bbc-world-news"]),
+            ("consumer-tech", ["ars-technica", "techcrunch"]),
+            ("health-wellness", ["medlineplus-health-news", "medlineplus-health-topics"]),
+            ("sports", ["espn-top-headlines"]),
+            ("food-cooking", ["smitten-kitchen"]),
+            ("politics-policy", ["pbs-newshour-politics", "bbc-politics"])
+        ]
+
+        for (interestID, expectedFeedIDs) in expectations {
+            let choices = buildStarterFeedChoices(
+                selectedInterestIDs: Set([interestID]),
+                avoidedInterestIDs: []
+            )
+
+            #expect(choices.map(\.feed.id) == expectedFeedIDs)
+        }
+    }
+
     @Test("Imported feeds dedupe against canonical starter feeds")
     func importedFeedsDedupeAgainstStarterCatalog() throws {
         let imported = try #require(
@@ -109,5 +154,36 @@ struct OnboardingSeedServiceTests {
         #expect(openAIFeedAffinity.affinity == 0.35)
         #expect(authorRows.isEmpty)
         #expect(weights.count == defaultSignalWeights.count)
+    }
+
+    @Test("Mainstream onboarding interests seed new topic and feed affinities")
+    func onboardingSeedingWritesMainstreamInterestSeeds() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+
+        let service = OnboardingSeedService(modelContainer: container)
+        let request = OnboardingSeedRequest(
+            selectedInterestIDs: ["world-us-news", "health-wellness"],
+            avoidedInterestIDs: ["food-cooking"],
+            selectedFeeds: [
+                try #require(starterFeed(id: "pbs-newshour-headlines")),
+                try #require(starterFeed(id: "medlineplus-health-news"))
+            ]
+        )
+
+        _ = try await service.apply(request: request)
+
+        let topicRows = (try? context.fetch(FetchDescriptor<TopicAffinity>())) ?? []
+        let feedRows = (try? context.fetch(FetchDescriptor<FeedAffinity>())) ?? []
+
+        let worldNews = try #require(topicRows.first(where: { $0.tagNameNormalized == "world news" }))
+        let health = try #require(topicRows.first(where: { $0.tagNameNormalized == "health" }))
+        let food = try #require(topicRows.first(where: { $0.tagNameNormalized == "food" }))
+        let pbsFeed = try #require(feedRows.first(where: { $0.feedKey == normalizedFeedKey(from: "https://feeds.pbs.org/newshour/rss/headlines") }))
+
+        #expect(worldNews.affinity == 0.6)
+        #expect(health.affinity == 0.6)
+        #expect(food.affinity == -0.6)
+        #expect(pbsFeed.affinity == 0.35)
     }
 }

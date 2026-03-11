@@ -47,6 +47,8 @@ struct OnboardingView: View {
     @State private var feedSelections: [String: Bool] = [:]
     @State private var showingAddFeedSheet = false
     @State private var showingHelpForAddFeedSheet = false
+    @State private var showingMoreInterests = false
+    @State private var showingMoreAvoidedInterests = false
     @State private var isFinishingStandalone = false
     @State private var standaloneError: String?
     @State private var apiSetupExpanded = false
@@ -85,6 +87,14 @@ struct OnboardingView: View {
 
     private var avoidedInterests: [StarterInterest] {
         starterInterestCatalog.filter { avoidedInterestIDs.contains($0.id) }
+    }
+
+    private var popularInterests: [StarterInterest] {
+        popularStarterInterestIDs.compactMap { starterInterest(id: $0) }
+    }
+
+    private var moreInterests: [StarterInterest] {
+        moreStarterInterestIDs.compactMap { starterInterest(id: $0) }
     }
 
     var body: some View {
@@ -229,21 +239,46 @@ struct OnboardingView: View {
                     progress: StandaloneOnboardingStep.interests.progressText
                 )
 
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(starterInterestCatalog) { interest in
-                        interestCard(
-                            interest,
-                            isSelected: selectedInterestIDs.contains(interest.id)
-                        ) {
-                            if selectedInterestIDs.contains(interest.id) {
-                                selectedInterestIDs.remove(interest.id)
-                            } else {
-                                selectedInterestIDs.insert(interest.id)
-                                avoidedInterestIDs.remove(interest.id)
-                            }
+                interestSelectionSection(
+                    title: "Popular",
+                    interests: popularInterests,
+                    selectionContains: { selectedInterestIDs.contains($0) },
+                    selectionAccent: nil,
+                    toggle: { interestID in
+                        if selectedInterestIDs.contains(interestID) {
+                            selectedInterestIDs.remove(interestID)
+                        } else {
+                            selectedInterestIDs.insert(interestID)
+                            avoidedInterestIDs.remove(interestID)
                         }
                     }
+                )
+
+                DisclosureGroup(isExpanded: $showingMoreInterests) {
+                    interestSelectionGrid(
+                        interests: moreInterests,
+                        selectionContains: { selectedInterestIDs.contains($0) },
+                        selectionAccent: nil,
+                        toggle: { interestID in
+                            if selectedInterestIDs.contains(interestID) {
+                                selectedInterestIDs.remove(interestID)
+                            } else {
+                                selectedInterestIDs.insert(interestID)
+                                avoidedInterestIDs.remove(interestID)
+                            }
+                        }
+                    )
+                    .padding(.top, 16)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("More interests")
+                            .font(.headline)
+                        Text("Add niche or specialist areas without crowding the first screen.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.horizontal, 2)
 
                 onboardingActions(
                     backTitle: "Back",
@@ -269,22 +304,46 @@ struct OnboardingView: View {
                     progress: StandaloneOnboardingStep.avoid.progressText
                 )
 
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(starterInterestCatalog) { interest in
-                        interestCard(
-                            interest,
-                            isSelected: avoidedInterestIDs.contains(interest.id),
-                            accentColor: .orange
-                        ) {
-                            if avoidedInterestIDs.contains(interest.id) {
-                                avoidedInterestIDs.remove(interest.id)
-                            } else {
-                                avoidedInterestIDs.insert(interest.id)
-                                selectedInterestIDs.remove(interest.id)
-                            }
+                interestSelectionSection(
+                    title: "Popular",
+                    interests: popularInterests,
+                    selectionContains: { avoidedInterestIDs.contains($0) },
+                    selectionAccent: .orange,
+                    toggle: { interestID in
+                        if avoidedInterestIDs.contains(interestID) {
+                            avoidedInterestIDs.remove(interestID)
+                        } else {
+                            avoidedInterestIDs.insert(interestID)
+                            selectedInterestIDs.remove(interestID)
                         }
                     }
+                )
+
+                DisclosureGroup(isExpanded: $showingMoreAvoidedInterests) {
+                    interestSelectionGrid(
+                        interests: moreInterests,
+                        selectionContains: { avoidedInterestIDs.contains($0) },
+                        selectionAccent: .orange,
+                        toggle: { interestID in
+                            if avoidedInterestIDs.contains(interestID) {
+                                avoidedInterestIDs.remove(interestID)
+                            } else {
+                                avoidedInterestIDs.insert(interestID)
+                                selectedInterestIDs.remove(interestID)
+                            }
+                        }
+                    )
+                    .padding(.top, 16)
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("More interests")
+                            .font(.headline)
+                        Text("Use this if there are whole categories you’d rather see less of.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.horizontal, 2)
 
                 onboardingActions(
                     backTitle: "Back",
@@ -563,6 +622,45 @@ struct OnboardingView: View {
         .buttonStyle(.plain)
         .accessibilityLabel("\(interest.title), \(interest.starterFeedCount) starter feeds")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private func interestSelectionSection(
+        title: String,
+        interests: [StarterInterest],
+        selectionContains: @escaping (String) -> Bool,
+        selectionAccent: Color?,
+        toggle: @escaping (String) -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(title)
+                .font(.headline)
+
+            interestSelectionGrid(
+                interests: interests,
+                selectionContains: selectionContains,
+                selectionAccent: selectionAccent,
+                toggle: toggle
+            )
+        }
+    }
+
+    private func interestSelectionGrid(
+        interests: [StarterInterest],
+        selectionContains: @escaping (String) -> Bool,
+        selectionAccent: Color?,
+        toggle: @escaping (String) -> Void
+    ) -> some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(interests) { interest in
+                interestCard(
+                    interest,
+                    isSelected: selectionContains(interest.id),
+                    accentColor: selectionAccent
+                ) {
+                    toggle(interest.id)
+                }
+            }
+        }
     }
 
     private func onboardingActions(
