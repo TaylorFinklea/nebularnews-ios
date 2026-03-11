@@ -20,10 +20,12 @@ public enum ArticleSort: String, Sendable, CaseIterable {
 public struct ArticleListCursor: Codable, Hashable, Sendable {
     public let sortDate: Date
     public let articleID: String
+    public let displayedScore: Int
 
-    public init(sortDate: Date, articleID: String) {
+    public init(sortDate: Date, articleID: String, displayedScore: Int = 0) {
         self.sortDate = sortDate
         self.articleID = articleID
+        self.displayedScore = displayedScore
     }
 }
 
@@ -34,6 +36,7 @@ public struct ArticleFilter: Sendable {
     public var minScore: Int?
     public var maxScore: Int?
     public var publishedAfter: Date?
+    public var publishedBefore: Date?
     public var feedId: String?
     public var tagIds: [String] = []
     public var searchText: String?
@@ -48,7 +51,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func listVisibleArticles(filter: ArticleFilter, sort: ArticleSort, limit: Int, offset: Int) async -> [Article]
     func count(filter: ArticleFilter) async -> Int
     func countVisibleArticles(filter: ArticleFilter) async -> Int
-    func listFeedPage(filter: ArticleFilter, cursor: ArticleListCursor?, limit: Int) async -> [Article]
+    func listFeedPage(filter: ArticleFilter, sort: ArticleSort, cursor: ArticleListCursor?, limit: Int) async -> [Article]
     func countFeed(filter: ArticleFilter) async -> Int
     func fetchTodaySnapshot() async -> TodaySnapshot
     func rebuildTodaySnapshot() async
@@ -185,6 +188,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             filter.minScore != nil ||
             filter.maxScore != nil ||
             filter.publishedAfter != nil ||
+            filter.publishedBefore != nil ||
             filter.feedId != nil ||
             !filter.tagIds.isEmpty ||
             !((searchText?.isEmpty) ?? true)
@@ -211,6 +215,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func listFeedPage(
         filter: ArticleFilter,
+        sort: ArticleSort,
         cursor: ArticleListCursor?,
         limit: Int
     ) async -> [Article] {
@@ -218,6 +223,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         feedFilter.presentationFilter = .readyOnly
         return await pagedArticles(
             filter: feedFilter,
+            sort: sort,
             cursor: cursor,
             limit: limit,
             requireReadingList: false
@@ -275,6 +281,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         readingListFilter.presentationFilter = .readyOnly
         return await pagedArticles(
             filter: readingListFilter,
+            sort: .newest,
             cursor: cursor,
             limit: limit,
             requireReadingList: true
@@ -969,21 +976,32 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     private func sortDescriptors(for sort: ArticleSort) -> [SortDescriptor<Article>] {
         switch sort {
         case .newest:
-            return [SortDescriptor(\.querySortDate, order: .reverse)]
+            return [
+                SortDescriptor(\.querySortDate, order: .reverse),
+                SortDescriptor(\.id, order: .reverse)
+            ]
         case .oldest:
-            return [SortDescriptor(\.querySortDate, order: .forward)]
+            return [
+                SortDescriptor(\.querySortDate, order: .forward),
+                SortDescriptor(\.id, order: .forward)
+            ]
         case .scoreDesc:
             return [
                 SortDescriptor(\.queryDisplayedScore, order: .reverse),
-                SortDescriptor(\.querySortDate, order: .reverse)
+                SortDescriptor(\.querySortDate, order: .reverse),
+                SortDescriptor(\.id, order: .reverse)
             ]
         case .scoreAsc:
             return [
                 SortDescriptor(\.queryDisplayedScore, order: .forward),
-                SortDescriptor(\.querySortDate, order: .reverse)
+                SortDescriptor(\.querySortDate, order: .reverse),
+                SortDescriptor(\.id, order: .reverse)
             ]
         case .unreadFirst:
-            return [SortDescriptor(\.querySortDate, order: .reverse)]
+            return [
+                SortDescriptor(\.querySortDate, order: .reverse),
+                SortDescriptor(\.id, order: .reverse)
+            ]
         }
     }
 
@@ -1027,6 +1045,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             result = result.filter(\.isInReadingList)
         }
 
+        if let feedId = filter.feedId {
+            result = result.filter { $0.queryFeedID == feedId }
+        }
+
         if let min = filter.minScore {
             result = result.filter { ($0.score ?? 0) >= min }
         }
@@ -1037,6 +1059,12 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         if let publishedAfter = filter.publishedAfter {
             result = result.filter {
                 ($0.publishedAt ?? $0.fetchedAt) >= publishedAfter
+            }
+        }
+
+        if let publishedBefore = filter.publishedBefore {
+            result = result.filter {
+                ($0.publishedAt ?? $0.fetchedAt) <= publishedBefore
             }
         }
 
@@ -1072,6 +1100,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     private func pagedArticles(
         filter: ArticleFilter,
+        sort: ArticleSort,
         cursor: ArticleListCursor?,
         limit: Int,
         requireReadingList: Bool
@@ -1080,12 +1109,17 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
            !search.isEmpty {
             var boundedFilter = filter
             boundedFilter.searchText = search
-            return await list(
+            let allMatching = await list(
                 filter: boundedFilter,
-                sort: .newest,
-                limit: limit,
+                sort: sort,
+                limit: 10_000,
                 offset: 0
             )
+            let filtered = allMatching.filter { article in
+                guard let cursor else { return true }
+                return isArticleAfterCursor(article, cursor: cursor, sort: sort)
+            }
+            return Array(filtered.prefix(limit))
         }
 
         let chunkSize = max(limit * 4, 120)
@@ -1096,7 +1130,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         for _ in 0..<maxPasses {
             var descriptor = basePagedDescriptor(
                 presentationFilter: filter.presentationFilter,
-                requireReadingList: requireReadingList
+                requireReadingList: requireReadingList,
+                sort: sort
             )
             descriptor.fetchOffset = offset
             descriptor.fetchLimit = chunkSize
@@ -1108,8 +1143,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
             let filtered = applyInMemoryFilters(chunk, filter: filter).filter { article in
                 guard let cursor else { return true }
-                return article.querySortDate < cursor.sortDate ||
-                    (article.querySortDate == cursor.sortDate && article.id < cursor.articleID)
+                return isArticleAfterCursor(article, cursor: cursor, sort: sort)
             }
 
             collected.append(contentsOf: filtered)
@@ -1125,12 +1159,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     private func basePagedDescriptor(
         presentationFilter: ArticlePresentationFilter,
-        requireReadingList: Bool
+        requireReadingList: Bool,
+        sort: ArticleSort
     ) -> FetchDescriptor<Article> {
-        let sortBy = [
-            SortDescriptor(\Article.querySortDate, order: .reverse),
-            SortDescriptor(\Article.id, order: .reverse)
-        ]
+        let sortBy = sortDescriptors(for: sort)
 
         switch (presentationFilter, requireReadingList) {
         case (.pendingOnly, true):
@@ -1161,6 +1193,46 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 },
                 sortBy: sortBy
             )
+        }
+    }
+
+    private func isArticleAfterCursor(
+        _ article: Article,
+        cursor: ArticleListCursor,
+        sort: ArticleSort
+    ) -> Bool {
+        switch sort {
+        case .newest:
+            if article.querySortDate != cursor.sortDate {
+                return article.querySortDate < cursor.sortDate
+            }
+            return article.id < cursor.articleID
+        case .oldest:
+            if article.querySortDate != cursor.sortDate {
+                return article.querySortDate > cursor.sortDate
+            }
+            return article.id > cursor.articleID
+        case .scoreDesc:
+            if article.queryDisplayedScore != cursor.displayedScore {
+                return article.queryDisplayedScore < cursor.displayedScore
+            }
+            if article.querySortDate != cursor.sortDate {
+                return article.querySortDate < cursor.sortDate
+            }
+            return article.id < cursor.articleID
+        case .scoreAsc:
+            if article.queryDisplayedScore != cursor.displayedScore {
+                return article.queryDisplayedScore > cursor.displayedScore
+            }
+            if article.querySortDate != cursor.sortDate {
+                return article.querySortDate < cursor.sortDate
+            }
+            return article.id < cursor.articleID
+        case .unreadFirst:
+            if article.querySortDate != cursor.sortDate {
+                return article.querySortDate < cursor.sortDate
+            }
+            return article.id < cursor.articleID
         }
     }
 

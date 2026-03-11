@@ -13,6 +13,8 @@ struct FeedTabView: View {
 
     @State private var searchText = ""
     @State private var filterMode: FeedFilterMode = .unread
+    @State private var advancedFilter = FeedAdvancedFilterState()
+    @State private var isAdvancedFilterPresented = false
     @State private var reactionSheetArticleID: String?
     @State private var viewModel = FeedBrowseViewModel()
 
@@ -21,7 +23,12 @@ struct FeedTabView: View {
             NebularScreen(emphasis: .reading) {
                 List {
                     Section {
-                        FeedFilterBar(filterMode: $filterMode, count: viewModel.visibleCount)
+                        FeedFilterBar(
+                            filterMode: $filterMode,
+                            count: viewModel.visibleCount,
+                            activeSummary: advancedFilter.summaryText(),
+                            onClearAdvancedFilters: clearAdvancedFilters
+                        )
                     }
                     .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
                     .listRowBackground(Color.clear)
@@ -47,25 +54,13 @@ struct FeedTabView: View {
                         }
                     } else if viewModel.articles.isEmpty {
                         Section {
-                            ContentUnavailableView.search(text: searchText)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 40)
+                            emptyStateView
                                 .feedRowStyle(top: 0, bottom: 8)
                         }
                     } else {
-                        if !featuredArticles.isEmpty {
-                            Section {
-                                ForEach(featuredArticles, id: \.id) { article in
-                                    feedArticleRow(article)
-                                }
-                            }
-                        }
-
-                        if !standardArticles.isEmpty {
-                            Section {
-                                ForEach(standardArticles, id: \.id) { article in
-                                    feedArticleRow(article)
-                                }
+                        Section {
+                            ForEach(viewModel.articles, id: \.id) { article in
+                                feedArticleRow(article)
                             }
                         }
 
@@ -84,6 +79,25 @@ struct FeedTabView: View {
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        isAdvancedFilterPresented = true
+                    } label: {
+                        Image(systemName: advancedFilter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                    }
+                    .accessibilityLabel("Filter Feed")
+                }
+            }
+            .sheet(isPresented: $isAdvancedFilterPresented) {
+                FeedAdvancedFilterSheet(
+                    state: advancedFilter,
+                    quickFilterMode: filterMode,
+                    searchText: searchText
+                ) { updatedState in
+                    advancedFilter = updatedState
+                }
+            }
             .sheet(isPresented: isReactionSheetPresented) {
                 if let article = selectedReactionArticle {
                     ReactionSheet(article: article, allowsDismiss: true)
@@ -96,21 +110,27 @@ struct FeedTabView: View {
                 await viewModel.reload(
                     container: modelContext.container,
                     filterMode: filterMode,
-                    searchText: searchText
+                    searchText: searchText,
+                    advancedFilter: advancedFilter
                 )
             }
             .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
                 viewModel.scheduleDebouncedReload(
                     container: modelContext.container,
                     filterMode: filterMode,
-                    searchText: searchText
+                    searchText: searchText,
+                    advancedFilter: advancedFilter
                 )
             }
         }
     }
 
-    private var reloadKey: String {
-        "\(filterMode.rawValue)|\(searchText)"
+    private var reloadKey: FeedReloadKey {
+        FeedReloadKey(
+            filterMode: filterMode,
+            searchText: searchText,
+            advancedFilter: advancedFilter
+        )
     }
 
     private var selectedReactionArticle: Article? {
@@ -149,7 +169,8 @@ struct FeedTabView: View {
                 currentArticleID: article.id,
                 container: modelContext.container,
                 filterMode: filterMode,
-                searchText: searchText
+                searchText: searchText,
+                advancedFilter: advancedFilter
             )
         }
     }
@@ -158,12 +179,38 @@ struct FeedTabView: View {
         viewModel.articles.first(where: { $0.id == articleID })
     }
 
-    private var featuredArticles: [Article] {
-        viewModel.articles.filter { ($0.displayedScore ?? 0) >= 4 }
+    private var emptyStateView: some View {
+        Group {
+            if advancedFilter.isActive {
+                ContentUnavailableView {
+                    Label("No Articles Match Filters", systemImage: "calendar.badge.exclamationmark")
+                } description: {
+                    Text(emptyStateDescription)
+                } actions: {
+                    Button("Clear Filters") {
+                        clearAdvancedFilters()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ContentUnavailableView.search(text: searchText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+            }
+        }
     }
 
-    private var standardArticles: [Article] {
-        viewModel.articles.filter { ($0.displayedScore ?? 0) < 4 }
+    private var emptyStateDescription: String {
+        let activeSummary = advancedFilter.summaryText() ?? "your selected filters"
+        if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Try widening \(activeSummary) or clear the filter to see more stories."
+        }
+        return "Nothing matched \(activeSummary) and your current search."
+    }
+
+    private func clearAdvancedFilters() {
+        advancedFilter.clear()
     }
 
     @ViewBuilder
@@ -224,6 +271,12 @@ struct FeedTabView: View {
             return .gray
         }
     }
+}
+
+private struct FeedReloadKey: Equatable {
+    let filterMode: FeedFilterMode
+    let searchText: String
+    let advancedFilter: FeedAdvancedFilterState
 }
 
 private struct FeedPreparingSection: View {
@@ -345,17 +398,24 @@ private final class FeedBrowseViewModel {
     func reload(
         container: ModelContainer,
         filterMode: FeedFilterMode,
-        searchText: String
+        searchText: String,
+        advancedFilter: FeedAdvancedFilterState
     ) async {
         let articleRepo = repository(for: container)
         requestToken += 1
         let token = requestToken
         isInitialLoadInProgress = true
 
-        let filter = makeFilter(filterMode: filterMode, searchText: searchText)
+        let filter = makeFilter(
+            filterMode: filterMode,
+            searchText: searchText,
+            advancedFilter: advancedFilter
+        )
+        let sort = advancedFilter.articleSort
 
         async let visibleArticles = articleRepo.listFeedPage(
             filter: filter,
+            sort: sort,
             cursor: nil,
             limit: initialBatchSize
         )
@@ -369,7 +429,13 @@ private final class FeedBrowseViewModel {
         guard token == requestToken else { return }
 
         articles = loadedArticles
-        nextCursor = loadedArticles.last.map { ArticleListCursor(sortDate: $0.querySortDate, articleID: $0.id) }
+        nextCursor = loadedArticles.last.map {
+            ArticleListCursor(
+                sortDate: $0.querySortDate,
+                articleID: $0.id,
+                displayedScore: $0.queryDisplayedScore
+            )
+        }
         totalVisibleCount = loadedCount
         self.visibleCount = loadedCount
         pendingPreparationCount = loadedPendingCount
@@ -381,7 +447,8 @@ private final class FeedBrowseViewModel {
         currentArticleID: String,
         container: ModelContainer,
         filterMode: FeedFilterMode,
-        searchText: String
+        searchText: String,
+        advancedFilter: FeedAdvancedFilterState
     ) async {
         guard hasMoreArticles,
               !isLoadingMore,
@@ -392,9 +459,14 @@ private final class FeedBrowseViewModel {
 
         let articleRepo = repository(for: container)
         isLoadingMore = true
-        let filter = makeFilter(filterMode: filterMode, searchText: searchText)
+        let filter = makeFilter(
+            filterMode: filterMode,
+            searchText: searchText,
+            advancedFilter: advancedFilter
+        )
         let nextBatch = await articleRepo.listFeedPage(
             filter: filter,
+            sort: advancedFilter.articleSort,
             cursor: nextCursor,
             limit: loadMoreBatchSize
         )
@@ -402,7 +474,13 @@ private final class FeedBrowseViewModel {
         let existingIDs = Set(articles.map(\.id))
         let appended = nextBatch.filter { !existingIDs.contains($0.id) }
         articles.append(contentsOf: appended)
-        nextCursor = articles.last.map { ArticleListCursor(sortDate: $0.querySortDate, articleID: $0.id) }
+        nextCursor = articles.last.map {
+            ArticleListCursor(
+                sortDate: $0.querySortDate,
+                articleID: $0.id,
+                displayedScore: $0.queryDisplayedScore
+            )
+        }
         isLoadingMore = false
     }
 
@@ -432,7 +510,8 @@ private final class FeedBrowseViewModel {
     func scheduleDebouncedReload(
         container: ModelContainer,
         filterMode: FeedFilterMode,
-        searchText: String
+        searchText: String,
+        advancedFilter: FeedAdvancedFilterState
     ) {
         reloadTask?.cancel()
         reloadTask = Task { [weak self] in
@@ -441,14 +520,16 @@ private final class FeedBrowseViewModel {
             await self.reload(
                 container: container,
                 filterMode: filterMode,
-                searchText: searchText
+                searchText: searchText,
+                advancedFilter: advancedFilter
             )
         }
     }
 
     private func makeFilter(
         filterMode: FeedFilterMode,
-        searchText: String
+        searchText: String,
+        advancedFilter: FeedAdvancedFilterState
     ) -> ArticleFilter {
         var filter = ArticleFilter()
         filter.searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -463,6 +544,8 @@ private final class FeedBrowseViewModel {
         case .read:
             filter.readFilter = .read
         }
+
+        advancedFilter.apply(to: &filter)
 
         return filter
     }
