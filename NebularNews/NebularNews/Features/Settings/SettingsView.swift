@@ -376,6 +376,7 @@ struct SettingsView: View {
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: settings.archiveAfterDays,
                     deleteArchivedAfterDays: settings.deleteArchivedAfterDays,
@@ -397,6 +398,7 @@ struct SettingsView: View {
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: newValue,
                     deleteArchivedAfterDays: settings.deleteArchivedAfterDays,
@@ -414,6 +416,7 @@ struct SettingsView: View {
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: settings.archiveAfterDays,
                     deleteArchivedAfterDays: newValue,
@@ -431,6 +434,7 @@ struct SettingsView: View {
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
                 try? modelContext.save()
+                pushSyncedPreferences()
             }
         )
     }
@@ -454,6 +458,14 @@ struct SettingsView: View {
 #if DEBUG
             refreshDebugMetrics()
 #endif
+        }
+    }
+
+    private func pushSyncedPreferences() {
+        let container = modelContext.container
+        Task {
+            let syncService = StandaloneStateSyncService(modelContainer: container)
+            await syncService.pushLocalPreferences()
         }
     }
 

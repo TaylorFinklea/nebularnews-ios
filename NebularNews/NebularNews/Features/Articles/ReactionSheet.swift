@@ -179,6 +179,8 @@ struct ReactionSheet: View {
         let newDismissedAt = article.dismissedAt
 
         Task {
+            let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+            try? await articleRepo.syncStandaloneUserState(id: article.id)
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService
@@ -213,6 +215,8 @@ struct ReactionSheet: View {
         try? modelContext.save()
 
         Task {
+            let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+            try? await articleRepo.syncStandaloneUserState(id: article.id)
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService

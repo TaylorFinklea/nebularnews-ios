@@ -163,10 +163,13 @@ public actor OnboardingSeedService {
         let selectedInterests = request.selectedInterestIDs.compactMap { interestsByID[$0] }
         let avoidedInterests = request.avoidedInterestIDs.compactMap { interestsByID[$0] }
 
-        return try await repository.applySeed(
+        let result = try await repository.applySeed(
             selectedInterests: selectedInterests,
             avoidedInterests: avoidedInterests,
             selectedFeeds: request.selectedFeeds
         )
+        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+        await syncService.bootstrap()
+        return result
     }
 }

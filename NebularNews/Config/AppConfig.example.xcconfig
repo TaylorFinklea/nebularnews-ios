@@ -11,7 +11,7 @@ BACKGROUND_REFRESH_TASK_IDENTIFIER = $(PRODUCT_BUNDLE_IDENTIFIER).feedRefresh
 // CloudKit sync for standalone mode.
 // Requires iCloud capability + CloudKit container in Apple Developer portal.
 // See SETUP.md "iCloud / CloudKit sync" for full setup steps.
-CLOUDKIT_CONTAINER_IDENTIFIER = iCloud.com.nebularnews.ios
+CLOUDKIT_CONTAINER_IDENTIFIER = iCloud.com.nebularnews
 CLOUDKIT_ENABLED = YES
 
 MOBILE_DEFAULT_SERVER_URL =

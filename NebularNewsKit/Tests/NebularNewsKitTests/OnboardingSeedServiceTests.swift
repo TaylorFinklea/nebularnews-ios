@@ -139,6 +139,7 @@ struct OnboardingSeedServiceTests {
         let feeds = (try? context.fetch(FetchDescriptor<Feed>())) ?? []
         let topicRows = (try? context.fetch(FetchDescriptor<TopicAffinity>())) ?? []
         let feedRows = (try? context.fetch(FetchDescriptor<FeedAffinity>())) ?? []
+        let syncedFeeds = (try? context.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
         let authorRows = (try? context.fetch(FetchDescriptor<AuthorAffinity>())) ?? []
         let weights = (try? context.fetch(FetchDescriptor<SignalWeight>())) ?? []
 
@@ -152,6 +153,7 @@ struct OnboardingSeedServiceTests {
         #expect(aiTopic.affinity == 0.6)
         #expect(natureTopic.affinity == -0.6)
         #expect(openAIFeedAffinity.affinity == 0.35)
+        #expect(syncedFeeds.count == 3)
         #expect(authorRows.isEmpty)
         #expect(weights.count == defaultSignalWeights.count)
     }

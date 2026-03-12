@@ -57,8 +57,10 @@ struct NebularNewsApp: App {
                     modelContainer: modelContainer,
                     keychainService: appState.configuration.keychainService
                 )
+                let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
                 await service.bootstrap()
                 _ = await settingsRepo.getOrCreate()
+                await syncService.bootstrap()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
@@ -84,6 +86,8 @@ struct NebularNewsApp: App {
             case .active:
                 if appState.isStandaloneMode {
                     Task {
+                        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+                        await syncService.bootstrap()
                         await ProcessingQueueSupervisor.shared.activate(
                             modelContainer: modelContainer,
                             keychainService: appState.configuration.keychainService

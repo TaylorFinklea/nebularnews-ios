@@ -42,6 +42,7 @@ public final class AppSettings: @unchecked Sendable {
     public var archiveAfterDays: Int = 0
     public var deleteArchivedAfterDays: Int = 30
     public var searchArchivedByDefault: Bool = false
+    public var syncedPreferencesUpdatedAt: Date?
 
     // Personalization migrations
     public var personalizationRebuildVersion: Int = 0

@@ -48,7 +48,10 @@ struct ArticleDetailView: View {
                         let shouldSave = article.isDismissed || !article.isRead
                         if article.isDismissed { article.clearDismissal() }
                         if !article.isRead { article.markRead() }
-                        if shouldSave { try? modelContext.save() }
+                        if shouldSave {
+                            try? modelContext.save()
+                            syncStandaloneState(for: article.id)
+                        }
                     }
             } else {
                 ContentUnavailableView(
@@ -684,11 +687,13 @@ struct ArticleDetailView: View {
     private func toggleReadState(for article: Article) {
         if article.isRead { article.markUnread() } else { article.markRead() }
         try? modelContext.save()
+        syncStandaloneState(for: article.id)
     }
 
     private func toggleReadingList(for article: Article) {
         article.toggleReadingList()
         try? modelContext.save()
+        syncStandaloneState(for: article.id)
     }
 
     private func articleURL(for article: Article) -> URL? {
@@ -759,6 +764,13 @@ struct ArticleDetailView: View {
                 keychainService: appState.configuration.keychainService
             )
             await service.dismissTagSuggestion(articleID: articleId, suggestionID: suggestion.id)
+        }
+    }
+
+    private func syncStandaloneState(for articleID: String) {
+        Task {
+            let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+            try? await articleRepo.syncStandaloneUserState(id: articleID)
         }
     }
 }

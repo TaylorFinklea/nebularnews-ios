@@ -3,12 +3,9 @@ import SwiftData
 
 /// All SwiftData model types registered with the container.
 public let cloudSyncedModelTypes: [any PersistentModel.Type] = [
-    Feed.self,
-    Article.self,
-    Tag.self,
-    ChatThread.self,
-    ChatMessage.self,
-    AppSettings.self
+    SyncedFeedSubscription.self,
+    SyncedArticleState.self,
+    SyncedPreferences.self
 ]
 
 /// Models that stay local even when CloudKit is enabled.
@@ -16,6 +13,12 @@ public let cloudSyncedModelTypes: [any PersistentModel.Type] = [
 /// These entities are operational/read-model data or use features that
 /// Core Data with CloudKit does not support, such as uniqueness constraints.
 public let localOnlyModelTypes: [any PersistentModel.Type] = [
+    Feed.self,
+    Article.self,
+    Tag.self,
+    ChatThread.self,
+    ChatMessage.self,
+    AppSettings.self,
     ArticleProcessingJob.self,
     TodaySnapshot.self,
     SignalWeight.self,

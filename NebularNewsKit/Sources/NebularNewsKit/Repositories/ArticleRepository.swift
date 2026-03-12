@@ -106,6 +106,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func markRead(id: String, isRead: Bool) async throws
     func setReadingList(id: String, isSaved: Bool) async throws
     func react(id: String, value: Int?, reasonCodes: [String]?) async throws
+    func syncStandaloneUserState(id: String) async throws
     func addTag(articleId: String, tag: Tag) async throws
     func removeTag(articleId: String, tagId: String) async throws
     func updateAIFields(
@@ -678,6 +679,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             article.contentRevision = 1
         }
         article.refreshQueryState()
+        applySyncedArticleStateIfPresent(to: article)
         modelContext.insert(article)
         try modelContext.save()
         try await enqueueMissingProcessingJobs(for: article.id)
@@ -706,6 +708,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         newArticle.queryIsVisible = false
         newArticle.contentRevision = 1
         newArticle.refreshQueryState()
+        applySyncedArticleStateIfPresent(to: newArticle)
 
         modelContext.insert(newArticle)
         try modelContext.save()
@@ -719,6 +722,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         } else {
             article.markUnread()
         }
+        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         await rebuildTodaySnapshot()
         ArticleChangeBus.postFeedPageMightChange()
@@ -732,6 +736,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         } else {
             article.removeFromReadingList()
         }
+        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         ArticleChangeBus.postReadingListChanged()
         ArticleChangeBus.postArticleChanged(id: id)
@@ -740,10 +745,22 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func react(id: String, value: Int?, reasonCodes: [String]?) async throws {
         guard let article = await get(id: id) else { return }
         article.setReaction(value: value, reasonCodes: reasonCodes)
+        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         await rebuildTodaySnapshot()
         ArticleChangeBus.postFeedPageMightChange()
         ArticleChangeBus.postArticleChanged(id: id)
+    }
+
+    public func syncStandaloneUserState(id: String) async throws {
+        guard let article = await get(id: id) else { return }
+        article.refreshQueryState()
+        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
+        try modelContext.save()
+        await rebuildTodaySnapshot()
+        ArticleChangeBus.postArticleChanged(id: id)
+        ArticleChangeBus.postReadingListChanged()
+        ArticleChangeBus.postFeedPageMightChange()
     }
 
     public func addTag(articleId: String, tag: Tag) async throws {
@@ -1664,6 +1681,53 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         }
 
         return reclaimed
+    }
+
+    private func syncedArticleState(articleKey: String) -> SyncedArticleState? {
+        guard !articleKey.isEmpty else { return nil }
+        var descriptor = FetchDescriptor<SyncedArticleState>(
+            predicate: #Predicate<SyncedArticleState> { $0.articleKey == articleKey }
+        )
+        descriptor.fetchLimit = 1
+        return try? modelContext.fetch(descriptor).first
+    }
+
+    private func applySyncedArticleStateIfPresent(to article: Article) {
+        guard !article.articleKey.isEmpty,
+              let synced = syncedArticleState(articleKey: article.articleKey)
+        else {
+            return
+        }
+
+        article.isRead = synced.isRead
+        article.readAt = synced.readAt
+        article.dismissedAt = synced.dismissedAt
+        article.readingListAddedAt = synced.readingListAddedAt
+        article.reactionValue = synced.reactionValue
+        article.reactionReasonCodes = synced.reactionReasonCodes
+        article.reactionUpdatedAt = synced.reactionValue == nil ? nil : synced.updatedAt
+        article.refreshQueryState()
+    }
+
+    private func upsertSyncedArticleState(from article: Article, updatedAt: Date) {
+        article.refreshQueryState()
+        guard !article.articleKey.isEmpty else {
+            return
+        }
+
+        let row = syncedArticleState(articleKey: article.articleKey) ?? {
+            let newRow = SyncedArticleState(articleKey: article.articleKey)
+            modelContext.insert(newRow)
+            return newRow
+        }()
+
+        row.isRead = article.isRead
+        row.readAt = article.readAt
+        row.dismissedAt = article.dismissedAt
+        row.readingListAddedAt = article.readingListAddedAt
+        row.reactionValue = article.reactionValue
+        row.reactionReasonCodes = article.reactionReasonCodes
+        row.updatedAt = updatedAt
     }
 }
 

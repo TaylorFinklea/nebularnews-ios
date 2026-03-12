@@ -19,6 +19,8 @@ actor RefreshCoordinator {
     static let shared = RefreshCoordinator()
 
     func runWarmStart(modelContainer: ModelContainer, keychainService: String) async {
+        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+        await syncService.bootstrap()
         await refreshIfNeeded(
             modelContainer: modelContainer,
             keychainService: keychainService,
@@ -38,6 +40,8 @@ actor RefreshCoordinator {
     }
 
     func runManualRefresh(modelContainer: ModelContainer, keychainService: String) async -> (result: PollCycleResult, storage: ArticleStoragePolicyResult, prepared: Int) {
+        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+        await syncService.bootstrap()
         await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
             modelContainer: modelContainer,
             keychainService: keychainService
@@ -74,6 +78,8 @@ actor RefreshCoordinator {
     }
 
     func runBackgroundRefresh(modelContainer: ModelContainer, keychainService: String) async {
+        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+        await syncService.bootstrap()
         await PersonalizationMigrationCoordinator.shared.migrateIfNeeded(
             modelContainer: modelContainer,
             keychainService: keychainService
@@ -154,6 +160,8 @@ actor RefreshCoordinator {
         allowLowPriority: Bool,
         bypassBackoff: Bool
     ) async {
+        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+        await syncService.bootstrap()
         let feedRepo = LocalFeedRepository(modelContainer: modelContainer)
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContainer)

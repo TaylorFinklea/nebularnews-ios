@@ -8,6 +8,7 @@ import SwiftData
 @Model
 public final class Feed: @unchecked Sendable {
     public var id: String = UUID().uuidString
+    public var feedKey: String = ""
     public var title: String = ""
     public var feedUrl: String = ""
     public var siteUrl: String?
@@ -29,8 +30,16 @@ public final class Feed: @unchecked Sendable {
 
     public init(feedUrl: String, title: String = "") {
         self.id = UUID().uuidString
-        self.feedUrl = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
+        let canonicalURL = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
+        self.feedUrl = canonicalURL
+        self.feedKey = normalizedFeedKey(from: canonicalURL) ?? canonicalURL
         self.title = title
         self.createdAt = Date()
+    }
+
+    public func refreshIdentity() {
+        let canonicalURL = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
+        feedUrl = canonicalURL
+        feedKey = normalizedFeedKey(from: canonicalURL) ?? canonicalURL
     }
 }

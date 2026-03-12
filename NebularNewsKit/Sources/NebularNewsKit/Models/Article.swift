@@ -22,6 +22,7 @@ public enum ArticleArchiveReason: String, Codable, Sendable {
 @Model
 public final class Article: @unchecked Sendable {
     public var id: String = UUID().uuidString
+    public var articleKey: String = ""
     public var canonicalUrl: String?
     public var title: String?
     public var author: String?
@@ -105,6 +106,12 @@ public final class Article: @unchecked Sendable {
         self.title = title
         self.fetchedAt = Date()
         self.querySortDate = self.fetchedAt
+        self.articleKey = standaloneArticleKey(
+            canonicalURL: canonicalUrl,
+            feedKey: nil,
+            title: title,
+            publishedAt: nil
+        ) ?? ""
     }
 
     // MARK: - Computed Helpers
@@ -218,6 +225,12 @@ public final class Article: @unchecked Sendable {
 
     public var isUnreadQueueCandidate: Bool {
         !isRead && !isDismissed
+    }
+
+    public var userStateUpdatedAt: Date? {
+        [readAt, dismissedAt, readingListAddedAt, reactionUpdatedAt]
+            .compactMap { $0 }
+            .max()
     }
 
     /// Retention uses the article's own age when available, falling back to fetch time.
@@ -375,6 +388,16 @@ public final class Article: @unchecked Sendable {
     }
 
     public func refreshQueryState() {
+        let resolvedArticleKey = standaloneArticleKey(
+            canonicalURL: canonicalUrl,
+            feedKey: feed?.feedKey,
+            title: title,
+            publishedAt: publishedAt
+        )
+        if let resolvedArticleKey {
+            articleKey = resolvedArticleKey
+        }
+
         querySortDate = publishedAt ?? fetchedAt
         queryDisplayedScore = displayedScore ?? 0
         queryIsArchived = isArchived

@@ -146,12 +146,14 @@ struct ArticleListView: View {
         if article.isRead {
             article.markUnread()
             try? modelContext.save()
+            syncStandaloneState(for: article.id)
             return
         }
 
         if article.isDismissed {
             article.clearDismissal()
             try? modelContext.save()
+            syncStandaloneState(for: article.id)
             return
         }
 
@@ -161,6 +163,8 @@ struct ArticleListView: View {
         try? modelContext.save()
 
         Task {
+            let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+            try? await articleRepo.syncStandaloneUserState(id: article.id)
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService
@@ -170,6 +174,13 @@ struct ArticleListView: View {
                 previousDismissedAt: previousDismissedAt,
                 newDismissedAt: newDismissedAt
             )
+        }
+    }
+
+    private func syncStandaloneState(for articleID: String) {
+        Task {
+            let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
+            try? await articleRepo.syncStandaloneUserState(id: articleID)
         }
     }
 
