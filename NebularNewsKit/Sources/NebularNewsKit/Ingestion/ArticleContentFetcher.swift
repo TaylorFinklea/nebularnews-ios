@@ -135,12 +135,10 @@ public actor ArticleContentFetcher {
     }
 
     private func fetch(candidate: ArticleContentFetchCandidate) async -> ArticleContentFetchResult {
-        if Self.isKnownPreviewOnlySource(urlString: candidate.canonicalUrl) {
-            try? await articleRepo.recordContentFetchAttempt(id: candidate.id)
-            return ArticleContentFetchResult(articleId: candidate.id, status: .blocked)
-        }
-
         do {
+            // TODO: When this app becomes a true companion to the NebularNews website,
+            // prefer pulling canonical article content from the website/server pipeline
+            // before falling back to on-device HTML fetching and extraction.
             let html = try await pageFetcher.fetchHTML(url: candidate.canonicalUrl)
 
             if ArticleContentExtractor.looksBlocked(html) {
@@ -174,17 +172,6 @@ public actor ArticleContentFetcher {
             try? await articleRepo.recordContentFetchAttempt(id: candidate.id)
             return ArticleContentFetchResult(articleId: candidate.id, status: .failed)
         }
-    }
-
-    private static func isKnownPreviewOnlySource(urlString: String) -> Bool {
-        guard let url = URL(string: urlString),
-              let host = url.host?.lowercased()
-        else {
-            return false
-        }
-
-        let normalizedHost = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        return normalizedHost == "openai.com" || normalizedHost.hasSuffix(".openai.com")
     }
 }
 

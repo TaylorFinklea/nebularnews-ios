@@ -14,10 +14,24 @@ private struct MockArticlePageFetcher: ArticlePageFetching, @unchecked Sendable 
     }
 }
 
-private struct ShouldNotBeCalledPageFetcher: ArticlePageFetching, @unchecked Sendable {
+private actor RecordingArticlePageFetcher: ArticlePageFetching {
+    private(set) var requestedURLs: [String] = []
+    var htmlByURL: [String: String]
+
+    init(htmlByURL: [String: String]) {
+        self.htmlByURL = htmlByURL
+    }
+
     func fetchHTML(url: String) async throws -> String {
-        Issue.record("Expected preview-only source to skip direct HTML fetch for \(url)")
-        throw FeedFetchError.networkError(underlying: "Should not be called")
+        requestedURLs.append(url)
+        guard let html = htmlByURL[url] else {
+            throw FeedFetchError.invalidURL
+        }
+        return html
+    }
+
+    func requests() -> [String] {
+        requestedURLs
     }
 }
 
@@ -156,8 +170,8 @@ struct ArticleContentFetcherTests {
         #expect(retriedCandidate?.id == article.id)
     }
 
-    @Test("Known preview-only sources are blocked without fetching HTML")
-    func previewOnlySourcesAreBlockedWithoutNetworkFetch() async throws {
+    @Test("OpenAI sources are attempted and only blocked when the fetched page is challenged")
+    func openAISourcesAreConditionallyBlocked() async throws {
         let container = try makeContainer()
         let feedRepo = LocalFeedRepository(modelContainer: container)
         let articleRepo = LocalArticleRepository(modelContainer: container)
@@ -173,15 +187,21 @@ struct ArticleContentFetcherTests {
 
         let insertedArticles = await articleRepo.list(filter: ArticleFilter(), sort: .newest, limit: 10, offset: 0)
         let article = try #require(insertedArticles.first)
+        let pageFetcher = RecordingArticlePageFetcher(
+            htmlByURL: [
+                "https://openai.com/index/rakuten": "<html><title>Just a moment...</title><body>Enable JavaScript and cookies to continue</body></html>"
+            ]
+        )
 
         let fetcher = ArticleContentFetcher(
             modelContainer: container,
-            pageFetcher: ShouldNotBeCalledPageFetcher()
+            pageFetcher: pageFetcher
         )
 
         let result = await fetcher.fetchMissingContent(articleId: article.id)
 
         #expect(result.status == .blocked)
+        #expect(await pageFetcher.requests() == ["https://openai.com/index/rakuten"])
 
         let refreshedArticle = try #require(await articleRepo.get(id: article.id))
         #expect(refreshedArticle.contentFetchAttemptedAt != nil)
