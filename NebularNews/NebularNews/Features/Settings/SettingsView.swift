@@ -212,6 +212,12 @@ struct SettingsView: View {
                         } label: {
                             Label("Job Inspector", systemImage: "list.bullet.rectangle")
                         }
+
+                        NavigationLink {
+                            DeveloperCloudKitSyncView()
+                        } label: {
+                            Label("CloudKit Sync", systemImage: "icloud")
+                        }
                     }
                 } header: {
                     Label("Developer Mode", systemImage: "hammer")

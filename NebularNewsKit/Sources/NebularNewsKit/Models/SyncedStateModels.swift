@@ -87,3 +87,98 @@ public final class SyncedPreferences: @unchecked Sendable {
         self.updatedAt = updatedAt
     }
 }
+
+#if DEBUG
+public struct StandaloneSyncDebugFeedRow: Identifiable, Sendable {
+    public let id: String
+    public let feedKey: String
+    public let feedURL: String
+    public let titleOverride: String?
+    public let isEnabled: Bool
+    public let updatedAt: Date
+
+    public init(
+        id: String,
+        feedKey: String,
+        feedURL: String,
+        titleOverride: String?,
+        isEnabled: Bool,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.feedKey = feedKey
+        self.feedURL = feedURL
+        self.titleOverride = titleOverride
+        self.isEnabled = isEnabled
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct StandaloneSyncDebugArticleStateRow: Identifiable, Sendable {
+    public let id: String
+    public let articleKey: String
+    public let isRead: Bool
+    public let isDismissed: Bool
+    public let isSaved: Bool
+    public let reactionValue: Int?
+    public let updatedAt: Date
+
+    public init(
+        id: String,
+        articleKey: String,
+        isRead: Bool,
+        isDismissed: Bool,
+        isSaved: Bool,
+        reactionValue: Int?,
+        updatedAt: Date
+    ) {
+        self.id = id
+        self.articleKey = articleKey
+        self.isRead = isRead
+        self.isDismissed = isDismissed
+        self.isSaved = isSaved
+        self.reactionValue = reactionValue
+        self.updatedAt = updatedAt
+    }
+}
+
+public struct StandaloneSyncDebugSnapshot: Sendable {
+    public let syncedFeedSubscriptionCount: Int
+    public let syncedArticleStateCount: Int
+    public let localFeedCount: Int
+    public let localArticleCount: Int
+    public let localReadCount: Int
+    public let localDismissedCount: Int
+    public let localSavedCount: Int
+    public let localReactedCount: Int
+    public let syncedPreferences: SyncedPreferences?
+    public let feedRows: [StandaloneSyncDebugFeedRow]
+    public let articleStateRows: [StandaloneSyncDebugArticleStateRow]
+
+    public init(
+        syncedFeedSubscriptionCount: Int,
+        syncedArticleStateCount: Int,
+        localFeedCount: Int,
+        localArticleCount: Int,
+        localReadCount: Int,
+        localDismissedCount: Int,
+        localSavedCount: Int,
+        localReactedCount: Int,
+        syncedPreferences: SyncedPreferences?,
+        feedRows: [StandaloneSyncDebugFeedRow],
+        articleStateRows: [StandaloneSyncDebugArticleStateRow]
+    ) {
+        self.syncedFeedSubscriptionCount = syncedFeedSubscriptionCount
+        self.syncedArticleStateCount = syncedArticleStateCount
+        self.localFeedCount = localFeedCount
+        self.localArticleCount = localArticleCount
+        self.localReadCount = localReadCount
+        self.localDismissedCount = localDismissedCount
+        self.localSavedCount = localSavedCount
+        self.localReactedCount = localReactedCount
+        self.syncedPreferences = syncedPreferences
+        self.feedRows = feedRows
+        self.articleStateRows = articleStateRows
+    }
+}
+#endif

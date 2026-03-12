@@ -1733,6 +1733,57 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
 #if DEBUG
 extension LocalArticleRepository {
+    public func standaloneSyncDebugSnapshot() async -> StandaloneSyncDebugSnapshot {
+        let syncedFeeds = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
+        let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
+        let syncedPreferences = try? modelContext.fetch(FetchDescriptor<SyncedPreferences>()).first
+        let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
+        let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
+
+        let feedRows = syncedFeeds
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(20)
+            .map {
+                StandaloneSyncDebugFeedRow(
+                    id: $0.id,
+                    feedKey: $0.feedKey,
+                    feedURL: $0.feedURL,
+                    titleOverride: $0.titleOverride,
+                    isEnabled: $0.isEnabled,
+                    updatedAt: $0.updatedAt
+                )
+            }
+
+        let articleStateRows = syncedStates
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(20)
+            .map {
+                StandaloneSyncDebugArticleStateRow(
+                    id: $0.id,
+                    articleKey: $0.articleKey,
+                    isRead: $0.isRead,
+                    isDismissed: $0.dismissedAt != nil,
+                    isSaved: $0.readingListAddedAt != nil,
+                    reactionValue: $0.reactionValue,
+                    updatedAt: $0.updatedAt
+                )
+            }
+
+        return StandaloneSyncDebugSnapshot(
+            syncedFeedSubscriptionCount: syncedFeeds.count,
+            syncedArticleStateCount: syncedStates.count,
+            localFeedCount: localFeeds.count,
+            localArticleCount: localArticles.count,
+            localReadCount: localArticles.filter(\.isRead).count,
+            localDismissedCount: localArticles.filter { $0.dismissedAt != nil }.count,
+            localSavedCount: localArticles.filter(\.isInReadingList).count,
+            localReactedCount: localArticles.filter { $0.reactionValue != nil }.count,
+            syncedPreferences: syncedPreferences,
+            feedRows: Array(feedRows),
+            articleStateRows: Array(articleStateRows)
+        )
+    }
+
     public func processingDebugSnapshot() async -> ArticleProcessingDebugSnapshot {
         let jobs = allProcessingJobs()
         let articleTitles = Dictionary(
