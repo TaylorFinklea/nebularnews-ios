@@ -21,8 +21,8 @@ public protocol FeedRepositoryProtocol: Sendable {
 
 @ModelActor
 public actor LocalFeedRepository: FeedRepositoryProtocol {
-
     public func list() async -> [Feed] {
+        ensureCanonicalStoredFeedURLs()
         let descriptor = FetchDescriptor<Feed>(
             sortBy: [SortDescriptor(\.title, comparator: .localizedStandard)]
         )
@@ -30,7 +30,11 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
     }
 
     public func listSnapshots() async -> [FeedSnapshot] {
-        let feeds = await list()
+        ensureCanonicalStoredFeedURLs()
+        let descriptor = FetchDescriptor<Feed>(
+            sortBy: [SortDescriptor(\.title, comparator: .localizedStandard)]
+        )
+        let feeds = (try? modelContext.fetch(descriptor)) ?? []
         return feeds.map { feed in
             FeedSnapshot(
                 id: feed.id,
@@ -46,6 +50,7 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
     }
 
     public func get(id: String) async -> Feed? {
+        ensureCanonicalStoredFeedURLs()
         var descriptor = FetchDescriptor<Feed>(
             predicate: #Predicate { $0.id == id }
         )
@@ -54,20 +59,25 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
     }
 
     public func getByUrl(_ feedUrl: String) async -> Feed? {
+        ensureCanonicalStoredFeedURLs()
+        let normalizedURL = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
         var descriptor = FetchDescriptor<Feed>(
-            predicate: #Predicate { $0.feedUrl == feedUrl }
+            predicate: #Predicate { $0.feedUrl == normalizedURL }
         )
         descriptor.fetchLimit = 1
         return try? modelContext.fetch(descriptor).first
     }
 
     public func add(feedUrl: String, title: String) async throws -> Feed {
+        ensureCanonicalStoredFeedURLs()
+        let normalizedURL = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
+
         // Check for duplicates
-        if let existing = await getByUrl(feedUrl) {
+        if let existing = await getByUrl(normalizedURL) {
             return existing
         }
 
-        let feed = Feed(feedUrl: feedUrl, title: title)
+        let feed = Feed(feedUrl: normalizedURL, title: title)
         modelContext.insert(feed)
         try modelContext.save()
         return feed
@@ -124,5 +134,24 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
         feed.errorMessage = message
         feed.consecutiveErrors += 1
         try modelContext.save()
+    }
+
+    private func ensureCanonicalStoredFeedURLs() {
+        let feeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
+        var didChange = false
+
+        for feed in feeds {
+            guard let canonicalURL = canonicalFeedURLForStorage(feed.feedUrl),
+                  canonicalURL != feed.feedUrl
+            else {
+                continue
+            }
+            feed.feedUrl = canonicalURL
+            didChange = true
+        }
+
+        if didChange {
+            try? modelContext.save()
+        }
     }
 }

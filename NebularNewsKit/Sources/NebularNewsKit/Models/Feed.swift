@@ -29,7 +29,7 @@ public final class Feed: @unchecked Sendable {
 
     public init(feedUrl: String, title: String = "") {
         self.id = UUID().uuidString
-        self.feedUrl = feedUrl
+        self.feedUrl = canonicalFeedURLForStorage(feedUrl) ?? feedUrl
         self.title = title
         self.createdAt = Date()
     }

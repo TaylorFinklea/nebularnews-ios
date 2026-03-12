@@ -35,6 +35,57 @@ struct FeedRepositoryTests {
         #expect(feeds.count == 1)
     }
 
+    @Test("Legacy ATS-hostile URLs are normalized on add")
+    func normalizesLegacyATSURLs() async throws {
+        let repo = try makeRepo()
+
+        let pbsFeed = try await repo.add(
+            feedUrl: "https://feeds.pbs.org/newshour/rss/headlines",
+            title: "PBS"
+        )
+        let jmlrFeed = try await repo.add(
+            feedUrl: "http://www.jmlr.org/jmlr.xml",
+            title: "JMLR"
+        )
+
+        #expect(pbsFeed.feedUrl == "https://pbs.org/newshour/feeds/rss/headlines")
+        #expect(jmlrFeed.feedUrl == "https://www.jmlr.org/jmlr.xml")
+    }
+
+    @Test("URL normalization deduplicates equivalent feeds")
+    func deduplicatesNormalizedFeedURLs() async throws {
+        let repo = try makeRepo()
+
+        let first = try await repo.add(
+            feedUrl: "https://feeds.pbs.org/newshour/rss/headlines",
+            title: "PBS Legacy"
+        )
+        let second = try await repo.add(
+            feedUrl: "https://pbs.org/newshour/feeds/rss/headlines",
+            title: "PBS Canonical"
+        )
+
+        #expect(first.id == second.id)
+        let feeds = await repo.list()
+        #expect(feeds.count == 1)
+    }
+
+    @Test("Listing repairs previously stored legacy URLs")
+    func listRepairsLegacyStoredURLs() async throws {
+        let container = try makeInMemoryModelContainer()
+        let context = ModelContext(container)
+        let legacyFeed = Feed(feedUrl: "https://feeds.pbs.org/newshour/rss/politics", title: "PBS Politics")
+        legacyFeed.feedUrl = "https://feeds.pbs.org/newshour/rss/politics"
+        context.insert(legacyFeed)
+        try context.save()
+
+        let repo = LocalFeedRepository(modelContainer: container)
+        let feeds = await repo.list()
+        let repaired = try #require(feeds.first)
+
+        #expect(repaired.feedUrl == "https://pbs.org/newshour/feeds/rss/politics")
+    }
+
     @Test("Delete feed")
     func deleteFeed() async throws {
         let repo = try makeRepo()

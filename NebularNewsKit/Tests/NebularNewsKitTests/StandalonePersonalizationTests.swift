@@ -277,14 +277,14 @@ struct StandalonePersonalizationTests {
         let cases: [Case] = [
             .init(
                 feedTitle: "PBS NewsHour Headlines",
-                feedURL: "https://feeds.pbs.org/newshour/rss/headlines",
+                feedURL: "https://www.pbs.org/newshour/feeds/rss/headlines",
                 siteURL: "https://www.pbs.org/newshour",
                 expectedTag: "World News",
                 unexpectedBonus: "U.S. News"
             ),
             .init(
                 feedTitle: "PBS NewsHour Politics",
-                feedURL: "https://feeds.pbs.org/newshour/rss/politics",
+                feedURL: "https://www.pbs.org/newshour/feeds/rss/politics",
                 siteURL: "https://www.pbs.org/newshour/politics",
                 expectedTag: "Politics",
                 unexpectedBonus: "Policy"

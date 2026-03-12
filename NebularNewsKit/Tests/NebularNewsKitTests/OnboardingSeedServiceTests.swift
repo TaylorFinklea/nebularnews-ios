@@ -179,7 +179,7 @@ struct OnboardingSeedServiceTests {
         let worldNews = try #require(topicRows.first(where: { $0.tagNameNormalized == "world news" }))
         let health = try #require(topicRows.first(where: { $0.tagNameNormalized == "health" }))
         let food = try #require(topicRows.first(where: { $0.tagNameNormalized == "food" }))
-        let pbsFeed = try #require(feedRows.first(where: { $0.feedKey == normalizedFeedKey(from: "https://feeds.pbs.org/newshour/rss/headlines") }))
+        let pbsFeed = try #require(feedRows.first(where: { $0.feedKey == normalizedFeedKey(from: "https://www.pbs.org/newshour/feeds/rss/headlines") }))
 
         #expect(worldNews.affinity == 0.6)
         #expect(health.affinity == 0.6)

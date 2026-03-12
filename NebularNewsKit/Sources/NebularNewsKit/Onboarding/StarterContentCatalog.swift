@@ -109,7 +109,8 @@ public let starterFeedCatalog: [StarterFeedDefinition] = [
     .init(
         id: "pbs-newshour-headlines",
         title: "PBS NewsHour Headlines",
-        feedURL: "https://feeds.pbs.org/newshour/rss/headlines"
+        feedURL: "https://www.pbs.org/newshour/feeds/rss/headlines",
+        aliases: ["https://feeds.pbs.org/newshour/rss/headlines"]
     ),
     .init(
         id: "bbc-world-news",
@@ -119,7 +120,8 @@ public let starterFeedCatalog: [StarterFeedDefinition] = [
     .init(
         id: "pbs-newshour-politics",
         title: "PBS NewsHour Politics",
-        feedURL: "https://feeds.pbs.org/newshour/rss/politics"
+        feedURL: "https://www.pbs.org/newshour/feeds/rss/politics",
+        aliases: ["https://feeds.pbs.org/newshour/rss/politics"]
     ),
     .init(
         id: "bbc-politics",
@@ -200,7 +202,8 @@ public let starterFeedCatalog: [StarterFeedDefinition] = [
     .init(
         id: "jmlr",
         title: "JMLR",
-        feedURL: "http://www.jmlr.org/jmlr.xml"
+        feedURL: "https://www.jmlr.org/jmlr.xml",
+        aliases: ["http://www.jmlr.org/jmlr.xml"]
     ),
     .init(
         id: "cncf",
