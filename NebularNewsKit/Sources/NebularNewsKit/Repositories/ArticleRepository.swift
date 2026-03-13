@@ -1736,7 +1736,7 @@ extension LocalArticleRepository {
     public func standaloneSyncDebugSnapshot() async -> StandaloneSyncDebugSnapshot {
         let syncedFeeds = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
         let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
-        let syncedPreferences = try? modelContext.fetch(FetchDescriptor<SyncedPreferences>()).first
+        let syncedPreferencesRow = try? modelContext.fetch(FetchDescriptor<SyncedPreferences>()).first
         let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
         let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
 
@@ -1768,6 +1768,16 @@ extension LocalArticleRepository {
                     updatedAt: $0.updatedAt
                 )
             }
+
+        let syncedPreferences = syncedPreferencesRow.map {
+            StandaloneSyncDebugPreferences(
+                archiveAfterDays: $0.archiveAfterDays,
+                deleteArchivedAfterDays: $0.deleteArchivedAfterDays,
+                maxArticlesPerFeed: $0.maxArticlesPerFeed,
+                searchArchivedByDefault: $0.searchArchivedByDefault,
+                updatedAt: $0.updatedAt
+            )
+        }
 
         return StandaloneSyncDebugSnapshot(
             syncedFeedSubscriptionCount: syncedFeeds.count,

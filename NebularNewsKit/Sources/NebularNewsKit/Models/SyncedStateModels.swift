@@ -89,6 +89,28 @@ public final class SyncedPreferences: @unchecked Sendable {
 }
 
 #if DEBUG
+public struct StandaloneSyncDebugPreferences: Sendable {
+    public let archiveAfterDays: Int
+    public let deleteArchivedAfterDays: Int
+    public let maxArticlesPerFeed: Int
+    public let searchArchivedByDefault: Bool
+    public let updatedAt: Date
+
+    public init(
+        archiveAfterDays: Int,
+        deleteArchivedAfterDays: Int,
+        maxArticlesPerFeed: Int,
+        searchArchivedByDefault: Bool,
+        updatedAt: Date
+    ) {
+        self.archiveAfterDays = archiveAfterDays
+        self.deleteArchivedAfterDays = deleteArchivedAfterDays
+        self.maxArticlesPerFeed = maxArticlesPerFeed
+        self.searchArchivedByDefault = searchArchivedByDefault
+        self.updatedAt = updatedAt
+    }
+}
+
 public struct StandaloneSyncDebugFeedRow: Identifiable, Sendable {
     public let id: String
     public let feedKey: String
@@ -151,7 +173,7 @@ public struct StandaloneSyncDebugSnapshot: Sendable {
     public let localDismissedCount: Int
     public let localSavedCount: Int
     public let localReactedCount: Int
-    public let syncedPreferences: SyncedPreferences?
+    public let syncedPreferences: StandaloneSyncDebugPreferences?
     public let feedRows: [StandaloneSyncDebugFeedRow]
     public let articleStateRows: [StandaloneSyncDebugArticleStateRow]
 
@@ -164,7 +186,7 @@ public struct StandaloneSyncDebugSnapshot: Sendable {
         localDismissedCount: Int,
         localSavedCount: Int,
         localReactedCount: Int,
-        syncedPreferences: SyncedPreferences?,
+        syncedPreferences: StandaloneSyncDebugPreferences?,
         feedRows: [StandaloneSyncDebugFeedRow],
         articleStateRows: [StandaloneSyncDebugArticleStateRow]
     ) {
