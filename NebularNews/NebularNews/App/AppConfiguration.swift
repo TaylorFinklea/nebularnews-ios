@@ -55,7 +55,14 @@ private extension Bundle {
         case let number as NSNumber:
             return number.boolValue
         default:
-            return String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "true"
+            switch String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "1":
+                return true
+            case "false", "no", "0":
+                return false
+            default:
+                return false
+            }
         }
     }
 }

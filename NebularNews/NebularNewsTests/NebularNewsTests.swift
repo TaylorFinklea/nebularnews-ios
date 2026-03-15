@@ -30,6 +30,31 @@ struct NebularNewsTests {
         #expect(configuration.mobileDefaultServerURL == nil)
     }
 
+    @Test func appConfigurationTreatsYesAsEnabledForCloudKit() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NebularNewsTests-\(UUID().uuidString)", isDirectory: true)
+        let bundleDirectory = tempDirectory.appendingPathComponent("CloudKitEnabled.bundle", isDirectory: true)
+        try FileManager.default.createDirectory(at: bundleDirectory, withIntermediateDirectories: true)
+
+        let infoPlistURL = bundleDirectory.appendingPathComponent("Info.plist")
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "com.nebularnews.tests.cloudkit",
+            "KeychainService": "com.nebularnews.tests.cloudkit",
+            "CloudKitEnabled": "YES",
+            "CloudKitContainerIdentifier": "iCloud.com.nebularnews"
+        ]
+        let plistData = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        try plistData.write(to: infoPlistURL)
+
+        let bundle = try #require(Bundle(url: bundleDirectory))
+        let configuration = AppConfiguration(bundle: bundle)
+
+        #expect(configuration.cloudKitEnabled == true)
+        #expect(configuration.cloudKitContainerIdentifier == "iCloud.com.nebularnews")
+
+        try? FileManager.default.removeItem(at: tempDirectory)
+    }
+
     @MainActor
     @Test func appStateCompletesStandaloneOnboardingAndPersistsObservableState() async throws {
         let bundle = Bundle(for: BundleProbe.self)
