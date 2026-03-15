@@ -88,6 +88,9 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func fetchReadingListPage(filter: ArticleFilter, cursor: ArticleListCursor?, limit: Int) async -> [Article]
     func listArticles(ids: [String]) async -> [Article]
     func activeArticleCountsByFeed() async -> [String: Int]
+    func feedReputation(feedKey: String?) async -> FeedReputation
+    func listFeedReputationSummaries() async -> [FeedReputationSummary]
+    func listLowestReputationFeeds(limit: Int) async -> [FeedReputationSummary]
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
@@ -357,6 +360,51 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             guard let feedID = element.key else { return }
             partial[feedID] = element.value.count
         }
+    }
+
+    public func feedReputation(feedKey: String?) async -> FeedReputation {
+        guard let feedKey, !feedKey.isEmpty else {
+            return computeFeedReputation(feedbackCount: 0, weightedFeedbackCount: 0, ratingSum: 0)
+        }
+
+        var accumulator = FeedReputationAccumulator()
+        for state in allSyncedArticleStates() where state.feedKey == feedKey {
+            accumulator.add(
+                reactionValue: state.reactionValue,
+                serializedReasonCodes: state.reactionReasonCodes,
+                feedbackAt: state.reactionUpdatedAt ?? state.updatedAt
+            )
+        }
+        return accumulator.reputation
+    }
+
+    public func listFeedReputationSummaries() async -> [FeedReputationSummary] {
+        allFeedReputationSummaries()
+            .sorted {
+                let lhsName = preferredFeedDisplayName(title: $0.title, feedURL: $0.feedURL)
+                let rhsName = preferredFeedDisplayName(title: $1.title, feedURL: $1.feedURL)
+                return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
+            }
+    }
+
+    public func listLowestReputationFeeds(limit: Int) async -> [FeedReputationSummary] {
+        Array(
+            allFeedReputationSummaries()
+                .filter { $0.feedbackCount > 0 }
+                .sorted {
+                    if $0.score != $1.score {
+                        return $0.score < $1.score
+                    }
+                    if $0.feedbackCount != $1.feedbackCount {
+                        return $0.feedbackCount > $1.feedbackCount
+                    }
+
+                    let lhsName = preferredFeedDisplayName(title: $0.title, feedURL: $0.feedURL)
+                    let rhsName = preferredFeedDisplayName(title: $1.title, feedURL: $1.feedURL)
+                    return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
+                }
+                .prefix(max(limit, 0))
+        )
     }
 
     public func pendingVisibleArticleCount() async -> Int {
@@ -1683,6 +1731,77 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return reclaimed
     }
 
+    private func allSyncedArticleStates() -> [SyncedArticleState] {
+        (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
+    }
+
+    private func allFeedReputationSummaries() -> [FeedReputationSummary] {
+        let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
+        let syncedSubscriptions = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
+        let syncedStates = allSyncedArticleStates()
+
+        let localByKey = Dictionary(
+            uniqueKeysWithValues: localFeeds.compactMap { feed -> (String, Feed)? in
+                feed.refreshIdentity()
+                guard !feed.feedKey.isEmpty else { return nil }
+                return (feed.feedKey, feed)
+            }
+        )
+        let subscriptionsByKey = Dictionary(uniqueKeysWithValues: syncedSubscriptions.map { ($0.feedKey, $0) })
+
+        var accumulators: [String: FeedReputationAccumulator] = [:]
+        for state in syncedStates {
+            guard !state.feedKey.isEmpty else { continue }
+            var accumulator = accumulators[state.feedKey] ?? FeedReputationAccumulator()
+            accumulator.add(
+                reactionValue: state.reactionValue,
+                serializedReasonCodes: state.reactionReasonCodes,
+                feedbackAt: state.reactionUpdatedAt ?? state.updatedAt
+            )
+            accumulators[state.feedKey] = accumulator
+        }
+
+        let allFeedKeys = Set(localByKey.keys)
+            .union(subscriptionsByKey.keys)
+            .union(accumulators.keys)
+
+        return allFeedKeys.map { feedKey in
+            let localFeed = localByKey[feedKey]
+            let subscription = subscriptionsByKey[feedKey]
+            let accumulator = accumulators[feedKey] ?? FeedReputationAccumulator()
+            let reputation = accumulator.reputation
+
+            let localTitle = localFeed?.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let syncedTitle = subscription?.titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = (localTitle?.isEmpty == false ? localTitle : nil)
+                ?? (syncedTitle?.isEmpty == false ? syncedTitle : nil)
+                ?? subscription?.feedURL
+                ?? localFeed?.feedUrl
+                ?? feedKey
+            let feedURL = localFeed?.feedUrl ?? subscription?.feedURL ?? feedKey
+            let isEnabled = localFeed?.isEnabled ?? subscription?.isEnabled ?? true
+
+            return FeedReputationSummary(
+                feedKey: feedKey,
+                feedID: localFeed?.id,
+                title: title,
+                feedURL: feedURL,
+                isEnabled: isEnabled,
+                feedbackCount: reputation.feedbackCount,
+                weightedFeedbackCount: reputation.weightedFeedbackCount,
+                ratingSum: reputation.ratingSum,
+                score: reputation.score,
+                normalizedScore: reputation.normalizedScore,
+                lastFeedbackAt: accumulator.lastFeedbackAt
+            )
+        }
+    }
+
+    private func preferredFeedDisplayName(title: String, feedURL: String) -> String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedTitle.isEmpty ? feedURL : trimmedTitle
+    }
+
     private func syncedArticleState(articleKey: String) -> SyncedArticleState? {
         guard !articleKey.isEmpty else { return nil }
         var descriptor = FetchDescriptor<SyncedArticleState>(
@@ -1699,13 +1818,17 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             return
         }
 
+        if synced.feedKey.isEmpty, let localFeedKey = article.feed?.feedKey, !localFeedKey.isEmpty {
+            synced.feedKey = localFeedKey
+        }
+
         article.isRead = synced.isRead
         article.readAt = synced.readAt
         article.dismissedAt = synced.dismissedAt
         article.readingListAddedAt = synced.readingListAddedAt
         article.reactionValue = synced.reactionValue
         article.reactionReasonCodes = synced.reactionReasonCodes
-        article.reactionUpdatedAt = synced.reactionValue == nil ? nil : synced.updatedAt
+        article.reactionUpdatedAt = synced.reactionUpdatedAt ?? (synced.reactionValue == nil ? nil : synced.updatedAt)
         article.refreshQueryState()
     }
 
@@ -1727,6 +1850,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         row.readingListAddedAt = article.readingListAddedAt
         row.reactionValue = article.reactionValue
         row.reactionReasonCodes = article.reactionReasonCodes
+        row.feedKey = article.feed?.feedKey ?? row.feedKey
+        row.reactionUpdatedAt = article.reactionUpdatedAt
         row.updatedAt = updatedAt
     }
 }

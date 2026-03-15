@@ -40,10 +40,14 @@ struct DiscoverFeedSection: View {
                             DiscoverFeedRow(
                                 feed: feed,
                                 activeArticleCount: viewModel.activeArticleCount(for: feed.id),
+                                reputation: viewModel.reputationSummary(for: feed.feedKey),
                                 onToggle: { Task { await viewModel.toggleEnabled(feed) } },
                                 onDelete: { Task { await viewModel.deleteFeed(feed) } },
                                 onShowIssue: {
-                                    presentedIssue = FeedIssuePresentation(feed: feed)
+                                    presentedIssue = FeedIssuePresentation(
+                                        feed: feed,
+                                        reputation: viewModel.reputationSummary(for: feed.feedKey)
+                                    )
                                 },
                                 onRetry: { Task { await viewModel.pollSingleFeed(id: feed.id) } }
                             )
@@ -72,6 +76,7 @@ struct DiscoverFeedSection: View {
 private struct DiscoverFeedRow: View {
     let feed: Feed
     let activeArticleCount: Int
+    let reputation: FeedReputationSummary?
     let onToggle: () -> Void
     let onDelete: () -> Void
     let onShowIssue: () -> Void
@@ -111,6 +116,13 @@ private struct DiscoverFeedRow: View {
                         .accessibilityLabel("View feed issue")
                         .accessibilityHint(errorMessage)
                     }
+                }
+
+                if let reputation, reputation.feedbackCount > 0 {
+                    Text(reputationRowText(for: reputation))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 if let errorMessage = feed.errorMessage, !errorMessage.isEmpty {
@@ -180,8 +192,9 @@ struct FeedIssuePresentation: Identifiable {
     let errorMessage: String
     let lastPolledAt: Date?
     let consecutiveErrors: Int
+    let reputation: FeedReputationSummary?
 
-    init?(feed: Feed) {
+    init?(feed: Feed, reputation: FeedReputationSummary?) {
         guard let errorMessage = feed.errorMessage, !errorMessage.isEmpty else {
             return nil
         }
@@ -193,6 +206,7 @@ struct FeedIssuePresentation: Identifiable {
         self.errorMessage = errorMessage
         lastPolledAt = feed.lastPolledAt
         consecutiveErrors = feed.consecutiveErrors
+        self.reputation = reputation
     }
 }
 
@@ -239,6 +253,30 @@ struct FeedIssueDetailsSheet: View {
                         .textSelection(.enabled)
                 }
 
+                Section("Reputation") {
+                    if let reputation = issue.reputation, reputation.feedbackCount > 0 {
+                        LabeledContent("Score") {
+                            Text(reputationScoreText(reputation.score))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        LabeledContent("Trust votes") {
+                            Text(reputationVoteText(reputation.feedbackCount))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let lastFeedbackAt = reputation.lastFeedbackAt {
+                            LabeledContent("Last feedback") {
+                                Text(lastFeedbackAt.formatted(date: .abbreviated, time: .shortened))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } else {
+                        Text("No trust data yet")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 Section {
                     Button {
                         dismiss()
@@ -259,4 +297,16 @@ struct FeedIssueDetailsSheet: View {
             }
         }
     }
+}
+
+private func reputationRowText(for summary: FeedReputationSummary) -> String {
+    "Reputation \(reputationScoreText(summary.score)) · \(reputationVoteText(summary.feedbackCount))"
+}
+
+private func reputationScoreText(_ score: Double) -> String {
+    String(format: "%.2f", score)
+}
+
+private func reputationVoteText(_ feedbackCount: Int) -> String {
+    "\(feedbackCount) trust vote\(feedbackCount == 1 ? "" : "s")"
 }

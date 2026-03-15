@@ -1066,7 +1066,7 @@ struct StandalonePersonalizationTests {
         #expect((rescoredB.scoreWeightedAverage ?? 0) < baselineB)
     }
 
-    @Test("Source reputation stays hidden until the support threshold is reached")
+    @Test("Source trust feedback becomes a data-backed source reputation signal after the first vote")
     func sourceTrustLearningTargetsSourceReputation() async throws {
         let container = try makeContainer()
         let service = LocalStandalonePersonalizationService(modelContainer: container)
@@ -1105,10 +1105,12 @@ struct StandalonePersonalizationTests {
         )
 
         _ = await service.processPendingArticles(limit: 20)
+        let articleRepo = LocalArticleRepository(modelContainer: container)
 
         let storedA = try fetchArticle(articleA.id, in: context)
         storedA.setReaction(value: 1, reasonCodes: ["up_source_trust"])
         try context.save()
+        try await articleRepo.syncStandaloneUserState(id: storedA.id)
 
         await service.processReactionChange(
             articleID: articleA.id,
@@ -1117,12 +1119,14 @@ struct StandalonePersonalizationTests {
             reasonCodes: ["up_source_trust"]
         )
 
-        let afterFirstReaction = try fetchArticle(articleC.id, in: context)
-        #expect(afterFirstReaction.signalScores.contains(where: { $0.signal == .sourceReputation }) == false)
+        let afterFirstReaction = try fetchArticle(articleA.id, in: context)
+        let initialSourceSignal = try #require(afterFirstReaction.signalScores.first(where: { $0.signal == .sourceReputation }))
+        #expect(initialSourceSignal.rawValue > 0)
 
         let storedB = try fetchArticle(articleB.id, in: context)
         storedB.setReaction(value: 1, reasonCodes: ["up_source_trust"])
         try context.save()
+        try await articleRepo.syncStandaloneUserState(id: storedB.id)
 
         let baselineC = try fetchArticle(articleC.id, in: context).scoreWeightedAverage ?? 0
         await service.processReactionChange(

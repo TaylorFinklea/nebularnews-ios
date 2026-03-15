@@ -8,12 +8,13 @@ public actor StandaloneStateSyncService {
         let didSeedPreferences = seedSyncedPreferencesFromLocalIfNeeded()
         let didSeedFeeds = seedSyncedFeedSubscriptionsFromLocalIfNeeded()
         let didSeedArticleStates = seedSyncedArticleStatesFromLocalIfNeeded()
+        let didBackfillArticleStateFeedKeys = backfillSyncedArticleStateFeedKeys()
 
         let didApplyPreferences = applySyncedPreferencesToLocal()
         let didProjectFeeds = reconcileLocalFeedsWithSyncedSubscriptions()
         let didProjectArticles = applySyncedArticleStatesToLocalArticles()
 
-        if didUpdateIdentities || didSeedPreferences || didSeedFeeds || didSeedArticleStates || didApplyPreferences || didProjectFeeds || didProjectArticles {
+        if didUpdateIdentities || didSeedPreferences || didSeedFeeds || didSeedArticleStates || didBackfillArticleStateFeedKeys || didApplyPreferences || didProjectFeeds || didProjectArticles {
             try? modelContext.save()
         }
 
@@ -250,6 +251,33 @@ public actor StandaloneStateSyncService {
         return didChange
     }
 
+    private func backfillSyncedArticleStateFeedKeys() -> Bool {
+        let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
+        let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
+        let localFeedKeyByArticleKey: [String: String] = Dictionary(
+            uniqueKeysWithValues: localArticles.compactMap { article -> (String, String)? in
+                article.refreshQueryState()
+                guard !article.articleKey.isEmpty,
+                      let feedKey = article.feed?.feedKey,
+                      !feedKey.isEmpty
+                else {
+                    return nil
+                }
+                return (article.articleKey, feedKey)
+            }
+        )
+
+        var didChange = false
+        for synced in syncedStates where synced.feedKey.isEmpty {
+            guard let feedKey = localFeedKeyByArticleKey[synced.articleKey] else {
+                continue
+            }
+            synced.feedKey = feedKey
+            didChange = true
+        }
+        return didChange
+    }
+
     private func applySyncedArticleStatesToLocalArticles() -> Bool {
         let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
         let allLocalArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
@@ -273,9 +301,10 @@ public actor StandaloneStateSyncService {
                 article.readingListAddedAt = synced.readingListAddedAt
                 article.reactionValue = synced.reactionValue
                 article.reactionReasonCodes = synced.reactionReasonCodes
+                article.reactionUpdatedAt = synced.reactionUpdatedAt ?? (synced.reactionValue == nil ? nil : synced.updatedAt)
 
                 if previousReactionValue != synced.reactionValue || previousReactionCodes != synced.reactionReasonCodes {
-                    article.reactionUpdatedAt = synced.reactionValue == nil ? nil : synced.updatedAt
+                    article.reactionUpdatedAt = synced.reactionUpdatedAt ?? (synced.reactionValue == nil ? nil : synced.updatedAt)
                 }
 
                 article.refreshQueryState()
@@ -341,6 +370,8 @@ public actor StandaloneStateSyncService {
         row.readingListAddedAt = article.readingListAddedAt
         row.reactionValue = article.reactionValue
         row.reactionReasonCodes = article.reactionReasonCodes
+        row.feedKey = article.feed?.feedKey ?? row.feedKey
+        row.reactionUpdatedAt = article.reactionUpdatedAt
         row.updatedAt = updatedAt
     }
 }

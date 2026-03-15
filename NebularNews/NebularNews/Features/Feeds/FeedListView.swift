@@ -64,6 +64,20 @@ private struct FeedListContent: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 } else {
+                    if !viewModel.lowestReputationFeeds.isEmpty {
+                        Section("Lowest Reputation") {
+                            ForEach(viewModel.lowestReputationFeeds.filter { $0.feedID != nil }, id: \.feedKey) { summary in
+                                if let feedID = summary.feedID {
+                                    NavigationLink {
+                                        ArticleListView(feedId: feedID, feedTitle: summary.title)
+                                    } label: {
+                                        FeedReputationAdminRow(summary: summary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     ForEach(viewModel.feeds, id: \.id) { feed in
                         NavigationLink {
                             ArticleListView(
@@ -74,8 +88,12 @@ private struct FeedListContent: View {
                             FeedRow(
                                 feed: feed,
                                 activeArticleCount: viewModel.activeArticleCount(for: feed.id),
+                                reputation: viewModel.reputationSummary(for: feed.feedKey),
                                 onShowIssue: {
-                                    presentedIssue = FeedIssuePresentation(feed: feed)
+                                    presentedIssue = FeedIssuePresentation(
+                                        feed: feed,
+                                        reputation: viewModel.reputationSummary(for: feed.feedKey)
+                                    )
                                 }
                             )
                         }
@@ -189,6 +207,7 @@ private struct StatusBanner: View {
 private struct FeedRow: View {
     let feed: Feed
     let activeArticleCount: Int
+    let reputation: FeedReputationSummary?
     let onShowIssue: () -> Void
 
     var body: some View {
@@ -219,6 +238,13 @@ private struct FeedRow: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                if let reputation {
+                    Text(reputationRowText(for: reputation))
+                        .font(.caption)
+                        .foregroundStyle(reputation.feedbackCount > 0 ? .secondary : .tertiary)
+                        .lineLimit(1)
                 }
 
                 if let error = feed.errorMessage, !error.isEmpty {
@@ -262,4 +288,49 @@ private struct FeedRow: View {
     private var accentColor: Color {
         feed.isEnabled ? .cyan : .orange
     }
+}
+
+private struct FeedReputationAdminRow: View {
+    let summary: FeedReputationSummary
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "hand.thumbsup")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(summary.title)
+                    .font(.headline)
+                    .lineLimit(1)
+
+                Text(summary.feedURL)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
+                Text(reputationRowText(for: summary))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+}
+
+private func reputationRowText(for summary: FeedReputationSummary) -> String {
+    guard summary.feedbackCount > 0 else {
+        return "No trust data yet"
+    }
+    return "Reputation \(reputationScoreText(summary.score)) · \(reputationVoteText(summary.feedbackCount))"
+}
+
+private func reputationScoreText(_ score: Double) -> String {
+    String(format: "%.2f", score)
+}
+
+private func reputationVoteText(_ feedbackCount: Int) -> String {
+    "\(feedbackCount) trust vote\(feedbackCount == 1 ? "" : "s")"
 }

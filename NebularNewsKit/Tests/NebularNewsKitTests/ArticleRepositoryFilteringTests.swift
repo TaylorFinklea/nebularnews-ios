@@ -253,4 +253,77 @@ struct ArticleRepositoryFilteringTests {
         let counts = await repo.activeArticleCountsByFeed()
         #expect(counts[feed.id] == 10)
     }
+
+    @Test("Feed reputation summaries are derived from synced trust reactions by feed key")
+    func feedReputationSummariesUseSyncedTrustReactions() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let feed = try insertFeed(in: context, title: "Trusted Feed")
+
+        context.insert(
+            SyncedArticleState(
+                articleKey: "https://example.com/trust-1",
+                feedKey: feed.feedKey,
+                reactionValue: 1,
+                reactionReasonCodes: "up_source_trust",
+                reactionUpdatedAt: Date(timeIntervalSince1970: 100),
+                updatedAt: Date(timeIntervalSince1970: 100)
+            )
+        )
+        context.insert(
+            SyncedArticleState(
+                articleKey: "https://example.com/nontrust-1",
+                feedKey: feed.feedKey,
+                reactionValue: 1,
+                reactionReasonCodes: "up_interest_match",
+                reactionUpdatedAt: Date(timeIntervalSince1970: 101),
+                updatedAt: Date(timeIntervalSince1970: 101)
+            )
+        )
+        try context.save()
+
+        let repo = LocalArticleRepository(modelContainer: container)
+        let summary = try #require(await repo.listFeedReputationSummaries().first(where: { $0.feedKey == feed.feedKey }))
+
+        #expect(summary.feedbackCount == 1)
+        #expect(summary.weightedFeedbackCount == sourceReputationVoteWeight)
+        #expect(summary.ratingSum == sourceReputationVoteWeight)
+        #expect(summary.score == sourceReputationVoteWeight / (sourceReputationVoteWeight + sourceReputationPriorWeight))
+    }
+
+    @Test("Lowest reputation feeds exclude zero-feedback feeds and sort ascending by score")
+    func lowestReputationFeedsExcludeZeroFeedbackAndSortAscending() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+        let distrusted = try insertFeed(in: context, title: "Distrusted", url: "https://example.com/distrusted.xml")
+        let trusted = try insertFeed(in: context, title: "Trusted", url: "https://example.com/trusted.xml")
+        _ = try insertFeed(in: context, title: "Unrated", url: "https://example.com/unrated.xml")
+
+        context.insert(
+            SyncedArticleState(
+                articleKey: "https://example.com/distrusted-1",
+                feedKey: distrusted.feedKey,
+                reactionValue: -1,
+                reactionReasonCodes: "down_source_distrust",
+                reactionUpdatedAt: Date(timeIntervalSince1970: 200),
+                updatedAt: Date(timeIntervalSince1970: 200)
+            )
+        )
+        context.insert(
+            SyncedArticleState(
+                articleKey: "https://example.com/trusted-1",
+                feedKey: trusted.feedKey,
+                reactionValue: 1,
+                reactionReasonCodes: "up_source_trust",
+                reactionUpdatedAt: Date(timeIntervalSince1970: 201),
+                updatedAt: Date(timeIntervalSince1970: 201)
+            )
+        )
+        try context.save()
+
+        let repo = LocalArticleRepository(modelContainer: container)
+        let lowest = await repo.listLowestReputationFeeds(limit: 20)
+
+        #expect(lowest.map(\.feedKey) == [distrusted.feedKey, trusted.feedKey])
+    }
 }

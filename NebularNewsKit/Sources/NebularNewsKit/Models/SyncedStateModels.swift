@@ -33,32 +33,38 @@ public final class SyncedFeedSubscription: @unchecked Sendable {
 public final class SyncedArticleState: @unchecked Sendable {
     public var id: String = ""
     public var articleKey: String = ""
+    public var feedKey: String = ""
     public var isRead: Bool = false
     public var readAt: Date?
     public var dismissedAt: Date?
     public var readingListAddedAt: Date?
     public var reactionValue: Int?
     public var reactionReasonCodes: String?
+    public var reactionUpdatedAt: Date?
     public var updatedAt: Date = Date()
 
     public init(
         articleKey: String,
+        feedKey: String = "",
         isRead: Bool = false,
         readAt: Date? = nil,
         dismissedAt: Date? = nil,
         readingListAddedAt: Date? = nil,
         reactionValue: Int? = nil,
         reactionReasonCodes: String? = nil,
+        reactionUpdatedAt: Date? = nil,
         updatedAt: Date = Date()
     ) {
         self.id = articleKey
         self.articleKey = articleKey
+        self.feedKey = feedKey
         self.isRead = isRead
         self.readAt = readAt
         self.dismissedAt = dismissedAt
         self.readingListAddedAt = readingListAddedAt
         self.reactionValue = reactionValue
         self.reactionReasonCodes = reactionReasonCodes
+        self.reactionUpdatedAt = reactionUpdatedAt
         self.updatedAt = updatedAt
     }
 }

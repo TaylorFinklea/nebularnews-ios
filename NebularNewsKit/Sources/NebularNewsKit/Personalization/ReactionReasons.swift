@@ -77,6 +77,12 @@ public func canonicalizeReasonCodes(for value: ReactionValue, codes: [ArticleRea
         .filter { selected.contains($0) }
 }
 
+public func decodedReactionReasonCodes(_ serialized: String?) -> [ArticleReactionReasonCode] {
+    serialized?
+        .split(separator: ",")
+        .map(String.init) ?? []
+}
+
 public func targetSignals(for reasonCodes: [ArticleReactionReasonCode]) -> Set<SignalName> {
     Set(reasonCodes.flatMap { reactionReasonSignalMap[$0] ?? [] })
 }

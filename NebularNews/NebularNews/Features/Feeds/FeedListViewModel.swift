@@ -12,6 +12,8 @@ final class FeedListViewModel {
     private let modelContainer: ModelContainer
     private var poller: FeedPoller?
     private(set) var activeArticleCountsByFeed: [String: Int] = [:]
+    private(set) var feedReputationsByFeedKey: [String: FeedReputationSummary] = [:]
+    private(set) var lowestReputationFeeds: [FeedReputationSummary] = []
 
     var feeds: [Feed] = []
     var isLoading = false
@@ -38,8 +40,16 @@ final class FeedListViewModel {
 
     func loadFeeds() async {
         isLoading = true
-        feeds = await feedRepo.list()
-        activeArticleCountsByFeed = await articleRepo.activeArticleCountsByFeed()
+        async let loadedFeeds = feedRepo.list()
+        async let loadedCounts = articleRepo.activeArticleCountsByFeed()
+        async let loadedReputations = articleRepo.listFeedReputationSummaries()
+        async let loadedLowestReputation = articleRepo.listLowestReputationFeeds(limit: 20)
+
+        feeds = await loadedFeeds
+        activeArticleCountsByFeed = await loadedCounts
+        let reputationSummaries = await loadedReputations
+        feedReputationsByFeedKey = Dictionary(uniqueKeysWithValues: reputationSummaries.map { ($0.feedKey, $0) })
+        lowestReputationFeeds = await loadedLowestReputation
         isLoading = false
     }
 
@@ -150,6 +160,10 @@ final class FeedListViewModel {
     // Consider: toast vs. subtitle, level of detail, auto-dismiss timing.
     func activeArticleCount(for feedID: String) -> Int {
         activeArticleCountsByFeed[feedID] ?? 0
+    }
+
+    func reputationSummary(for feedKey: String) -> FeedReputationSummary? {
+        feedReputationsByFeedKey[feedKey]
     }
 
     private func formatPollResult(_ result: PollCycleResult, storage: ArticleStoragePolicyResult) -> String {

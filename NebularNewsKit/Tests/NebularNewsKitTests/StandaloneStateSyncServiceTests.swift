@@ -52,6 +52,7 @@ struct StandaloneStateSyncServiceTests {
         #expect(syncedPrefs.count == 1)
         #expect(syncedFeeds.first?.feedKey == feed.feedKey)
         #expect(syncedStates.first?.articleKey == article.articleKey)
+        #expect(syncedStates.first?.feedKey == feed.feedKey)
         #expect(syncedPrefs.first?.archiveAfterDays == 21)
         #expect(syncedPrefs.first?.maxArticlesPerFeed == 40)
     }
@@ -118,12 +119,14 @@ struct StandaloneStateSyncServiceTests {
         context.insert(
             SyncedArticleState(
                 articleKey: "https://example.com/articles/2",
+                feedKey: feed.feedKey,
                 isRead: true,
                 readAt: Date(timeIntervalSince1970: 300),
                 dismissedAt: nil,
                 readingListAddedAt: Date(timeIntervalSince1970: 301),
                 reactionValue: 1,
                 reactionReasonCodes: "matches_interests",
+                reactionUpdatedAt: Date(timeIntervalSince1970: 302),
                 updatedAt: Date(timeIntervalSince1970: 302)
             )
         )
@@ -173,9 +176,41 @@ struct StandaloneStateSyncServiceTests {
 
         let synced = try #require((try context.fetch(FetchDescriptor<SyncedArticleState>())).first)
         #expect(synced.articleKey == article.articleKey)
+        #expect(synced.feedKey == feed.feedKey)
         #expect(synced.isRead)
         #expect(synced.readingListAddedAt != nil)
         #expect(synced.reactionValue == -1)
         #expect(synced.reactionReasonCodes == "off_topic")
+        #expect(synced.reactionUpdatedAt != nil)
+    }
+
+    @Test("Bootstrap backfills missing synced article-state feed keys from local articles")
+    func bootstrapBackfillsMissingSyncedArticleStateFeedKeys() async throws {
+        let container = try makeContainer()
+        let context = makeContext(container)
+
+        let feed = Feed(feedUrl: "https://example.com/feed.xml", title: "Example")
+        context.insert(feed)
+
+        let article = Article(canonicalUrl: "https://example.com/articles/9", title: "Nine")
+        article.feed = feed
+        article.refreshQueryState()
+        context.insert(article)
+        context.insert(
+            SyncedArticleState(
+                articleKey: article.articleKey,
+                feedKey: "",
+                isRead: true,
+                readAt: Date(timeIntervalSince1970: 500),
+                updatedAt: Date(timeIntervalSince1970: 500)
+            )
+        )
+        try context.save()
+
+        let service = StandaloneStateSyncService(modelContainer: container)
+        await service.bootstrap()
+
+        let synced = try #require((try context.fetch(FetchDescriptor<SyncedArticleState>())).first)
+        #expect(synced.feedKey == feed.feedKey)
     }
 }

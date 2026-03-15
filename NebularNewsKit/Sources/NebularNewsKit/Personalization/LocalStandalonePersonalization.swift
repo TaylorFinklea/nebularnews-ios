@@ -115,20 +115,6 @@ public struct TargetFeedCoverageSnapshot: Sendable, Hashable {
 }
 #endif
 
-public struct FeedReputation: Sendable, Hashable {
-    public let feedbackCount: Int
-    public let weightedFeedbackCount: Double
-    public let ratingSum: Double
-    public let score: Double
-
-    public init(feedbackCount: Int, weightedFeedbackCount: Double, ratingSum: Double, score: Double) {
-        self.feedbackCount = feedbackCount
-        self.weightedFeedbackCount = weightedFeedbackCount
-        self.ratingSum = ratingSum
-        self.score = score
-    }
-}
-
 @ModelActor
 actor LocalPersonalizationRepository {
     func bootstrapStarterData() async throws {
@@ -798,36 +784,23 @@ actor LocalPersonalizationRepository {
         }
     }
 
-    func feedReputation(feedID: String?) async -> FeedReputation {
-        guard let feedID,
-              let feed = try? fetchFeed(feedID)
-        else {
-            return FeedReputation(feedbackCount: 0, weightedFeedbackCount: 0, ratingSum: 0, score: 0)
+    func feedReputation(feedKey: String?) async -> FeedReputation {
+        guard let feedKey, !feedKey.isEmpty else {
+            return computeFeedReputation(feedbackCount: 0, weightedFeedbackCount: 0, ratingSum: 0)
         }
 
-        var feedbackCount = 0
-        var weightedFeedbackCount = 0.0
-        var ratingSum = 0.0
+        let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
+        var accumulator = FeedReputationAccumulator()
 
-        for article in feed.articles ?? [] {
-            guard let reactionValue = article.reactionValue else { continue }
-            let reasonCodes = article.reactionReasonCodes?
-                .split(separator: ",")
-                .map(String.init) ?? []
-            guard hasSourceReason(reasonCodes) else { continue }
-            feedbackCount += 1
-            let voteWeight = sourceReputationVoteWeight
-            weightedFeedbackCount += voteWeight
-            ratingSum += Double(reactionValue) * voteWeight
+        for state in syncedStates where state.feedKey == feedKey {
+            accumulator.add(
+                reactionValue: state.reactionValue,
+                serializedReasonCodes: state.reactionReasonCodes,
+                feedbackAt: state.reactionUpdatedAt ?? state.updatedAt
+            )
         }
 
-        let score = feedbackCount > 0 ? (ratingSum / (weightedFeedbackCount + sourceReputationPriorWeight)) : 0
-        return FeedReputation(
-            feedbackCount: feedbackCount,
-            weightedFeedbackCount: weightedFeedbackCount,
-            ratingSum: ratingSum,
-            score: score
-        )
+        return accumulator.reputation
     }
 
     func topicAffinityMap(for normalizedTagNames: [String]) async -> [String: TopicAffinity] {
@@ -1271,7 +1244,7 @@ public actor LocalStandalonePersonalizationService {
         let topicAffinityMap = await repository.topicAffinityMap(for: context.tags.map(\.normalizedName))
         let authorAffinity = await repository.authorAffinity(for: context.authorNormalized)
         let feedAffinity = await repository.feedAffinity(for: context.feedKey)
-        let feedReputation = await repository.feedReputation(feedID: context.feedID)
+        let feedReputation = await repository.feedReputation(feedKey: context.feedKey)
         let signalScores = extractSignals(
             context: context,
             topicAffinities: topicAffinityMap,
@@ -1757,12 +1730,12 @@ public actor LocalStandalonePersonalizationService {
             )
         }
 
-        if feedReputation.weightedFeedbackCount >= 3.0 {
+        if feedReputation.hasFeedback {
             signals.append(
                 StoredSignalScore(
                     signal: .sourceReputation,
                     rawValue: feedReputation.score,
-                    normalizedValue: clamped((feedReputation.score + 1) / 2),
+                    normalizedValue: feedReputation.normalizedScore,
                     isDataBacked: true
                 )
             )
