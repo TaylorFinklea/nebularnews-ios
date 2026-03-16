@@ -3,6 +3,11 @@ import Observation
 import SwiftData
 import NebularNewsKit
 
+struct FeedOPMLExportPayload {
+    let document: FeedOPMLDocument
+    let defaultFilename: String
+}
+
 @Observable
 @MainActor
 final class FeedListViewModel {
@@ -136,6 +141,29 @@ final class FeedListViewModel {
         }
     }
 
+    func makeOPMLExportPayload() throws -> FeedOPMLExportPayload {
+        let entries = feeds
+            .sorted {
+                let lhs = $0.title.isEmpty ? $0.feedUrl.localizedLowercase : $0.title.localizedLowercase
+                let rhs = $1.title.isEmpty ? $1.feedUrl.localizedLowercase : $1.title.localizedLowercase
+                return lhs < rhs
+            }
+            .map { feed in
+                OPMLFeedEntry(
+                    feedURL: feed.feedUrl,
+                    title: feed.title,
+                    siteURL: feed.siteUrl
+                )
+            }
+
+        let data = try OPMLDocument.data(entries: entries)
+        let filename = "nebular-news-feeds-\(Self.exportDateFormatter.string(from: Date())).opml"
+        return FeedOPMLExportPayload(
+            document: FeedOPMLDocument(data: data),
+            defaultFilename: filename
+        )
+    }
+
     func deleteFeed(_ feed: Feed) async {
         do {
             try await feedRepo.delete(id: feed.id)
@@ -196,4 +224,13 @@ final class FeedListViewModel {
         }
         return parts.joined(separator: " · ")
     }
+
+    private static let exportDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }

@@ -50,4 +50,25 @@ struct OPMLParserTests {
             try OPMLParser.parse(string: "<opml><body><outline")
         }
     }
+
+    @Test("Exports OPML that round-trips through the parser")
+    func exportsRoundTripDocument() throws {
+        let entries = [
+            OPMLFeedEntry(
+                feedURL: "https://example.com/openai.xml",
+                title: "OpenAI & Research",
+                siteURL: "https://example.com/openai?ref=ai&mode=full"
+            ),
+            OPMLFeedEntry(
+                feedURL: "https://example.com/weekly.xml",
+                title: "",
+                siteURL: nil
+            )
+        ]
+
+        let data = try OPMLDocument.data(title: "My <Feeds>", entries: entries)
+        let parsed = try OPMLParser.parse(data: data)
+
+        #expect(parsed == entries)
+    }
 }

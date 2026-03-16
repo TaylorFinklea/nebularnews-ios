@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import NebularNewsKit
 
 struct FeedListView: View {
@@ -27,6 +28,10 @@ struct FeedListView: View {
 private struct FeedListContent: View {
     @Bindable var viewModel: FeedListViewModel
     @State private var presentedIssue: FeedIssuePresentation?
+    @State private var exportDocument = FeedOPMLDocument(data: Data())
+    @State private var exportFilename = "nebular-news-feeds.opml"
+    @State private var exportErrorMessage: String?
+    @State private var isExportingOPML = false
 
     var body: some View {
         NebularScreen {
@@ -134,13 +139,44 @@ private struct FeedListContent: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button {
-                    Task { await viewModel.refreshAllFeeds() }
+                Menu {
+                    Button {
+                        Task { await viewModel.refreshAllFeeds() }
+                    } label: {
+                        Label("Refresh All", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(viewModel.isPolling)
+
+                    Button {
+                        exportOPML()
+                    } label: {
+                        Label("Export OPML", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(viewModel.feeds.isEmpty)
                 } label: {
-                    Label("Refresh All", systemImage: "arrow.clockwise")
+                    Image(systemName: "ellipsis.circle")
                 }
-                .disabled(viewModel.isPolling)
             }
+        }
+        .fileExporter(
+            isPresented: $isExportingOPML,
+            document: exportDocument,
+            contentType: opmlContentType,
+            defaultFilename: exportFilename
+        ) { result in
+            switch result {
+            case .success:
+                viewModel.lastPollMessage = "Exported \(viewModel.feeds.count) feed\(viewModel.feeds.count == 1 ? "" : "s") to OPML"
+            case .failure(let error):
+                exportErrorMessage = error.localizedDescription
+            }
+        }
+        .alert("Export Failed", isPresented: exportErrorIsPresented) {
+            Button("OK", role: .cancel) {
+                exportErrorMessage = nil
+            }
+        } message: {
+            Text(exportErrorMessage ?? "")
         }
         .sheet(isPresented: $viewModel.showAddSheet) {
             AddFeedSheet { request in
@@ -166,6 +202,32 @@ private struct FeedListContent: View {
         }
         .refreshable {
             await viewModel.refreshAllFeeds()
+        }
+    }
+
+    private var opmlContentType: UTType {
+        UTType(filenameExtension: "opml") ?? .xml
+    }
+
+    private var exportErrorIsPresented: Binding<Bool> {
+        Binding(
+            get: { exportErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    exportErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func exportOPML() {
+        do {
+            let payload = try viewModel.makeOPMLExportPayload()
+            exportDocument = payload.document
+            exportFilename = payload.defaultFilename
+            isExportingOPML = true
+        } catch {
+            exportErrorMessage = error.localizedDescription
         }
     }
 }
