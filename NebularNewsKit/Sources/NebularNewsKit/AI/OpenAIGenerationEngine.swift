@@ -17,6 +17,8 @@ public enum OpenAIEngineError: LocalizedError {
 public struct OpenAIGenerationEngine: ArticleGenerationEngine {
     public let provider: AIGenerationProvider = .openAI
 
+    private static let completionsEndpoint = URL(string: "https://api.openai.com/v1/chat/completions")!
+
     private let apiKey: String
     private let modelIdentifier: String
     private let session: URLSession
@@ -165,7 +167,7 @@ public struct OpenAIGenerationEngine: ArticleGenerationEngine {
             "temperature": 0.2
         ]
 
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
+        var request = URLRequest(url: Self.completionsEndpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 60
         request.httpBody = try JSONSerialization.data(withJSONObject: payload)

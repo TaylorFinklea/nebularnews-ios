@@ -45,15 +45,29 @@ public actor OGImageFetcher {
 
     // MARK: - Private
 
-    private static let ogPattern = try! NSRegularExpression(
-        pattern: #"<meta\s+[^>]*property\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']"#,
-        options: .caseInsensitive
-    )
+    private static let ogPattern: NSRegularExpression = {
+        do {
+            return try NSRegularExpression(
+                pattern: #"<meta\s+[^>]*property\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']"#,
+                options: .caseInsensitive
+            )
+        } catch {
+            assertionFailure("Invalid OG image regex: \(error)")
+            return NSRegularExpression()
+        }
+    }()
 
-    private static let ogPatternReversed = try! NSRegularExpression(
-        pattern: #"<meta\s+[^>]*content\s*=\s*["']([^"']+)["'][^>]*property\s*=\s*["']og:image["']"#,
-        options: .caseInsensitive
-    )
+    private static let ogPatternReversed: NSRegularExpression = {
+        do {
+            return try NSRegularExpression(
+                pattern: #"<meta\s+[^>]*content\s*=\s*["']([^"']+)["'][^>]*property\s*=\s*["']og:image["']"#,
+                options: .caseInsensitive
+            )
+        } catch {
+            assertionFailure("Invalid OG image regex: \(error)")
+            return NSRegularExpression()
+        }
+    }()
 
     private func parseOGImage(from html: String) -> String? {
         let range = NSRange(html.startIndex..<html.endIndex, in: html)

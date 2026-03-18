@@ -21,7 +21,7 @@ actor ProcessingQueueSupervisor {
     private let lowPriorityImageBackfillLimit = 120
     private let lowPriorityBatchSize = 12
     private let lowPriorityPassDelay = Duration.milliseconds(250)
-    private let watchdogInterval = Duration.seconds(5)
+    private let watchdogInterval = Duration.seconds(15)
     private let stalledQueueWarningInterval: TimeInterval = 30
     private let kickDebounce = Duration.milliseconds(250)
 
@@ -35,6 +35,8 @@ actor ProcessingQueueSupervisor {
     private var visibilityTask: Task<Void, Never>?
     private var lowPriorityTask: Task<Void, Never>?
 
+    private var cachedArticleRepo: LocalArticleRepository?
+    private var watchdogIdle = false
     private var wantsLowPriorityDrain = false
     private var lastKickReason = "initial"
     private var lastSuccessfulDrainAt: Date?
@@ -50,7 +52,9 @@ actor ProcessingQueueSupervisor {
     ) async {
         self.modelContainer = modelContainer
         self.keychainService = keychainService
+        self.cachedArticleRepo = LocalArticleRepository(modelContainer: modelContainer)
         sceneIsActive = true
+        watchdogIdle = false
 
         await endBackgroundTaskIfNeeded()
         startQueueObserverIfNeeded()
@@ -69,6 +73,7 @@ actor ProcessingQueueSupervisor {
         watchdogTask?.cancel()
         watchdogTask = nil
         wantsLowPriorityDrain = false
+        cachedArticleRepo = nil
 
         await extendVisibilityBurstIntoBackgroundIfNeeded()
     }
@@ -78,6 +83,7 @@ actor ProcessingQueueSupervisor {
         allowLowPriority: Bool = false
     ) async {
         lastKickReason = reason
+        watchdogIdle = false
         wantsLowPriorityDrain = wantsLowPriorityDrain || allowLowPriority
         logger.debug("Queue kick requested: \(reason, privacy: .public), lowPriority=\(allowLowPriority)")
 
@@ -93,13 +99,12 @@ actor ProcessingQueueSupervisor {
     private func runKickIfNeeded() async {
         kickTask = nil
         guard sceneIsActive,
-              let modelContainer,
-              keychainService != nil
+              keychainService != nil,
+              let articleRepo = cachedArticleRepo
         else {
             return
         }
 
-        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let health = await articleRepo.processingQueueHealth()
 
         if health.pendingVisibleCount > 0 {
@@ -197,9 +202,8 @@ actor ProcessingQueueSupervisor {
         visibilityTask = nil
         await endBackgroundTaskIfNeeded()
 
-        guard sceneIsActive else { return }
-        let articleRepoAfter = LocalArticleRepository(modelContainer: modelContainer)
-        let health = await articleRepoAfter.processingQueueHealth()
+        guard sceneIsActive, let repoAfterVisibility = cachedArticleRepo else { return }
+        let health = await repoAfterVisibility.processingQueueHealth()
 
         if health.pendingVisibleCount > 0 {
             logger.notice(
@@ -251,22 +255,21 @@ actor ProcessingQueueSupervisor {
         lowPriorityTask = nil
         wantsLowPriorityDrain = false
 
-        guard sceneIsActive else { return }
-        let articleRepoAfter = LocalArticleRepository(modelContainer: modelContainer)
-        let health = await articleRepoAfter.processingQueueHealth()
-        if health.pendingVisibleCount > 0 {
+        guard sceneIsActive, let repoAfterLowPriority = cachedArticleRepo else { return }
+        let healthAfterLowPriority = await repoAfterLowPriority.processingQueueHealth()
+        if healthAfterLowPriority.pendingVisibleCount > 0 {
             await kick(reason: "low_priority_preempted", allowLowPriority: false)
         }
     }
 
     private func evaluateQueueHealth() async {
-        guard sceneIsActive, let modelContainer else { return }
+        guard sceneIsActive, !watchdogIdle, let articleRepo = cachedArticleRepo else { return }
 
-        let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let health = await articleRepo.processingQueueHealth()
 
         guard health.pendingVisibleCount > 0 else {
             stalledSince = nil
+            watchdogIdle = true
             return
         }
 
