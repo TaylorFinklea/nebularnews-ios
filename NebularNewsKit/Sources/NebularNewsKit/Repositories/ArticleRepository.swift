@@ -350,17 +350,14 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func activeArticleCountsByFeed() async -> [String: Int] {
-        let descriptor = FetchDescriptor<Article>()
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.queryIsArchived == false }
+        )
         let articles = (try? modelContext.fetch(descriptor)) ?? []
 
-        return Dictionary(
-            grouping: articles.filter { !$0.queryIsArchived }
-        ) { article in
-            article.queryFeedID
-        }
-        .reduce(into: [String: Int]()) { partial, element in
-            guard let feedID = element.key else { return }
-            partial[feedID] = element.value.count
+        return articles.reduce(into: [String: Int]()) { counts, article in
+            guard let feedID = article.queryFeedID else { return }
+            counts[feedID, default: 0] += 1
         }
     }
 
