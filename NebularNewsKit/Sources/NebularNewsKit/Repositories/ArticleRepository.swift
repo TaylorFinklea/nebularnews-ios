@@ -1924,9 +1924,10 @@ extension LocalArticleRepository {
     public func processingDebugSnapshot() async -> ArticleProcessingDebugSnapshot {
         let jobs = allProcessingJobs()
         let articleTitles = Dictionary(
-            uniqueKeysWithValues: (((try? modelContext.fetch(FetchDescriptor<Article>())) ?? []).map { article in
+            ((try? modelContext.fetch(FetchDescriptor<Article>())) ?? []).map { article in
                 (article.id, article.title)
-            })
+            },
+            uniquingKeysWith: { first, _ in first }
         )
 
         let runningJobs = jobs

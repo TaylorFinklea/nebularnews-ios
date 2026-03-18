@@ -143,7 +143,9 @@ public enum FeedItemMapper {
     public static func computeHash(url: String?, title: String?, publishedAt: Date?) -> String {
         let input: String
         if let url, !url.isEmpty {
-            input = url
+            // Normalize URL so variants (www vs non-www, trailing slash, etc.)
+            // produce the same hash, matching articleKey normalization.
+            input = normalizedCanonicalArticleURL(from: url) ?? url
         } else if let title, !title.isEmpty, let date = publishedAt {
             input = "\(title)|\(date.timeIntervalSince1970)"
         } else if let title, !title.isEmpty {

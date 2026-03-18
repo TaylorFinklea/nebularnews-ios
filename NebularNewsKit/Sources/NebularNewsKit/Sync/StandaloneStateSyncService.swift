@@ -255,7 +255,7 @@ public actor StandaloneStateSyncService {
         let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
         let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
         let localFeedKeyByArticleKey: [String: String] = Dictionary(
-            uniqueKeysWithValues: localArticles.compactMap { article -> (String, String)? in
+            localArticles.compactMap { article -> (String, String)? in
                 article.refreshQueryState()
                 guard !article.articleKey.isEmpty,
                       let feedKey = article.feed?.feedKey,
@@ -264,7 +264,8 @@ public actor StandaloneStateSyncService {
                     return nil
                 }
                 return (article.articleKey, feedKey)
-            }
+            },
+            uniquingKeysWith: { first, _ in first }
         )
 
         var didChange = false
