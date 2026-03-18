@@ -414,19 +414,25 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     public func processingQueueHealth() async -> ArticleProcessingQueueHealth {
-        let hiddenArticleIDs = Set(
-            (((try? modelContext.fetch(FetchDescriptor<Article>())) ?? [])
-                .filter { $0.queryIsVisible == false && $0.queryIsArchived == false }
-                .map(\.id))
+        let hiddenDescriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> {
+                $0.queryIsVisible == false && $0.queryIsArchived == false
+            }
         )
-        let jobs = allProcessingJobs()
+        let hiddenArticleIDs = Set(
+            ((try? modelContext.fetch(hiddenDescriptor)) ?? []).map(\.id)
+        )
 
-        let queuedScoreJobs = jobs.filter {
-            $0.stage == .scoreAndTag && $0.status == .queued
-        }
-        let runningScoreJobs = jobs.filter {
-            $0.stage == .scoreAndTag && $0.status == .running
-        }
+        let scoreJobDescriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> {
+                $0.stageRaw == "score_and_tag" &&
+                ($0.statusRaw == "queued" || $0.statusRaw == "running")
+            }
+        )
+        let scoreJobs = (try? modelContext.fetch(scoreJobDescriptor)) ?? []
+        let queuedScoreJobs = scoreJobs.filter { $0.status == .queued }
+        let runningScoreJobs = scoreJobs.filter { $0.status == .running }
+
         let pendingVisibleCount =
             queuedScoreJobs.count(where: { hiddenArticleIDs.contains($0.articleID) }) +
             runningScoreJobs.count(where: { hiddenArticleIDs.contains($0.articleID) })
