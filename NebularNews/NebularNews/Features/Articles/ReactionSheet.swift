@@ -1,6 +1,12 @@
 import SwiftUI
 import SwiftData
+import os
 import NebularNewsKit
+
+private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.nebularnews.ios",
+    category: "ReactionSheet"
+)
 
 /// Sheet for reacting to an article with optional reason codes.
 struct ReactionSheet: View {
@@ -174,13 +180,17 @@ struct ReactionSheet: View {
             article.clearDismissal()
             article.setReaction(value: nil)
         }
-        try? modelContext.save()
+        saveContext()
 
         let newDismissedAt = article.dismissedAt
 
         Task {
             let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-            try? await articleRepo.syncStandaloneUserState(id: article.id)
+            do {
+                try await articleRepo.syncStandaloneUserState(id: article.id)
+            } catch {
+                logger.error("Failed to sync reaction state for \(article.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService
@@ -212,11 +222,15 @@ struct ReactionSheet: View {
         selectedCodes.removeAll()
         article.clearDismissal()
         article.setReaction(value: nil)
-        try? modelContext.save()
+        saveContext()
 
         Task {
             let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-            try? await articleRepo.syncStandaloneUserState(id: article.id)
+            do {
+                try await articleRepo.syncStandaloneUserState(id: article.id)
+            } catch {
+                logger.error("Failed to sync clear-reaction state for \(article.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService
@@ -234,6 +248,14 @@ struct ReactionSheet: View {
             )
         }
         dismiss()
+    }
+
+    private func saveContext() {
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to save model context: \(error.localizedDescription, privacy: .public)")
+        }
     }
 }
 

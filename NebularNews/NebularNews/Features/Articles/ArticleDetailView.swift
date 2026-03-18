@@ -1,6 +1,12 @@
 import SwiftUI
 import SwiftData
+import os
 import NebularNewsKit
+
+private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.nebularnews.ios",
+    category: "ArticleDetail"
+)
 
 struct ArticleDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -49,7 +55,7 @@ struct ArticleDetailView: View {
                         if article.isDismissed { article.clearDismissal() }
                         if !article.isRead { article.markRead() }
                         if shouldSave {
-                            try? modelContext.save()
+                            saveContext()
                             syncStandaloneState(for: article.id)
                         }
                     }
@@ -686,14 +692,22 @@ struct ArticleDetailView: View {
 
     private func toggleReadState(for article: Article) {
         if article.isRead { article.markUnread() } else { article.markRead() }
-        try? modelContext.save()
+        saveContext()
         syncStandaloneState(for: article.id)
     }
 
     private func toggleReadingList(for article: Article) {
         article.toggleReadingList()
-        try? modelContext.save()
+        saveContext()
         syncStandaloneState(for: article.id)
+    }
+
+    private func saveContext() {
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to save model context: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private func articleURL(for article: Article) -> URL? {
@@ -770,7 +784,11 @@ struct ArticleDetailView: View {
     private func syncStandaloneState(for articleID: String) {
         Task {
             let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-            try? await articleRepo.syncStandaloneUserState(id: articleID)
+            do {
+                try await articleRepo.syncStandaloneUserState(id: articleID)
+            } catch {
+                logger.error("Failed to sync state for \(articleID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 }
