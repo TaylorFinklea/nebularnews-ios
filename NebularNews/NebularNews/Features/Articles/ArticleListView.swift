@@ -1,7 +1,13 @@
 import SwiftUI
 import SwiftData
 import Observation
+import os
 import NebularNewsKit
+
+private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.nebularnews.ios",
+    category: "ArticleList"
+)
 
 struct ArticleListView: View {
     @Environment(\.modelContext) private var modelContext
@@ -139,14 +145,14 @@ struct ArticleListView: View {
     private func handleLeadingSwipe(for article: Article) {
         if article.isRead {
             article.markUnread()
-            try? modelContext.save()
+            saveContext()
             syncStandaloneState(for: article.id)
             return
         }
 
         if article.isDismissed {
             article.clearDismissal()
-            try? modelContext.save()
+            saveContext()
             syncStandaloneState(for: article.id)
             return
         }
@@ -154,11 +160,15 @@ struct ArticleListView: View {
         let previousDismissedAt = article.dismissedAt
         article.markDismissed()
         let newDismissedAt = article.dismissedAt
-        try? modelContext.save()
+        saveContext()
 
         Task {
             let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-            try? await articleRepo.syncStandaloneUserState(id: article.id)
+            do {
+                try await articleRepo.syncStandaloneUserState(id: article.id)
+            } catch {
+                logger.error("Failed to sync dismiss state for \(article.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
             let service = LocalStandalonePersonalizationService(
                 modelContainer: modelContext.container,
                 keychainService: AppConfiguration.shared.keychainService
@@ -171,10 +181,22 @@ struct ArticleListView: View {
         }
     }
 
+    private func saveContext() {
+        do {
+            try modelContext.save()
+        } catch {
+            logger.error("Failed to save model context: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func syncStandaloneState(for articleID: String) {
         Task {
             let articleRepo = LocalArticleRepository(modelContainer: modelContext.container)
-            try? await articleRepo.syncStandaloneUserState(id: articleID)
+            do {
+                try await articleRepo.syncStandaloneUserState(id: articleID)
+            } catch {
+                logger.error("Failed to sync state for \(articleID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
