@@ -1,10 +1,16 @@
 import SwiftUI
 import SwiftData
+import os
 import NebularNewsKit
 
 #if DEBUG
 private let personalizationReprocessLaunchArgument = "-reprocess-personalization"
 #endif
+
+private let appLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.nebularnews.ios",
+    category: "App"
+)
 
 @main
 struct NebularNewsApp: App {
@@ -22,7 +28,8 @@ struct NebularNewsApp: App {
                 cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier
             )
         } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
+            appLogger.fault("Primary ModelContainer failed, falling back to in-memory: \(error.localizedDescription, privacy: .public)")
+            modelContainer = try! makeInMemoryModelContainer()
         }
 
         _appState = State(initialValue: AppState(configuration: configuration))
