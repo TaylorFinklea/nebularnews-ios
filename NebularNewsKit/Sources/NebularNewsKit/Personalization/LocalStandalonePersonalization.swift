@@ -1419,6 +1419,7 @@ public actor LocalStandalonePersonalizationService {
         let impactedIDs = await repository.impactedArticleIDs(for: articleID, limit: impactedArticleRescoreLimit)
 
         for impactedID in impactedIDs {
+            guard !Task.isCancelled else { break }
             if await repository.needsRetagging(articleID: impactedID) {
                 try? await retagAndScoreArticle(articleID: impactedID)
             } else {
@@ -1431,6 +1432,7 @@ public actor LocalStandalonePersonalizationService {
         let impactedIDs = await repository.sameFeedArticleIDs(for: articleID, limit: impactedArticleRescoreLimit)
 
         for impactedID in impactedIDs {
+            guard !Task.isCancelled else { break }
             if await repository.needsRetagging(articleID: impactedID) {
                 try? await retagAndScoreArticle(articleID: impactedID)
             } else {
@@ -1471,8 +1473,10 @@ public actor LocalStandalonePersonalizationService {
         var processed = 0
 
         for chunkStart in stride(from: 0, to: articleIDs.count, by: max(1, batchSize)) {
+            guard !Task.isCancelled else { break }
             let chunk = articleIDs[chunkStart..<min(chunkStart + max(1, batchSize), articleIDs.count)]
             for articleID in chunk {
+                guard !Task.isCancelled else { break }
                 try? await retagAndScoreArticle(
                     articleID: articleID,
                     skipTagSuggestions: true,
@@ -1484,6 +1488,7 @@ public actor LocalStandalonePersonalizationService {
 
         let events = await repository.listHistoricalLearningEvents()
         for event in events {
+            guard !Task.isCancelled else { break }
             guard await refreshSnapshot(
                 articleID: event.articleID,
                 skipTagSuggestions: true,
@@ -1511,8 +1516,10 @@ public actor LocalStandalonePersonalizationService {
         }
 
         for chunkStart in stride(from: 0, to: articleIDs.count, by: max(1, batchSize)) {
+            guard !Task.isCancelled else { break }
             let chunk = articleIDs[chunkStart..<min(chunkStart + max(1, batchSize), articleIDs.count)]
             for articleID in chunk {
+                guard !Task.isCancelled else { break }
                 try? await rescoreArticle(articleID: articleID, persistScoreAssist: false)
             }
         }
