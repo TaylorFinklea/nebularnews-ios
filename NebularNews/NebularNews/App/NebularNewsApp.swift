@@ -110,6 +110,7 @@ struct NebularNewsApp: App {
                 await service.bootstrap()
                 _ = await settingsRepo.getOrCreate()
                 await syncService.bootstrap()
+                lastSyncBootstrapAt = Date()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
@@ -136,7 +137,8 @@ struct NebularNewsApp: App {
                 if appState.isStandaloneMode {
                     Task {
                         let now = Date()
-                        if lastSyncBootstrapAt == nil || now.timeIntervalSince(lastSyncBootstrapAt!) > 300 {
+                        let shouldSync = lastSyncBootstrapAt.map { now.timeIntervalSince($0) > 300 } ?? true
+                        if shouldSync {
                             let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
                             await syncService.bootstrap()
                             lastSyncBootstrapAt = now
