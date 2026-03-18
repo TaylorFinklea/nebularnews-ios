@@ -72,8 +72,8 @@ public enum AnthropicError: LocalizedError, Sendable {
 public struct AnthropicClient: Sendable {
     private let apiKey: String
     private let session: URLSession
-    private let messagesURL = "https://api.anthropic.com/v1/messages"
-    private let modelsURL = "https://api.anthropic.com/v1/models"
+    private static let messagesEndpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+    private static let modelsEndpoint = URL(string: "https://api.anthropic.com/v1/models")!
     private let apiVersion = "2023-06-01"
 
     public init(apiKey: String, session: URLSession = .shared) {
@@ -111,7 +111,7 @@ public struct AnthropicClient: Sendable {
         let jsonData = try JSONSerialization.data(withJSONObject: body)
 
         // Build HTTP request
-        var request = URLRequest(url: URL(string: messagesURL)!)
+        var request = URLRequest(url: Self.messagesEndpoint)
         request.httpMethod = "POST"
         request.httpBody = jsonData
         request.timeoutInterval = 60
@@ -168,7 +168,7 @@ public struct AnthropicClient: Sendable {
     }
 
     public func listModels() async throws -> [AnthropicModelDescriptor] {
-        var request = URLRequest(url: URL(string: modelsURL)!)
+        var request = URLRequest(url: Self.modelsEndpoint)
         request.httpMethod = "GET"
         request.timeoutInterval = 30
         request.setValue(apiKey, forHTTPHeaderField: "x-api-key")

@@ -79,9 +79,7 @@ struct TodayView: View {
                 await viewModel.reload(container: modelContext.container)
             }
             .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.todaySnapshotChanged)) { _ in
-                Task {
-                    await viewModel.reload(container: modelContext.container)
-                }
+                viewModel.scheduleDebouncedReload(container: modelContext.container)
             }
             .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
                 viewModel.scheduleDebouncedReload(container: modelContext.container)

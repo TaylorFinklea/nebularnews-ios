@@ -10,6 +10,11 @@ final class AppState {
         case standalone
     }
 
+    enum ContainerFallbackReason {
+        case cloudKitUnavailable(any Error)
+        case diskCorrupted(any Error)
+    }
+
     private enum DefaultsKey {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let appMode = "appMode"
@@ -25,6 +30,8 @@ final class AppState {
     let keychain: KeychainManager
     let mobileAPI: MobileAPIClient
     let mobileOAuthCoordinator: MobileOAuthCoordinator
+
+    var containerFallbackReason: ContainerFallbackReason?
 
     var hasCompletedOnboarding: Bool {
         didSet {
