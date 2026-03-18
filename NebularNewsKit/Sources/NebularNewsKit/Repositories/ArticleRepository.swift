@@ -341,7 +341,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
     public func listArticles(ids: [String]) async -> [Article] {
         guard !ids.isEmpty else { return [] }
-        let descriptor = FetchDescriptor<Article>()
+        let descriptor = FetchDescriptor<Article>(
+            predicate: #Predicate { ids.contains($0.id) }
+        )
         let articles = (try? modelContext.fetch(descriptor)) ?? []
         let byID = Dictionary(uniqueKeysWithValues: articles.map { ($0.id, $0) })
         return ids.compactMap { byID[$0] }
