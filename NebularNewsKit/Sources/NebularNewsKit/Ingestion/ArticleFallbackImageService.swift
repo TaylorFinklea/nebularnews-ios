@@ -76,7 +76,7 @@ public actor ArticleFallbackImageService {
             )
         }
 
-        let preset = deterministicPreset(for: snapshot)
+        guard let preset = deterministicPreset(for: snapshot) else { return nil }
         return ImagePresetSelection(
             preset: preset,
             provider: "deterministic",
@@ -136,9 +136,11 @@ public actor ArticleFallbackImageService {
         return nil
     }
 
-    private func deterministicPreset(for snapshot: ArticleFallbackImageSnapshot) -> UnsplashFallbackPreset {
+    private func deterministicPreset(for snapshot: ArticleFallbackImageSnapshot) -> UnsplashFallbackPreset? {
+        guard let firstPreset = unsplashFallbackPresets.first else { return nil }
+
         let queryTokens = fallbackQuery(for: snapshot)
-        var bestPreset = unsplashFallbackPresets[0]
+        var bestPreset = firstPreset
         var bestScore = -1
 
         for preset in unsplashFallbackPresets {
