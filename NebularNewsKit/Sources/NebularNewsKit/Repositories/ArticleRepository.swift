@@ -1669,7 +1669,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         stage: ArticleProcessingStage
     ) throws -> ArticleProcessingJob? {
         let key = ArticleProcessingJob.makeKey(articleID: articleID, stage: stage)
-        return allProcessingJobs().first { $0.key == key }
+        let descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> { $0.key == key }
+        )
+        return try modelContext.fetch(descriptor).first
     }
 
     private func allProcessingJobs() -> [ArticleProcessingJob] {
@@ -1677,9 +1680,16 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    private func processingJobs(for articleID: String) -> [ArticleProcessingJob] {
+        let descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> { $0.articleID == articleID }
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
     @discardableResult
     private func removeProcessingJobs(for articleID: String) -> Bool {
-        let jobs = allProcessingJobs().filter { $0.articleID == articleID }
+        let jobs = processingJobs(for: articleID)
         guard !jobs.isEmpty else { return false }
         for job in jobs {
             modelContext.delete(job)
@@ -1688,29 +1698,40 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     }
 
     private func cleanupOrphanedProcessingJobs() {
-        let articleDescriptor = FetchDescriptor<Article>()
-        let liveArticleIDs = Set(((try? modelContext.fetch(articleDescriptor)) ?? []).map(\.id))
+        let jobs = (try? modelContext.fetch(FetchDescriptor<ArticleProcessingJob>())) ?? []
+        let jobArticleIDs = Set(jobs.map(\.articleID))
 
-        let jobs = allProcessingJobs()
+        guard !jobArticleIDs.isEmpty else { return }
 
-        for job in jobs where !liveArticleIDs.contains(job.articleID) {
-            modelContext.delete(job)
+        for articleID in jobArticleIDs {
+            let descriptor = FetchDescriptor<Article>(
+                predicate: #Predicate<Article> { $0.id == articleID }
+            )
+            let exists = ((try? modelContext.fetchCount(descriptor)) ?? 0) > 0
+            if !exists {
+                for job in jobs where job.articleID == articleID {
+                    modelContext.delete(job)
+                }
+            }
         }
     }
 
     private func cleanupArchivedProcessingJobs() -> Bool {
-        let articleDescriptor = FetchDescriptor<Article>()
-        let archivedArticleIDs = Set(
-            ((try? modelContext.fetch(articleDescriptor)) ?? [])
-                .filter(\.isArchived)
-                .map(\.id)
+        let jobs = (try? modelContext.fetch(FetchDescriptor<ArticleProcessingJob>())) ?? []
+        let jobArticleIDs = Set(jobs.map(\.articleID))
+        guard !jobArticleIDs.isEmpty else { return false }
+
+        let archivedDescriptor = FetchDescriptor<Article>(
+            predicate: #Predicate<Article> { $0.queryIsArchived == true }
         )
+        let archivedArticleIDs = Set(
+            ((try? modelContext.fetch(archivedDescriptor)) ?? []).map(\.id)
+        )
+        let archivedJobArticleIDs = jobArticleIDs.intersection(archivedArticleIDs)
+        guard !archivedJobArticleIDs.isEmpty else { return false }
 
-        guard !archivedArticleIDs.isEmpty else { return false }
-
-        let jobs = allProcessingJobs()
         var removed = false
-        for job in jobs where archivedArticleIDs.contains(job.articleID) {
+        for job in jobs where archivedJobArticleIDs.contains(job.articleID) {
             modelContext.delete(job)
             removed = true
         }
@@ -1721,11 +1742,15 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         timeout: TimeInterval = 120
     ) -> Bool {
         let cutoff = Date().addingTimeInterval(-timeout)
-        let jobs = allProcessingJobs()
+        let descriptor = FetchDescriptor<ArticleProcessingJob>(
+            predicate: #Predicate<ArticleProcessingJob> {
+                $0.statusRaw == "running" && $0.updatedAt < cutoff
+            }
+        )
+        let staleJobs = (try? modelContext.fetch(descriptor)) ?? []
         var reclaimed = false
 
-        for job in jobs
-        where job.status == .running && job.updatedAt < cutoff {
+        for job in staleJobs {
             job.status = .queued
             job.updatedAt = Date()
             job.availableAt = Date()
