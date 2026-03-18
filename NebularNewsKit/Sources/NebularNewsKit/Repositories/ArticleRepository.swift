@@ -366,8 +366,13 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             return computeFeedReputation(feedbackCount: 0, weightedFeedbackCount: 0, ratingSum: 0)
         }
 
+        let descriptor = FetchDescriptor<SyncedArticleState>(
+            predicate: #Predicate<SyncedArticleState> { $0.feedKey == feedKey }
+        )
+        let states = (try? modelContext.fetch(descriptor)) ?? []
+
         var accumulator = FeedReputationAccumulator()
-        for state in allSyncedArticleStates() where state.feedKey == feedKey {
+        for state in states {
             accumulator.add(
                 reactionValue: state.reactionValue,
                 serializedReasonCodes: state.reactionReasonCodes,
