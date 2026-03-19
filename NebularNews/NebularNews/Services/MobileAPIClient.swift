@@ -136,6 +136,31 @@ final class MobileAPIClient {
         return response.tags
     }
 
+    // MARK: - Feed management
+
+    func addFeed(url: String) async throws -> CompanionAddFeedResponse {
+        struct Body: Encodable { let url: String }
+        return try await post("/api/mobile/feeds", body: Body(url: url))
+    }
+
+    func deleteFeed(id: String) async throws -> CompanionDeleteFeedResponse {
+        try await delete("/api/mobile/feeds/\(id)")
+    }
+
+    func importOPML(xml: String) async throws -> CompanionImportOPMLResponse {
+        struct Body: Encodable { let opml: String }
+        return try await post("/api/mobile/feeds/import", body: Body(opml: xml))
+    }
+
+    func exportOPML() async throws -> String {
+        try await getRawString("/api/mobile/feeds/export")
+    }
+
+    func triggerPull(cycles: Int = 1) async throws -> CompanionTriggerPullResponse {
+        struct Body: Encodable { let cycles: Int }
+        return try await post("/api/mobile/pull", body: Body(cycles: cycles))
+    }
+
     func clearSession() {
         keychain.delete(forKey: KeychainManager.Key.syncAccessToken)
         keychain.delete(forKey: KeychainManager.Key.syncRefreshToken)
@@ -148,6 +173,29 @@ final class MobileAPIClient {
 
     private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body) async throws -> T {
         try await authorizedRequest(path: path, method: "POST", bodyData: try encoder.encode(body), decode: T.self)
+    }
+
+    private func delete<T: Decodable>(_ path: String) async throws -> T {
+        try await authorizedRequest(path: path, method: "DELETE", bodyData: nil, decode: T.self)
+    }
+
+    private func getRawString(_ path: String) async throws -> String {
+        let serverURL = try serverURL()
+        let accessToken = try await accessToken()
+        var request = URLRequest(url: serverURL.appending(path: path))
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw MobileAPIError.invalidResponse
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw try decodeServerError(from: data, statusCode: httpResponse.statusCode)
+        }
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw MobileAPIError.invalidResponse
+        }
+        return string
     }
 
     private func authorizedRequest<T: Decodable>(

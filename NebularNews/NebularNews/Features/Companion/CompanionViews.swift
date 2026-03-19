@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import UniformTypeIdentifiers
 import NebularNewsKit
 
 private struct ReactionReasonOption: Identifiable {
@@ -131,7 +133,11 @@ struct CompanionDashboardView: View {
                             }
                         }
                     }
-                    .refreshable { await loadDashboard() }
+                    .refreshable {
+                        _ = try? await appState.mobileAPI.triggerPull()
+                        try? await Task.sleep(for: .seconds(2))
+                        await loadDashboard()
+                    }
                 } else {
                     VStack(spacing: 20) {
                         if !errorMessage.isEmpty {
@@ -329,7 +335,11 @@ struct CompanionArticlesView: View {
             .task(id: FilterKey(query: query, filter: filter)) {
                 await loadArticles()
             }
-            .refreshable { await loadArticles() }
+            .refreshable {
+                _ = try? await appState.mobileAPI.triggerPull()
+                try? await Task.sleep(for: .seconds(2))
+                await loadArticles()
+            }
         }
     }
 
@@ -865,6 +875,9 @@ struct CompanionFeedsView: View {
     @State private var feeds: [CompanionFeed] = []
     @State private var errorMessage = ""
     @State private var isLoading = false
+    @State private var showingAddFeed = false
+    @State private var showingImport = false
+    @State private var deletingFeed: CompanionFeed?
 
     var body: some View {
         List {
@@ -900,9 +913,39 @@ struct CompanionFeedsView: View {
                     .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        deletingFeed = feed
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
             }
         }
         .navigationTitle("Feeds")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        showingAddFeed = true
+                    } label: {
+                        Label("Add Feed", systemImage: "plus")
+                    }
+                    Button {
+                        showingImport = true
+                    } label: {
+                        Label("Import OPML", systemImage: "square.and.arrow.down")
+                    }
+                    Button {
+                        Task { await exportOPML() }
+                    } label: {
+                        Label("Export OPML", systemImage: "square.and.arrow.up")
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
         .overlay {
             if isLoading && feeds.isEmpty {
                 ProgressView("Loading feeds…")
@@ -914,6 +957,45 @@ struct CompanionFeedsView: View {
             }
         }
         .refreshable { await loadFeeds() }
+        .sheet(isPresented: $showingAddFeed) {
+            CompanionAddFeedSheet { url in
+                Task {
+                    do {
+                        _ = try await appState.mobileAPI.addFeed(url: url)
+                        await loadFeeds()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showingImport) {
+            CompanionOPMLImportSheet { xml in
+                Task {
+                    do {
+                        _ = try await appState.mobileAPI.importOPML(xml: xml)
+                        await loadFeeds()
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                }
+            }
+        }
+        .alert(
+            "Delete Feed",
+            isPresented: Binding(
+                get: { deletingFeed != nil },
+                set: { if !$0 { deletingFeed = nil } }
+            ),
+            presenting: deletingFeed
+        ) { feed in
+            Button("Delete", role: .destructive) {
+                Task { await deleteFeed(feed) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { feed in
+            Text("Delete \"\(feed.title ?? feed.url)\" and all its exclusive articles?")
+        }
     }
 
     private func loadFeeds() async {
@@ -925,6 +1007,118 @@ struct CompanionFeedsView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func deleteFeed(_ feed: CompanionFeed) async {
+        do {
+            _ = try await appState.mobileAPI.deleteFeed(id: feed.id)
+            feeds.removeAll { $0.id == feed.id }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func exportOPML() async {
+        do {
+            let xml = try await appState.mobileAPI.exportOPML()
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("nebular-news.opml")
+            try xml.write(to: tempURL, atomically: true, encoding: .utf8)
+
+            await MainActor.run {
+                let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
+                guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                      let rootVC = windowScene.windows.first?.rootViewController else { return }
+                rootVC.present(activityVC, animated: true)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Add Feed Sheet
+
+private struct CompanionAddFeedSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onAdd: (String) -> Void
+    @State private var url = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Feed URL", text: $url)
+                        .keyboardType(.URL)
+                        .textContentType(.URL)
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                }
+            }
+            .navigationTitle("Add Feed")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        onAdd(url)
+                        dismiss()
+                    }
+                    .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+}
+
+// MARK: - OPML Import Sheet
+
+private struct CompanionOPMLImportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let onImport: (String) -> Void
+    @State private var showingFilePicker = false
+    @State private var importedXML: String?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                Image(systemName: "doc.text")
+                    .font(.largeTitle)
+                    .foregroundStyle(.secondary)
+                Text("Select an OPML file to import feeds.")
+                    .foregroundStyle(.secondary)
+                Button("Choose File") {
+                    showingFilePicker = true
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .navigationTitle("Import OPML")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .fileImporter(
+                isPresented: $showingFilePicker,
+                allowedContentTypes: [.xml, .plainText],
+                allowsMultipleSelection: false
+            ) { result in
+                guard let url = try? result.get().first else { return }
+                guard url.startAccessingSecurityScopedResource() else { return }
+                defer { url.stopAccessingSecurityScopedResource() }
+                if let xml = try? String(contentsOf: url, encoding: .utf8) {
+                    onImport(xml)
+                    dismiss()
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

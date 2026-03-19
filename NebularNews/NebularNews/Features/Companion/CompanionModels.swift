@@ -259,3 +259,31 @@ struct CompanionArticleFilter: Equatable {
         sortOrder = .newest
     }
 }
+
+// MARK: - Feed management responses
+
+struct CompanionAddFeedResponse: Decodable {
+    let ok: Bool
+    let id: String
+}
+
+struct CompanionDeleteFeedResponse: Decodable {
+    let ok: Bool
+    let deleted: CompanionDeleteStats?
+}
+
+struct CompanionDeleteStats: Decodable {
+    let feeds: Int
+    let articles: Int
+}
+
+struct CompanionImportOPMLResponse: Decodable {
+    let ok: Bool
+    let added: Int
+}
+
+struct CompanionTriggerPullResponse: Decodable {
+    let ok: Bool?
+    let started: Bool?
+    let runId: String?
+}
