@@ -161,6 +161,26 @@ final class MobileAPIClient {
         return try await post("/api/mobile/pull", body: Body(cycles: cycles))
     }
 
+    // MARK: - Today + Reading list
+
+    func fetchToday() async throws -> CompanionTodayPayload {
+        try await get("/api/mobile/today")
+    }
+
+    func saveArticle(id: String, saved: Bool) async throws -> CompanionSaveResponse {
+        struct Body: Encodable { let saved: Bool }
+        return try await post("/api/mobile/articles/\(id)/save", body: Body(saved: saved))
+    }
+
+    func dismissArticle(id: String) async throws -> CompanionDismissResponse {
+        struct Body: Encodable { let dismissed = true }
+        return try await post("/api/mobile/articles/\(id)/dismiss", body: Body())
+    }
+
+    func fetchSavedArticles(offset: Int = 0, limit: Int = 50) async throws -> CompanionArticlesPayload {
+        try await get("/api/mobile/articles?saved=true&limit=\(limit)&offset=\(offset)")
+    }
+
     func clearSession() {
         keychain.delete(forKey: KeychainManager.Key.syncAccessToken)
         keychain.delete(forKey: KeychainManager.Key.syncRefreshToken)

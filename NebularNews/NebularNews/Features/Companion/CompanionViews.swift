@@ -416,6 +416,8 @@ struct CompanionArticleDetailView: View {
     @State private var reactionDraft: ReactionDraft?
     @State private var acceptingSuggestion: String?
     @State private var scoreExpanded = false
+    @State private var isSaved = false
+    @State private var savingBookmark = false
 
     private var palette: NebularPalette { NebularPalette.forColorScheme(colorScheme) }
 
@@ -722,6 +724,15 @@ struct CompanionArticleDetailView: View {
 
         Spacer()
 
+        Button {
+            Task { await toggleSaved() }
+        } label: {
+            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+        }
+        .disabled(savingBookmark)
+
+        Spacer()
+
         Button(payload.article.isRead == 1 ? "Mark unread" : "Mark read") {
             Task { await toggleRead() }
         }
@@ -815,6 +826,17 @@ struct CompanionArticleDetailView: View {
             let reaction = try await appState.mobileAPI.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
             payload?.reaction = reaction
             reactionDraft = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleSaved() async {
+        savingBookmark = true
+        defer { savingBookmark = false }
+        do {
+            let response = try await appState.mobileAPI.saveArticle(id: articleId, saved: !isSaved)
+            isSaved = response.saved
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1147,6 +1169,9 @@ struct CompanionMoreView: View {
     var body: some View {
         NavigationStack {
             List {
+                NavigationLink(destination: CompanionDashboardView()) {
+                    Label("Dashboard", systemImage: "house")
+                }
                 NavigationLink(destination: CompanionFeedsView()) {
                     Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
                 }

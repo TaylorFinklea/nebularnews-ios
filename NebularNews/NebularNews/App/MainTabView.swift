@@ -54,25 +54,38 @@ struct MainTabView: View {
         }
     }
 
-    // MARK: - Companion Mode (unchanged)
+    // MARK: - Companion Mode
 
     private var companionTabs: some View {
         TabView {
-            Tab("Dashboard", systemImage: "house") {
-                CompanionDashboardView()
+            Tab("Today", systemImage: "sun.max") {
+                CompanionTodayView()
             }
 
-            Tab("Articles", systemImage: "doc.text") {
+            Tab("Feed", systemImage: "doc.text") {
                 CompanionArticlesView()
             }
 
-            Tab("Chat", systemImage: "bubble.left.and.bubble.right") {
-                CompanionChatPlaceholderView()
+            Tab("Reading List", systemImage: "bookmark") {
+                CompanionReadingListView()
             }
+            .badge(companionSavedCount)
 
             Tab("More", systemImage: "ellipsis") {
                 CompanionMoreView()
             }
+        }
+        .task {
+            await loadCompanionSavedCount()
+        }
+    }
+
+    @State private var companionSavedCount = 0
+
+    private func loadCompanionSavedCount() async {
+        guard appState.isCompanionMode else { return }
+        if let payload = try? await appState.mobileAPI.fetchSavedArticles(limit: 0) {
+            companionSavedCount = payload.total
         }
     }
 

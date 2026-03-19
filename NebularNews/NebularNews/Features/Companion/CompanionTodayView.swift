@@ -1,0 +1,241 @@
+import SwiftUI
+import NebularNewsKit
+
+struct CompanionTodayView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var payload: CompanionTodayPayload?
+    @State private var errorMessage = ""
+    @State private var isLoading = false
+
+    private var palette: NebularPalette { NebularPalette.forColorScheme(colorScheme) }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !errorMessage.isEmpty && payload == nil {
+                        errorBanner
+                    }
+
+                    if let payload {
+                        if !errorMessage.isEmpty {
+                            errorBanner
+                        }
+
+                        // Quick stats
+                        HStack(spacing: 12) {
+                            StatPill(label: "Unread", value: "\(payload.stats.unreadTotal)")
+                            StatPill(label: "New today", value: "\(payload.stats.newToday)")
+                            StatPill(label: "High fit", value: "\(payload.stats.highFitUnread)")
+                        }
+                        .padding(.horizontal)
+
+                        // Hero card
+                        if let hero = payload.hero {
+                            NavigationLink(destination: CompanionArticleDetailView(articleId: hero.id)) {
+                                TodayHeroCardView(article: hero)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
+                        }
+
+                        // Up next
+                        if !payload.upNext.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Up next")
+                                    .font(.headline)
+                                    .padding(.horizontal)
+
+                                ForEach(payload.upNext) { article in
+                                    NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
+                                        CompactUpNextRow(article: article)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
+                        // News brief
+                        if let newsBrief = payload.newsBrief, appState.features?.newsBrief == true {
+                            GlassCard(style: .standard) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(newsBrief.title)
+                                        .font(.headline)
+                                    Text(newsBrief.editionLabel)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+
+                                    ForEach(newsBrief.bullets) { bullet in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("• \(bullet.text)")
+                                                .font(.subheadline)
+                                            ForEach(bullet.sources) { source in
+                                                NavigationLink(destination: CompanionArticleDetailView(articleId: source.articleId)) {
+                                                    Text(source.title)
+                                                        .font(.caption)
+                                                        .foregroundStyle(palette.primary)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+                .padding(.vertical)
+            }
+            .background(NebularBackdrop())
+            .overlay {
+                if isLoading && payload == nil {
+                    ProgressView("Loading today…")
+                }
+            }
+            .navigationTitle("Today")
+            .refreshable {
+                _ = try? await appState.mobileAPI.triggerPull()
+                try? await Task.sleep(for: .seconds(2))
+                await loadToday()
+            }
+            .task {
+                // Show cached data immediately
+                if payload == nil {
+                    payload = await CompanionCache.shared.load(CompanionTodayPayload.self, category: .today)
+                }
+                await loadToday()
+            }
+        }
+    }
+
+    private var errorBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wifi.exclamationmark")
+                .foregroundStyle(.red)
+            Text(errorMessage)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button("Retry") { Task { await loadToday() } }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+        }
+        .padding()
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.horizontal)
+    }
+
+    private func loadToday() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let result = try await appState.mobileAPI.fetchToday()
+            payload = result
+            errorMessage = ""
+            await CompanionCache.shared.store(result, category: .today)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Today subviews
+
+private struct StatPill: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.bold())
+                .monospacedDigit()
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .modifier(GlassRoundedBackground(cornerRadius: 12))
+    }
+}
+
+private struct TodayHeroCardView: View {
+    let article: CompanionArticleListItem
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let palette = NebularPalette.forColorScheme(colorScheme)
+
+        GlassImageCard(style: .hero) {
+            ZStack(alignment: .bottomLeading) {
+                if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().aspectRatio(contentMode: .fill)
+                        default:
+                            Rectangle().fill(palette.surfaceSoft)
+                        }
+                    }
+                    .frame(height: 220)
+                    .clipped()
+                } else {
+                    Rectangle()
+                        .fill(palette.surfaceSoft)
+                        .frame(height: 220)
+                }
+
+                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    if let score = article.score {
+                        ScoreBadge(score: score)
+                    }
+                    Text(article.title ?? "Untitled")
+                        .font(.title3.bold())
+                        .foregroundStyle(.white)
+                        .lineLimit(3)
+                    if let source = article.sourceName {
+                        Text(source)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+}
+
+private struct CompactUpNextRow: View {
+    let article: CompanionArticleListItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 3)
+                .frame(height: 44)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(article.title ?? "Untitled")
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    if let source = article.sourceName {
+                        Text(source)
+                    }
+                    if let score = article.score {
+                        Text("\(score)/5")
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal)
+    }
+}

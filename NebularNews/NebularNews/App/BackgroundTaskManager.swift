@@ -70,6 +70,12 @@ enum BackgroundTaskManager {
         scheduleNextRefresh()
         scheduleNextProcessing()
 
+        let appState = AppState(configuration: AppConfiguration.shared)
+        if appState.isCompanionMode && appState.hasCompanionSession {
+            handleCompanionRefreshTask(task, api: appState.mobileAPI)
+            return
+        }
+
         // Create a task that iOS can cancel if time runs out
         let pollTask = Task {
             await RefreshCoordinator.shared.runBackgroundRefresh(
@@ -128,6 +134,39 @@ enum BackgroundTaskManager {
         Task {
             _ = await processingTask.result
             task.setTaskCompleted(success: !processingTask.isCancelled)
+        }
+    }
+
+    // MARK: - Companion mode background refresh
+
+    private static func handleCompanionRefreshTask(_ task: BGAppRefreshTask, api: MobileAPIClient) {
+        let refreshTask = Task {
+            // Trigger server poll
+            _ = try? await api.triggerPull()
+            try? await Task.sleep(for: .seconds(3))
+
+            // Prefetch today + articles and cache them
+            if let today = try? await api.fetchToday() {
+                await CompanionCache.shared.store(today, category: .today)
+            }
+            if let articles = try? await api.fetchArticles() {
+                await CompanionCache.shared.store(articles.articles, category: .articleList)
+            }
+            if let saved = try? await api.fetchSavedArticles() {
+                await CompanionCache.shared.store(saved.articles, category: .savedArticles)
+            }
+
+            // Clean up stale cache entries
+            await CompanionCache.shared.evictStale()
+        }
+
+        task.expirationHandler = {
+            refreshTask.cancel()
+        }
+
+        Task {
+            _ = await refreshTask.result
+            task.setTaskCompleted(success: !refreshTask.isCancelled)
         }
     }
 }

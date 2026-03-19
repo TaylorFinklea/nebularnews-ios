@@ -1,12 +1,12 @@
 import Foundation
 
-struct CompanionSessionPayload: Decodable {
+struct CompanionSessionPayload: Codable {
     let session: CompanionSession
     let server: CompanionServer
     let features: CompanionFeatureFlags
 }
 
-struct CompanionSession: Decodable {
+struct CompanionSession: Codable {
     let authenticated: Bool
     let clientId: String
     let userId: String
@@ -14,28 +14,28 @@ struct CompanionSession: Decodable {
     let scopes: [String]
 }
 
-struct CompanionServer: Decodable {
+struct CompanionServer: Codable {
     let origin: String?
     let resource: String?
 }
 
-struct CompanionFeatureFlags: Decodable {
+struct CompanionFeatureFlags: Codable {
     let dashboard: Bool
     let newsBrief: Bool
     let reactions: Bool
     let tags: Bool
 }
 
-struct CompanionDashboardPayload: Decodable {
+struct CompanionDashboardPayload: Codable {
     let hasFeeds: Bool
     let newsBrief: CompanionNewsBrief?
     let readingQueue: [CompanionArticleListItem]
     let momentum: CompanionReadingMomentum
 }
 
-struct CompanionNewsBrief: Decodable {
-    struct Bullet: Decodable, Identifiable {
-        struct Source: Decodable, Identifiable {
+struct CompanionNewsBrief: Codable {
+    struct Bullet: Codable, Identifiable {
+        struct Source: Codable, Identifiable {
             let articleId: String
             let title: String
             let canonicalUrl: String?
@@ -60,21 +60,21 @@ struct CompanionNewsBrief: Decodable {
     let stale: Bool
 }
 
-struct CompanionReadingMomentum: Decodable {
+struct CompanionReadingMomentum: Codable {
     let unreadTotal: Int?
     let unread24h: Int?
     let unread7d: Int?
     let highFitUnread7d: Int?
 }
 
-struct CompanionArticlesPayload: Decodable {
+struct CompanionArticlesPayload: Codable {
     let articles: [CompanionArticleListItem]
     let total: Int
     let limit: Int
     let offset: Int
 }
 
-struct CompanionArticleListItem: Decodable, Identifiable {
+struct CompanionArticleListItem: Codable, Identifiable {
     let id: String
     let canonicalUrl: String?
     let imageUrl: String?
@@ -96,7 +96,7 @@ struct CompanionArticleListItem: Decodable, Identifiable {
     let tags: [CompanionTag]?
 }
 
-struct CompanionArticleDetailPayload: Decodable {
+struct CompanionArticleDetailPayload: Codable {
     let article: CompanionArticle
     let summary: CompanionArticleSummary?
     let keyPoints: CompanionKeyPoints?
@@ -109,7 +109,7 @@ struct CompanionArticleDetailPayload: Decodable {
     let tagSuggestions: [CompanionTagSuggestion]
 }
 
-struct CompanionArticle: Decodable {
+struct CompanionArticle: Codable {
     let id: String
     let canonicalUrl: String?
     let imageUrl: String?
@@ -124,21 +124,21 @@ struct CompanionArticle: Decodable {
     let isRead: Int?
 }
 
-struct CompanionArticleSummary: Decodable {
+struct CompanionArticleSummary: Codable {
     let summaryText: String?
     let provider: String?
     let model: String?
     let createdAt: Int?
 }
 
-struct CompanionKeyPoints: Decodable {
+struct CompanionKeyPoints: Codable {
     let keyPointsJson: String?
     let provider: String?
     let model: String?
     let createdAt: Int?
 }
 
-struct CompanionScore: Decodable {
+struct CompanionScore: Codable {
     let score: Int?
     let label: String?
     let reasonText: String?
@@ -151,7 +151,7 @@ struct CompanionScore: Decodable {
     let weightedAverage: Double?
 }
 
-struct CompanionFeedback: Decodable, Identifiable {
+struct CompanionFeedback: Codable, Identifiable {
     let rating: Int?
     let comment: String?
     let createdAt: Int?
@@ -159,7 +159,7 @@ struct CompanionFeedback: Decodable, Identifiable {
     var id: String { "\(createdAt ?? 0)-\(rating ?? 0)-\(comment ?? "")" }
 }
 
-struct CompanionReaction: Decodable {
+struct CompanionReaction: Codable {
     let articleId: String?
     let feedId: String?
     let value: Int
@@ -167,7 +167,7 @@ struct CompanionReaction: Decodable {
     let reasonCodes: [String]?
 }
 
-struct CompanionSource: Decodable, Identifiable {
+struct CompanionSource: Codable, Identifiable {
     let feedId: String?
     let feedTitle: String?
     let siteUrl: String?
@@ -178,22 +178,22 @@ struct CompanionSource: Decodable, Identifiable {
     var id: String { feedId ?? feedUrl ?? UUID().uuidString }
 }
 
-struct CompanionTag: Decodable, Identifiable, Hashable {
+struct CompanionTag: Codable, Identifiable, Hashable {
     let id: String
     let name: String
 }
 
-struct CompanionTagSuggestion: Decodable, Identifiable {
+struct CompanionTagSuggestion: Codable, Identifiable {
     let id: String
     let name: String
     let confidence: Double?
 }
 
-struct CompanionFeedListPayload: Decodable {
+struct CompanionFeedListPayload: Codable {
     let feeds: [CompanionFeed]
 }
 
-struct CompanionFeed: Decodable, Identifiable {
+struct CompanionFeed: Codable, Identifiable {
     let id: String
     let url: String
     let title: String?
@@ -205,11 +205,11 @@ struct CompanionFeed: Decodable, Identifiable {
     let articleCount: Int?
 }
 
-struct CompanionReactionResponse: Decodable {
+struct CompanionReactionResponse: Codable {
     let reaction: CompanionReaction
 }
 
-struct CompanionTagMutationResponse: Decodable {
+struct CompanionTagMutationResponse: Codable {
     let articleId: String?
     let tags: [CompanionTag]
 }
@@ -262,28 +262,56 @@ struct CompanionArticleFilter: Equatable {
 
 // MARK: - Feed management responses
 
-struct CompanionAddFeedResponse: Decodable {
+struct CompanionAddFeedResponse: Codable {
     let ok: Bool
     let id: String
 }
 
-struct CompanionDeleteFeedResponse: Decodable {
+struct CompanionDeleteFeedResponse: Codable {
     let ok: Bool
     let deleted: CompanionDeleteStats?
 }
 
-struct CompanionDeleteStats: Decodable {
+struct CompanionDeleteStats: Codable {
     let feeds: Int
     let articles: Int
 }
 
-struct CompanionImportOPMLResponse: Decodable {
+struct CompanionImportOPMLResponse: Codable {
     let ok: Bool
     let added: Int
 }
 
-struct CompanionTriggerPullResponse: Decodable {
+struct CompanionTriggerPullResponse: Codable {
     let ok: Bool?
     let started: Bool?
     let runId: String?
+}
+
+// MARK: - Today payload
+
+struct CompanionTodayPayload: Codable {
+    let hero: CompanionArticleListItem?
+    let upNext: [CompanionArticleListItem]
+    let stats: CompanionTodayStats
+    let newsBrief: CompanionNewsBrief?
+}
+
+struct CompanionTodayStats: Codable {
+    let unreadTotal: Int
+    let newToday: Int
+    let highFitUnread: Int
+}
+
+// MARK: - Save response
+
+struct CompanionSaveResponse: Codable {
+    let articleId: String
+    let saved: Bool
+    let savedAt: Int?
+}
+
+struct CompanionDismissResponse: Codable {
+    let articleId: String
+    let dismissed: Bool
 }
