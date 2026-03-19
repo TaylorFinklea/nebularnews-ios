@@ -32,6 +32,7 @@ final class AppState {
     let mobileOAuthCoordinator: MobileOAuthCoordinator
 
     var containerFallbackReason: ContainerFallbackReason?
+    var features: CompanionFeatureFlags?
 
     var hasCompletedOnboarding: Bool {
         didSet {

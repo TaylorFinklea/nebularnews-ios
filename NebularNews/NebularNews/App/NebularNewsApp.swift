@@ -96,6 +96,13 @@ struct NebularNewsApp: App {
             .environment(appState)
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
+            .task(id: appState.isCompanionMode) {
+                if appState.isCompanionMode && appState.hasCompanionSession {
+                    if let session = try? await appState.mobileAPI.fetchSession() {
+                        appState.features = session.features
+                    }
+                }
+            }
             .task(id: appState.mode) {
                 guard appState.isStandaloneMode else {
                     await ProcessingQueueSupervisor.shared.deactivate()
