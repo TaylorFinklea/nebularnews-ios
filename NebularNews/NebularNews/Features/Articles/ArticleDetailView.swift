@@ -850,20 +850,26 @@ private struct ScrollOffsetKey: PreferenceKey {
 
 private struct HTMLTextView: View {
     let html: String
+    @State private var plainText: String?
 
     var body: some View {
-        let plainText = renderPlainText(html)
-
-        if plainText.isEmpty {
-            Text("This article didn't include readable inline text. Open it in your browser for the full version.")
-                .font(.body)
-                .lineSpacing(4)
-                .textSelection(.enabled)
-        } else {
-            Text(plainText)
-                .font(.body)
-                .lineSpacing(4)
-                .textSelection(.enabled)
+        Group {
+            if let text = plainText {
+                if text.isEmpty {
+                    Text("This article didn't include readable inline text. Open it in your browser for the full version.")
+                        .font(.body)
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                } else {
+                    Text(text)
+                        .font(.body)
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .task(id: html) {
+            plainText = renderPlainText(html)
         }
     }
 

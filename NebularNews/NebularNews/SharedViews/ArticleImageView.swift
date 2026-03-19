@@ -97,11 +97,16 @@ struct ArticleImageView: View {
 
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
-            guard !Task.isCancelled, let image = UIImage(data: data) else {
+            guard !Task.isCancelled, let raw = UIImage(data: data) else {
                 isLoadingRemoteImage = false
                 failedURLString = urlString
                 return
             }
+            // Downscale to a max of 1200x1200 before caching to reduce memory and GPU cost.
+            // prepareThumbnail is async and runs off the main thread.
+            let maxSide: CGFloat = 1200
+            let targetSize = CGSize(width: maxSide, height: maxSide)
+            let image = await raw.byPreparingThumbnail(ofSize: targetSize) ?? raw
 
             await ArticleRemoteImageCache.shared.insert(image, for: urlString)
             remoteImage = image
@@ -118,13 +123,20 @@ struct ArticleImageView: View {
 private actor ArticleRemoteImageCache {
     static let shared = ArticleRemoteImageCache()
 
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 100          // max 100 images in memory
+        c.totalCostLimit = 50 * 1024 * 1024  // 50 MB
+        return c
+    }()
 
     func image(for urlString: String) -> UIImage? {
         cache.object(forKey: urlString as NSString)
     }
 
     func insert(_ image: UIImage, for urlString: String) {
-        cache.setObject(image, forKey: urlString as NSString)
+        // Approximate byte cost: width * height * 4 bytes per pixel
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: urlString as NSString, cost: cost)
     }
 }

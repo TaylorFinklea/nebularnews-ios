@@ -82,7 +82,12 @@ private enum CardTier {
 }
 
 private struct LayoutGroup: Identifiable {
-    let id = UUID()
     let tier: CardTier
     let articles: [Article]
+
+    /// Stable identity derived from tier + first article ID, so SwiftUI
+    /// does not treat groups as new items on every body evaluation.
+    var id: String {
+        "\(tier)-\(articles.first?.id ?? "")"
+    }
 }

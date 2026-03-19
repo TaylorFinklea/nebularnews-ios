@@ -13,10 +13,9 @@ public actor OGImageFetcher {
 
     public init(modelContainer: ModelContainer) {
         self.modelContainer = modelContainer
-        let config = URLSessionConfiguration.ephemeral
+        let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 10
         config.httpShouldSetCookies = false
-        config.requestCachePolicy = .reloadIgnoringLocalCacheData
         self.session = URLSession(configuration: config)
     }
 

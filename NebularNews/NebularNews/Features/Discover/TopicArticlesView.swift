@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Observation
 import NebularNewsKit
 
 /// Articles filtered by a specific tag, displayed in the magazine grid layout.
@@ -7,14 +8,15 @@ struct TopicArticlesView: View {
     let tagId: String
     let tagName: String
 
-    @Query(sort: [SortDescriptor(\Article.publishedAt, order: .reverse)])
-    private var allArticles: [Article]
+    @Environment(\.modelContext) private var modelContext
+    @State private var articles: [Article] = []
+    @State private var reloadTask: Task<Void, Never>?
 
     var body: some View {
         NebularScreen(emphasis: .discover) {
             ScrollView {
                 VStack(spacing: 16) {
-                    if filteredArticles.isEmpty {
+                    if articles.isEmpty {
                         ContentUnavailableView(
                             "No Articles",
                             systemImage: "doc.text",
@@ -22,7 +24,7 @@ struct TopicArticlesView: View {
                         )
                         .padding(.top, 60)
                     } else {
-                        MagazineGrid(articles: filteredArticles)
+                        MagazineGrid(articles: articles)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -34,11 +36,28 @@ struct TopicArticlesView: View {
         .navigationDestination(for: String.self) { articleId in
             ArticleDetailView(articleId: articleId)
         }
+        .task(id: tagId) {
+            await loadArticles()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
+            scheduleDebouncedReload()
+        }
     }
 
-    private var filteredArticles: [Article] {
-        allArticles.filter { article in
-            article.tags?.contains(where: { $0.id == tagId }) ?? false
+    private func loadArticles() async {
+        let repo = LocalArticleRepository(modelContainer: modelContext.container)
+        var filter = ArticleFilter()
+        filter.tagIds = [tagId]
+        filter.storageScope = .active
+        articles = await repo.list(filter: filter, sort: .newest, limit: 200, offset: 0)
+    }
+
+    private func scheduleDebouncedReload() {
+        reloadTask?.cancel()
+        reloadTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await loadArticles()
         }
     }
 }

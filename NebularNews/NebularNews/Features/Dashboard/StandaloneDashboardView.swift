@@ -1,70 +1,27 @@
 import SwiftUI
 import SwiftData
+import Observation
 import NebularNewsKit
 
 /// Dashboard for standalone mode — shows reading momentum, top-scored articles, and quick actions.
 ///
-/// Uses `@Query` for live SwiftData observation. Stats automatically update when
-/// articles are polled, read, tagged, or rescored — no manual refresh needed.
+/// Uses a debounced view model backed by the TodaySnapshot and targeted count queries,
+/// rather than an unbounded @Query that recomputes on every article mutation.
 struct StandaloneDashboardView: View {
     @Environment(\.modelContext) private var modelContext
 
-    @Query(sort: [SortDescriptor(\Article.publishedAt, order: .reverse)])
-    private var allArticles: [Article]
-
     @Query private var feeds: [Feed]
 
-    // MARK: - Computed Stats
+    @State private var viewModel = StandaloneDashboardViewModel()
 
-    private var unreadCount: Int {
-        allArticles.count(where: \.isUnreadQueueCandidate)
-    }
-
-    private var unread24h: Int {
-        let cutoff = Date().addingTimeInterval(-86400)
-        return allArticles.count(where: {
-            $0.isUnreadQueueCandidate && ($0.publishedAt ?? .distantPast) > cutoff
-        })
-    }
-
-    private var unread7d: Int {
-        let cutoff = Date().addingTimeInterval(-604800)
-        return allArticles.count(where: {
-            $0.isUnreadQueueCandidate && ($0.publishedAt ?? .distantPast) > cutoff
-        })
-    }
-
-    private var highFitUnread: Int {
-        let cutoff = Date().addingTimeInterval(-604800)
-        return allArticles.count(where: {
-            $0.isUnreadQueueCandidate &&
-            $0.hasReadyScore &&
-            ($0.displayedScore ?? 0) >= 4 &&
-            ($0.publishedAt ?? .distantPast) > cutoff
-        })
-    }
-
-    private var scoredCount: Int {
-        allArticles.count(where: \.hasReadyScore)
-    }
-
-    private var learningCount: Int {
-        allArticles.count(where: \.isLearningScore)
-    }
-
-    /// Top unread articles sorted by score (descending), limited to 10.
-    private var topUnread: [Article] {
-        allArticles
-            .filter { $0.isUnreadQueueCandidate && $0.hasReadyScore && $0.displayedScore != nil }
-            .sorted {
-                if ($0.displayedScore ?? 0) == ($1.displayedScore ?? 0) {
-                    return ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
-                }
-                return ($0.displayedScore ?? 0) > ($1.displayedScore ?? 0)
-            }
-            .prefix(10)
-            .map { $0 }
-    }
+    private var unreadCount: Int { viewModel.unreadCount }
+    private var unread24h: Int { viewModel.unread24h }
+    private var unread7d: Int { viewModel.unread7d }
+    private var highFitUnread: Int { viewModel.highFitUnread }
+    private var scoredCount: Int { viewModel.scoredCount }
+    private var learningCount: Int { viewModel.learningCount }
+    private var topUnread: [Article] { viewModel.topUnread }
+    private var totalArticles: Int { viewModel.totalArticles }
 
     var body: some View {
         NavigationStack {
@@ -89,6 +46,15 @@ struct StandaloneDashboardView: View {
             .navigationDestination(for: String.self) { articleId in
                 ArticleDetailView(articleId: articleId)
             }
+        }
+        .task {
+            await viewModel.reload(container: modelContext.container)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.feedPageMightChange)) { _ in
+            viewModel.scheduleDebouncedReload(container: modelContext.container)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ArticleChangeBus.todaySnapshotChanged)) { _ in
+            viewModel.scheduleDebouncedReload(container: modelContext.container)
         }
     }
 
@@ -244,12 +210,92 @@ struct StandaloneDashboardView: View {
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 12) {
-                StatPill(label: "Articles", value: "\(allArticles.count)")
+                StatPill(label: "Articles", value: "\(totalArticles)")
                 StatPill(label: "Feeds", value: "\(feeds.count)")
                 StatPill(label: "Scored", value: "\(scoredCount)")
                 StatPill(label: "Learning", value: "\(learningCount)")
             }
         }
+    }
+}
+
+// MARK: - View Model
+
+@Observable
+@MainActor
+private final class StandaloneDashboardViewModel {
+    private var articleRepo: LocalArticleRepository?
+    private var requestToken = 0
+    private var reloadTask: Task<Void, Never>?
+
+    var unreadCount = 0
+    var unread24h = 0
+    var unread7d = 0
+    var highFitUnread = 0
+    var scoredCount = 0
+    var learningCount = 0
+    var totalArticles = 0
+    var topUnread: [Article] = []
+
+    func reload(container: ModelContainer) async {
+        let repo = repository(for: container)
+        requestToken += 1
+        let token = requestToken
+
+        async let snapshotTask = repo.fetchTodaySnapshot()
+        async let totalTask = repo.count(filter: ArticleFilter())
+
+        let snapshot = await snapshotTask
+        let total = await totalTask
+
+        // Load top articles from the pre-computed snapshot (hero + upNext)
+        let articleIDs = [snapshot.heroArticleID].compactMap { $0 } + snapshot.upNextArticleIDs
+        let loaded = await repo.listArticles(ids: articleIDs)
+
+        // unread7d and learningCount require a lightweight full-article pass,
+        // but it runs once here rather than on every SwiftData observation.
+        var unread7dCount = 0
+        var learningCountValue = 0
+        if let all = try? await fetchAllActive(repo: repo) {
+            let sevenDaysAgo = Date().addingTimeInterval(-604800)
+            unread7dCount = all.count(where: {
+                $0.isUnreadQueueCandidate && ($0.publishedAt ?? .distantPast) > sevenDaysAgo
+            })
+            learningCountValue = all.count(where: \.isLearningScore)
+        }
+
+        guard token == requestToken else { return }
+
+        unreadCount = snapshot.unreadCount
+        unread24h = snapshot.newTodayCount
+        unread7d = unread7dCount
+        highFitUnread = snapshot.highFitCount
+        scoredCount = snapshot.readyArticleCount
+        learningCount = learningCountValue
+        totalArticles = total
+        topUnread = loaded
+    }
+
+    func scheduleDebouncedReload(container: ModelContainer) {
+        reloadTask?.cancel()
+        reloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self, !Task.isCancelled else { return }
+            await self.reload(container: container)
+        }
+    }
+
+    private func repository(for container: ModelContainer) -> LocalArticleRepository {
+        if let articleRepo { return articleRepo }
+        let repo = LocalArticleRepository(modelContainer: container)
+        self.articleRepo = repo
+        return repo
+    }
+
+    private func fetchAllActive(repo: LocalArticleRepository) async throws -> [Article] {
+        var filter = ArticleFilter()
+        filter.storageScope = .active
+        return await repo.list(filter: filter, sort: .newest, limit: 5000, offset: 0)
     }
 }
 

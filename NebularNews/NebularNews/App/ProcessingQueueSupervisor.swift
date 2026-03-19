@@ -21,7 +21,9 @@ actor ProcessingQueueSupervisor {
     private let lowPriorityImageBackfillLimit = 120
     private let lowPriorityBatchSize = 12
     private let lowPriorityPassDelay = Duration.milliseconds(250)
-    private let watchdogInterval = Duration.seconds(5)
+    private let watchdogInterval = Duration.seconds(30)
+    private let watchdogIdleInterval = Duration.seconds(60)
+    private let watchdogIdleThreshold = 3
     private let stalledQueueWarningInterval: TimeInterval = 30
     private let kickDebounce = Duration.milliseconds(250)
 
@@ -126,9 +128,14 @@ actor ProcessingQueueSupervisor {
         guard watchdogTask == nil else { return }
 
         watchdogTask = Task(priority: .background) {
+            var emptyChecks = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: watchdogInterval)
-                await self.evaluateQueueHealth()
+                let interval = emptyChecks >= self.watchdogIdleThreshold
+                    ? self.watchdogIdleInterval
+                    : self.watchdogInterval
+                try? await Task.sleep(for: interval)
+                let hadWork = await self.evaluateQueueHealth()
+                emptyChecks = hadWork ? 0 : emptyChecks + 1
             }
         }
     }
@@ -259,15 +266,16 @@ actor ProcessingQueueSupervisor {
         }
     }
 
-    private func evaluateQueueHealth() async {
-        guard sceneIsActive, let modelContainer else { return }
+    @discardableResult
+    private func evaluateQueueHealth() async -> Bool {
+        guard sceneIsActive, let modelContainer else { return false }
 
         let articleRepo = LocalArticleRepository(modelContainer: modelContainer)
         let health = await articleRepo.processingQueueHealth()
 
         guard health.pendingVisibleCount > 0 else {
             stalledSince = nil
-            return
+            return false
         }
 
         guard health.runningScoreJobCount == 0 else {
@@ -295,6 +303,7 @@ actor ProcessingQueueSupervisor {
         }
 
         await kick(reason: "idle_watchdog", allowLowPriority: false)
+        return true
     }
 
     private func extendVisibilityBurstIntoBackgroundIfNeeded() async {

@@ -63,7 +63,7 @@ public actor ArticlePreparationService {
             enricher: enricher
         )
 
-        return await withTaskGroup(of: Void.self, returning: Int.self) { group in
+        let completed = await withTaskGroup(of: Void.self, returning: Int.self) { group in
             var iterator = claimedKeys.makeIterator()
             let maxConcurrency = min(2, claimedKeys.count)
 
@@ -74,9 +74,9 @@ public actor ArticlePreparationService {
                 }
             }
 
-            var completed = 0
+            var count = 0
             while await group.next() != nil {
-                completed += 1
+                count += 1
                 if let key = iterator.next() {
                     group.addTask {
                         await processJob(key: key, dependencies: dependencies)
@@ -84,8 +84,16 @@ public actor ArticlePreparationService {
                 }
             }
 
-            return completed
+            return count
         }
+
+        if completed > 0 {
+            await articleRepo.rebuildTodaySnapshot()
+            ArticleChangeBus.postFeedPageMightChange()
+            ArticleChangeBus.postProcessingQueueChanged()
+        }
+
+        return completed
     }
 }
 
@@ -131,10 +139,9 @@ private func processScoreJob(
             stage: .scoreAndTag,
             status: .done,
             inputRevision: revision,
-            error: nil
+            error: nil,
+            suppressNotification: true
         )
-        await dependencies.articleRepo.rebuildTodaySnapshot()
-        ArticleChangeBus.postFeedPageMightChange()
         ArticleChangeBus.postArticleChanged(id: articleID)
     } catch {
         try? await dependencies.articleRepo.completeProcessingJob(
@@ -142,7 +149,8 @@ private func processScoreJob(
             stage: .scoreAndTag,
             status: .failed,
             inputRevision: revision,
-            error: error.localizedDescription
+            error: error.localizedDescription,
+            suppressNotification: true
         )
     }
 }

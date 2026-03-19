@@ -229,6 +229,7 @@ struct NebularStarField: View {
         let y: CGFloat
         let size: CGFloat
         let opacity: Double
+        let scale: CGFloat
     }
 
     private let stars: [Star] = {
@@ -244,12 +245,11 @@ struct NebularStarField: View {
                 x: CGFloat(next()),
                 y: CGFloat(next()),
                 size: CGFloat(1.0 + next() * 2.0),
-                opacity: 0.03 + next() * 0.05
+                opacity: 0.03 + next() * 0.05,
+                scale: CGFloat(1.0 + next() * 0.3)
             )
         }
     }()
-
-    @State private var pulse = false
 
     var body: some View {
         GeometryReader { geo in
@@ -261,16 +261,11 @@ struct NebularStarField: View {
                         x: star.x * geo.size.width,
                         y: star.y * geo.size.height
                     )
-                    .scaleEffect(pulse ? 1.3 : 1.0)
+                    .scaleEffect(star.scale)
             }
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-        .onAppear {
-            withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) {
-                pulse = true
-            }
-        }
     }
 }
 

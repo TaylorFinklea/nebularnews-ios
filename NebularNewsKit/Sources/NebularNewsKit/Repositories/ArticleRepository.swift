@@ -106,7 +106,7 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func enqueueMissingProcessingJobs(for articleID: String) async throws
     func claimProcessingJobs(limit: Int, allowLowPriority: Bool) async -> [String]
     func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob?
-    func completeProcessingJob(articleID: String, stage: ArticleProcessingStage, status: ArticleProcessingJobStatus, inputRevision: Int, error: String?) async throws
+    func completeProcessingJob(articleID: String, stage: ArticleProcessingStage, status: ArticleProcessingJobStatus, inputRevision: Int, error: String?, suppressNotification: Bool) async throws
     func insert(_ article: Article) async throws
     func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
@@ -547,12 +547,13 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let removedArchived = cleanupArchivedProcessingJobs()
         let reclaimed = reclaimStaleRunningProcessingJobs()
 
-        let descriptor = FetchDescriptor<ArticleProcessingJob>(
+        var descriptor = FetchDescriptor<ArticleProcessingJob>(
             sortBy: [
                 SortDescriptor(\.priority, order: .reverse),
                 SortDescriptor(\.updatedAt, order: .forward)
             ]
         )
+        descriptor.fetchLimit = limit * 4  // overfetch slightly to allow for in-memory filtering
 
         let now = Date()
         let minimumPriority = allowLowPriority ? 0 : 200
@@ -587,7 +588,8 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         stage: ArticleProcessingStage,
         status: ArticleProcessingJobStatus,
         inputRevision: Int,
-        error: String? = nil
+        error: String? = nil,
+        suppressNotification: Bool = false
     ) async throws {
         guard let job = await processingJob(articleID: articleID, stage: stage) else { return }
         job.status = status
@@ -599,7 +601,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             job.availableAt = Date().addingTimeInterval(60)
         }
         try modelContext.save()
-        if stage == .scoreAndTag {
+        if stage == .scoreAndTag && !suppressNotification {
             ArticleChangeBus.postProcessingQueueChanged()
         }
     }
