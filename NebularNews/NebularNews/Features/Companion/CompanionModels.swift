@@ -213,3 +213,49 @@ struct CompanionTagMutationResponse: Decodable {
     let articleId: String?
     let tags: [CompanionTag]
 }
+
+// MARK: - Filter types for article list
+
+enum CompanionReadFilter: String, CaseIterable {
+    case all = "all"
+    case unread = "unread"
+    case read = "read"
+
+    var label: String {
+        switch self {
+        case .all: "All"
+        case .unread: "Unread"
+        case .read: "Read"
+        }
+    }
+}
+
+enum CompanionSortOrder: String, CaseIterable {
+    case newest = "newest"
+    case oldest = "oldest"
+    case score = "score"
+
+    var label: String {
+        switch self {
+        case .newest: "Newest"
+        case .oldest: "Oldest"
+        case .score: "Best fit"
+        }
+    }
+}
+
+struct CompanionArticleFilter: Equatable {
+    var readFilter: CompanionReadFilter = .all
+    var minScore: Int? = nil
+    var sortOrder: CompanionSortOrder = .newest
+
+    var isActive: Bool {
+        readFilter != .all || minScore != nil || sortOrder != .newest
+    }
+
+    mutating func reset() {
+        readFilter = .all
+        minScore = nil
+        sortOrder = .newest
+    }
+}

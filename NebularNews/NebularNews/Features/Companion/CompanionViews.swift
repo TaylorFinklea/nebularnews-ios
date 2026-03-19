@@ -1,4 +1,5 @@
 import SwiftUI
+import NebularNewsKit
 
 private struct ReactionReasonOption: Identifiable {
     let code: String
@@ -164,6 +165,78 @@ struct CompanionDashboardView: View {
     }
 }
 
+// MARK: - Companion Filter Bar
+
+private struct CompanionFilterBar: View {
+    @Binding var filter: CompanionArticleFilter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Status", selection: $filter.readFilter) {
+                ForEach(CompanionReadFilter.allCases, id: \.self) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .controlSize(.small)
+
+            HStack(spacing: 12) {
+                Menu {
+                    ForEach(CompanionSortOrder.allCases, id: \.self) { order in
+                        Button {
+                            filter.sortOrder = order
+                        } label: {
+                            HStack {
+                                Text(order.label)
+                                if filter.sortOrder == order {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(filter.sortOrder.label, systemImage: "arrow.up.arrow.down")
+                        .font(.caption)
+                }
+
+                Menu {
+                    Button {
+                        filter.minScore = nil
+                    } label: {
+                        HStack {
+                            Text("Any score")
+                            if filter.minScore == nil { Image(systemName: "checkmark") }
+                        }
+                    }
+                    ForEach([3, 4, 5], id: \.self) { threshold in
+                        Button {
+                            filter.minScore = threshold
+                        } label: {
+                            HStack {
+                                Text("\(threshold)+ score")
+                                if filter.minScore == threshold { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(filter.minScore.map { "\($0)+" } ?? "Score", systemImage: "star")
+                        .font(.caption)
+                }
+
+                Spacer()
+
+                if filter.isActive {
+                    Button("Clear") {
+                        withAnimation { filter.reset() }
+                    }
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.borderless)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Articles
 
 struct CompanionArticlesView: View {
@@ -175,6 +248,10 @@ struct CompanionArticlesView: View {
     @State private var errorMessage = ""
     @State private var isLoading = false
     @State private var isLoadingMore = false
+    @State private var filter = CompanionArticleFilter()
+    @State private var recentSearches: [String] = {
+        UserDefaults.standard.stringArray(forKey: "companionRecentSearches") ?? []
+    }()
 
     private var hasMore: Bool { articles.count < total }
 
@@ -189,6 +266,12 @@ struct CompanionArticlesView: View {
                         .listRowInsets(.init())
                         .listRowBackground(Color.clear)
                     }
+                }
+
+                Section {
+                    CompanionFilterBar(filter: $filter)
+                        .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))
+                        .listRowBackground(Color.clear)
                 }
 
                 Section {
@@ -232,7 +315,18 @@ struct CompanionArticlesView: View {
             }
             .navigationTitle("Articles")
             .searchable(text: $query, prompt: "Search articles")
-            .task(id: query) {
+            .searchSuggestions {
+                if query.isEmpty && !recentSearches.isEmpty {
+                    ForEach(recentSearches, id: \.self) { recent in
+                        Text(recent)
+                            .searchCompletion(recent)
+                    }
+                }
+            }
+            .onSubmit(of: .search) {
+                saveRecentSearch(query)
+            }
+            .task(id: FilterKey(query: query, filter: filter)) {
                 await loadArticles()
             }
             .refreshable { await loadArticles() }
@@ -243,7 +337,13 @@ struct CompanionArticlesView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(query: query, offset: 0)
+            let payload = try await appState.mobileAPI.fetchArticles(
+                query: query,
+                offset: 0,
+                read: filter.readFilter,
+                minScore: filter.minScore,
+                sort: filter.sortOrder
+            )
             articles = payload.articles
             total = payload.total
             errorMessage = ""
@@ -257,7 +357,13 @@ struct CompanionArticlesView: View {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(query: query, offset: articles.count)
+            let payload = try await appState.mobileAPI.fetchArticles(
+                query: query,
+                offset: articles.count,
+                read: filter.readFilter,
+                minScore: filter.minScore,
+                sort: filter.sortOrder
+            )
             articles.append(contentsOf: payload.articles)
             total = payload.total
             errorMessage = ""
@@ -265,12 +371,28 @@ struct CompanionArticlesView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func saveRecentSearch(_ term: String) {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        recentSearches.removeAll { $0 == trimmed }
+        recentSearches.insert(trimmed, at: 0)
+        if recentSearches.count > 10 { recentSearches = Array(recentSearches.prefix(10)) }
+        UserDefaults.standard.set(recentSearches, forKey: "companionRecentSearches")
+    }
 }
 
-// MARK: - Article Detail
+private struct FilterKey: Equatable {
+    let query: String
+    let filter: CompanionArticleFilter
+}
+
+
+// MARK: - Article Detail (Immersive Reader)
 
 struct CompanionArticleDetailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
 
     let articleId: String
 
@@ -285,282 +407,273 @@ struct CompanionArticleDetailView: View {
     @State private var acceptingSuggestion: String?
     @State private var scoreExpanded = false
 
+    private var palette: NebularPalette { NebularPalette.forColorScheme(colorScheme) }
+
     var body: some View {
         Group {
             if isLoading && payload == nil {
                 ProgressView("Loading article…")
             } else if let payload {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Title + meta
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(payload.article.title ?? "Untitled article")
-                                .font(.title.bold())
-                            if let author = payload.article.author, !author.isEmpty {
-                                Text(author)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let canonicalURL = payload.article.canonicalUrl,
-                               let url = URL(string: canonicalURL) {
-                                Link(destination: url) {
-                                    Label("Open article", systemImage: "arrow.up.right.square")
-                                }
-                            }
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Hero image
+                        if let imageUrl = payload.article.imageUrl, let url = URL(string: imageUrl) {
+                            CompanionHeroImage(url: url)
                         }
 
-                        // Source attribution
-                        if !payload.sources.isEmpty {
-                            SectionCard(title: "Source") {
-                                ForEach(payload.sources) { source in
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Score accent + title
+                            HStack(alignment: .top, spacing: 12) {
+                                if let score = payload.score?.score {
+                                    ScoreAccentBar(score: score, isRead: payload.article.isRead == 1)
+                                }
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(payload.article.title ?? "Untitled article")
+                                        .font(.title2.bold())
                                     HStack(spacing: 8) {
-                                        Image(systemName: "antenna.radiowaves.left.and.right")
-                                            .foregroundStyle(.secondary)
-                                            .font(.caption)
-                                        VStack(alignment: .leading, spacing: 2) {
+                                        if let author = payload.article.author, !author.isEmpty {
+                                            Text(author)
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        if let score = payload.score?.score {
+                                            ScoreBadge(score: score)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Source attribution
+                            if !payload.sources.isEmpty {
+                                GlassCard(style: .compact) {
+                                    ForEach(payload.sources) { source in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "antenna.radiowaves.left.and.right")
+                                                .foregroundStyle(.secondary)
+                                                .font(.caption)
                                             Text(source.feedTitle ?? source.feedId ?? "Unknown feed")
                                                 .font(.subheadline.weight(.medium))
-                                            if let siteUrl = source.siteUrl {
-                                                Text(siteUrl)
-                                                    .font(.caption)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Score evidence disclosure
+                            if let score = payload.score, let scoreValue = score.score {
+                                GlassCard(style: .standard, tintColor: Color.forScore(scoreValue)) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("Fit score: \(scoreValue)/5")
+                                                .font(.headline)
+                                            if let label = score.label, !label.isEmpty {
+                                                Text(label)
+                                                    .font(.subheadline)
                                                     .foregroundStyle(.secondary)
                                             }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Score with expandable evidence
-                        if let score = payload.score, let scoreValue = score.score {
-                            SectionCard(title: "Fit score") {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text("\(scoreValue)/5")
-                                            .font(.title2.weight(.semibold))
-                                        if let label = score.label, !label.isEmpty {
-                                            Text(label)
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        if let confidence = score.confidence {
-                                            Text("\(Int(confidence * 100))% confident")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Button {
-                                            withAnimation(.easeInOut(duration: 0.2)) {
-                                                scoreExpanded.toggle()
-                                            }
-                                        } label: {
-                                            Image(systemName: scoreExpanded ? "chevron.up" : "chevron.down")
-                                                .font(.caption)
-                                        }
-                                        .buttonStyle(.borderless)
-                                    }
-
-                                    if scoreExpanded {
-                                        if let reasonText = score.reasonText, !reasonText.isEmpty {
-                                            Text(reasonText)
-                                                .font(.subheadline)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        if let evidenceJson = score.evidenceJson,
-                                           !evidenceJson.isEmpty,
-                                           let data = evidenceJson.data(using: .utf8),
-                                           let items = try? JSONDecoder().decode([ScoreEvidenceItem].self, from: data) {
-                                            ForEach(items) { item in
-                                                HStack(alignment: .top, spacing: 6) {
-                                                    Image(systemName: item.weight > 0 ? "plus.circle.fill" : "minus.circle.fill")
-                                                        .foregroundStyle(item.weight > 0 ? .green : .red)
-                                                        .font(.caption)
-                                                    Text(item.reason)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Summary or excerpt
-                        if let summary = payload.summary?.summaryText, !summary.isEmpty {
-                            SectionCard(title: "Summary") {
-                                Text(summary)
-                            }
-                        } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
-                            SectionCard(title: "Excerpt") {
-                                Text(excerpt)
-                            }
-                        }
-
-                        // Key points
-                        if let keyPoints = payload.keyPoints,
-                           let jsonString = keyPoints.keyPointsJson,
-                           !jsonString.isEmpty,
-                           let data = jsonString.data(using: .utf8),
-                           let points = try? JSONDecoder().decode([String].self, from: data),
-                           !points.isEmpty {
-                            SectionCard(title: "Key points") {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(points, id: \.self) { point in
-                                        HStack(alignment: .top, spacing: 8) {
-                                            Text("•")
-                                                .foregroundStyle(.secondary)
-                                            Text(point)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Tag suggestions
-                        if !payload.tagSuggestions.isEmpty {
-                            SectionCard(title: "Suggested tags") {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(payload.tagSuggestions) { suggestion in
-                                        HStack {
-                                            Image(systemName: "tag")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                            Text(suggestion.name)
-                                            if let confidence = suggestion.confidence {
+                                            Spacer()
+                                            if let confidence = score.confidence {
                                                 Text("\(Int(confidence * 100))%")
                                                     .font(.caption)
                                                     .foregroundStyle(.secondary)
                                             }
-                                            Spacer()
-                                            Button("Accept") {
-                                                Task { await acceptTagSuggestion(suggestion) }
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .controlSize(.small)
-                                            .disabled(acceptingSuggestion == suggestion.id)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Actions
-                        SectionCard(title: "Actions") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Button(payload.article.isRead == 1 ? "Mark unread" : "Mark read") {
-                                    Task { await toggleRead() }
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(savingRead)
-
-                                if appState.features?.reactions == true {
-                                    HStack {
-                                        Button("Thumbs up") {
-                                            openReactionDraft(value: 1)
-                                        }
-                                        .buttonStyle(.bordered)
-
-                                        Button("Thumbs down") {
-                                            openReactionDraft(value: -1)
-                                        }
-                                        .buttonStyle(.bordered)
-                                    }
-
-                                    if let reaction = payload.reaction {
-                                        Text("Current reaction: \(reaction.value == 1 ? "Thumbs up" : "Thumbs down")")
-                                            .font(.subheadline)
-                                        if let reasonCodes = reaction.reasonCodes, !reasonCodes.isEmpty {
-                                            Text(reasonCodes.joined(separator: ", "))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Tags
-                        if appState.features?.tags == true {
-                            SectionCard(title: "Tags") {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    if payload.tags.isEmpty {
-                                        Text("No tags yet.")
-                                            .foregroundStyle(.secondary)
-                                    } else {
-                                        ForEach(payload.tags) { tag in
-                                            HStack {
-                                                Text(tag.name)
-                                                Spacer()
-                                                Button(role: .destructive) {
-                                                    Task { await removeTag(tag) }
-                                                } label: {
-                                                    Image(systemName: "trash")
+                                            Button {
+                                                withAnimation(.easeInOut(duration: 0.2)) {
+                                                    scoreExpanded.toggle()
                                                 }
-                                                .buttonStyle(.borderless)
-                                            }
-                                        }
-                                    }
-
-                                    HStack {
-                                        TextField("Add manual tag", text: $pendingTagName)
-                                            .textFieldStyle(.roundedBorder)
-                                        Button("Add") {
-                                            Task { await addTag() }
-                                        }
-                                        .disabled(pendingTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || savingTag)
-                                    }
-                                }
-                            }
-                        }
-
-                        // Full text
-                        if let content = payload.article.contentText, !content.isEmpty {
-                            SectionCard(title: "Full text") {
-                                Text(content)
-                                    .font(.body)
-                            }
-                        }
-
-                        // Feedback history
-                        if !payload.feedback.isEmpty {
-                            SectionCard(title: "Feedback history") {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    ForEach(payload.feedback) { item in
-                                        HStack(alignment: .top, spacing: 8) {
-                                            if let rating = item.rating {
-                                                Image(systemName: rating > 0 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
-                                                    .foregroundStyle(rating > 0 ? .green : .red)
+                                            } label: {
+                                                Image(systemName: scoreExpanded ? "chevron.up" : "chevron.down")
                                                     .font(.caption)
                                             }
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                if let comment = item.comment, !comment.isEmpty {
-                                                    Text(comment)
-                                                        .font(.subheadline)
+                                            .buttonStyle(.borderless)
+                                        }
+
+                                        if scoreExpanded {
+                                            if let reasonText = score.reasonText, !reasonText.isEmpty {
+                                                Text(reasonText)
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                            if let evidenceJson = score.evidenceJson,
+                                               !evidenceJson.isEmpty,
+                                               let data = evidenceJson.data(using: .utf8),
+                                               let items = try? JSONDecoder().decode([ScoreEvidenceItem].self, from: data) {
+                                                ForEach(items) { item in
+                                                    HStack(alignment: .top, spacing: 6) {
+                                                        Image(systemName: item.weight > 0 ? "plus.circle.fill" : "minus.circle.fill")
+                                                            .foregroundStyle(item.weight > 0 ? .green : .red)
+                                                            .font(.caption)
+                                                        Text(item.reason)
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                    }
                                                 }
-                                                if let createdAt = item.createdAt {
-                                                    Text(Date(timeIntervalSince1970: Double(createdAt)).formatted(date: .abbreviated, time: .omitted))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Summary
+                            if let summary = payload.summary?.summaryText, !summary.isEmpty {
+                                GlassCard(style: .standard) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Summary").font(.headline)
+                                        Text(summary)
+                                    }
+                                }
+                            }
+
+                            // Key points
+                            if let keyPoints = payload.keyPoints,
+                               let jsonString = keyPoints.keyPointsJson,
+                               !jsonString.isEmpty,
+                               let data = jsonString.data(using: .utf8),
+                               let points = try? JSONDecoder().decode([String].self, from: data),
+                               !points.isEmpty {
+                                GlassCard(style: .standard) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Key points").font(.headline)
+                                        ForEach(points, id: \.self) { point in
+                                            HStack(alignment: .top, spacing: 8) {
+                                                Text("•").foregroundStyle(.secondary)
+                                                Text(point)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Rich article content
+                            if let contentHtml = payload.article.contentHtml, !contentHtml.isEmpty {
+                                GlassCard(style: .raised) {
+                                    RichArticleContentView(html: contentHtml)
+                                }
+                            } else if let contentText = payload.article.contentText, !contentText.isEmpty {
+                                GlassCard(style: .raised) {
+                                    Text(contentText)
+                                        .font(.body)
+                                        .lineSpacing(4)
+                                }
+                            } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
+                                GlassCard(style: .standard) {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text("Excerpt").font(.headline)
+                                        Text(excerpt)
+                                    }
+                                }
+                            }
+
+                            // Tag suggestions
+                            if !payload.tagSuggestions.isEmpty {
+                                GlassCard(style: .compact) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Suggested tags").font(.headline)
+                                        ForEach(payload.tagSuggestions) { suggestion in
+                                            HStack {
+                                                TagPill(name: suggestion.name)
+                                                if let confidence = suggestion.confidence {
+                                                    Text("\(Int(confidence * 100))%")
                                                         .font(.caption)
                                                         .foregroundStyle(.secondary)
                                                 }
+                                                Spacer()
+                                                Button("Accept") {
+                                                    Task { await acceptTagSuggestion(suggestion) }
+                                                }
+                                                .buttonStyle(.bordered)
+                                                .controlSize(.small)
+                                                .disabled(acceptingSuggestion == suggestion.id)
                                             }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        // Error banner while payload is visible
-                        if !errorMessage.isEmpty {
-                            ErrorBanner(message: errorMessage) {
-                                Task { await loadArticle() }
+                            // Feedback history
+                            if !payload.feedback.isEmpty {
+                                GlassCard(style: .compact) {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Feedback history").font(.headline)
+                                        ForEach(payload.feedback) { item in
+                                            HStack(alignment: .top, spacing: 8) {
+                                                if let rating = item.rating {
+                                                    Image(systemName: rating > 0 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
+                                                        .foregroundStyle(rating > 0 ? .green : .red)
+                                                        .font(.caption)
+                                                }
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    if let comment = item.comment, !comment.isEmpty {
+                                                        Text(comment).font(.subheadline)
+                                                    }
+                                                    if let createdAt = item.createdAt {
+                                                        Text(Date(timeIntervalSince1970: Double(createdAt)).formatted(date: .abbreviated, time: .omitted))
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Tags
+                            if appState.features?.tags == true {
+                                GlassCard(style: .compact) {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text("Tags").font(.headline)
+                                        if payload.tags.isEmpty {
+                                            Text("No tags yet.")
+                                                .foregroundStyle(.secondary)
+                                        } else {
+                                            FlowLayout(spacing: 6) {
+                                                ForEach(payload.tags) { tag in
+                                                    HStack(spacing: 4) {
+                                                        TagPill(name: tag.name)
+                                                        Button {
+                                                            Task { await removeTag(tag) }
+                                                        } label: {
+                                                            Image(systemName: "xmark.circle.fill")
+                                                                .font(.caption2)
+                                                                .foregroundStyle(.secondary)
+                                                        }
+                                                        .buttonStyle(.plain)
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        HStack {
+                                            TextField("Add tag", text: $pendingTagName)
+                                                .textFieldStyle(.roundedBorder)
+                                            Button("Add") {
+                                                Task { await addTag() }
+                                            }
+                                            .disabled(pendingTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || savingTag)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Error banner while payload is visible
+                            if !errorMessage.isEmpty {
+                                ErrorBanner(message: errorMessage) {
+                                    Task { await loadArticle() }
+                                }
                             }
                         }
+                        .padding()
                     }
-                    .padding()
                 }
+                .background(NebularBackdrop())
                 .navigationTitle("Article")
                 .navigationBarTitleDisplayMode(.inline)
                 .refreshable { await loadArticle() }
+                .toolbar {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        bottomActionTray(payload)
+                    }
+                }
                 .sheet(item: $reactionDraft) { draft in
                     CompanionReactionReasonSheet(draft: draft) { selectedCodes in
                         Task { await saveReaction(value: draft.value, reasonCodes: selectedCodes) }
@@ -583,6 +696,40 @@ struct CompanionArticleDetailView: View {
         .task {
             if payload == nil {
                 await loadArticle()
+            }
+        }
+    }
+
+    // MARK: - Bottom action tray
+
+    @ViewBuilder
+    private func bottomActionTray(_ payload: CompanionArticleDetailPayload) -> some View {
+        if let canonicalURL = payload.article.canonicalUrl, let url = URL(string: canonicalURL) {
+            Link(destination: url) {
+                Label("Open", systemImage: "safari")
+            }
+        }
+
+        Spacer()
+
+        Button(payload.article.isRead == 1 ? "Mark unread" : "Mark read") {
+            Task { await toggleRead() }
+        }
+        .disabled(savingRead)
+
+        if appState.features?.reactions == true {
+            Spacer()
+
+            Button {
+                openReactionDraft(value: 1)
+            } label: {
+                Image(systemName: payload.reaction?.value == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+            }
+
+            Button {
+                openReactionDraft(value: -1)
+            } label: {
+                Image(systemName: payload.reaction?.value == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
             }
         }
     }
@@ -660,6 +807,52 @@ struct CompanionArticleDetailView: View {
             reactionDraft = nil
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - Companion Hero Image
+
+private struct CompanionHeroImage: View {
+    let url: URL
+    @Environment(\.colorScheme) private var colorScheme
+
+    private let baseHeight: CGFloat = 280
+
+    var body: some View {
+        let palette = NebularPalette.forColorScheme(colorScheme)
+
+        AsyncImage(url: url) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            case .failure:
+                Rectangle()
+                    .fill(palette.surfaceSoft)
+                    .overlay {
+                        Image(systemName: "photo")
+                            .font(.title)
+                            .foregroundStyle(.secondary.opacity(0.5))
+                    }
+            case .empty:
+                Rectangle()
+                    .fill(palette.surfaceSoft)
+                    .overlay { ProgressView() }
+            @unknown default:
+                EmptyView()
+            }
+        }
+        .frame(height: baseHeight)
+        .clipped()
+        .overlay(alignment: .bottom) {
+            LinearGradient(
+                colors: [.clear, palette.heroGradientEnd.opacity(0.6), palette.heroGradientEnd],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 120)
         }
     }
 }
@@ -774,22 +967,6 @@ struct CompanionMoreView: View {
 
 // MARK: - Shared subviews
 
-private struct SectionCard<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-}
-
 private struct MetricRow: View {
     let label: String
     let value: Int?
@@ -806,24 +983,49 @@ private struct MetricRow: View {
 
 private struct ArticleRow: View {
     let article: CompanionArticleListItem
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(article.title ?? "Untitled article")
-                .font(.headline)
-            HStack(spacing: 8) {
-                if let sourceName = article.sourceName, !sourceName.isEmpty {
-                    Text(sourceName)
+        HStack(alignment: .top, spacing: 12) {
+            ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 3)
+                .frame(height: 56)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(article.title ?? "Untitled article")
+                    .font(.headline)
+                    .lineLimit(2)
+                HStack(spacing: 8) {
+                    if let sourceName = article.sourceName, !sourceName.isEmpty {
+                        Text(sourceName)
+                    }
+                    if let score = article.score {
+                        ScoreBadge(score: score)
+                    }
+                    if article.isRead == 1 {
+                        Text("Read")
+                    }
                 }
-                if let score = article.score {
-                    Text("\(score)/5")
-                }
-                if article.isRead == 1 {
-                    Text("Read")
-                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    default:
+                        Rectangle()
+                            .fill(NebularPalette.forColorScheme(colorScheme).surfaceSoft)
+                    }
+                }
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
         }
         .padding(.vertical, 2)
     }
@@ -835,6 +1037,50 @@ private struct ScoreEvidenceItem: Decodable, Identifiable {
 
     var id: String { reason }
 }
+
+// MARK: - Flow Layout (for tag pills)
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let result = layoutSubviews(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layoutSubviews(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
+        }
+    }
+
+    private func layoutSubviews(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth && x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x)
+        }
+
+        return (CGSize(width: maxX, height: y + rowHeight), positions)
+    }
+}
+
+// MARK: - Reaction Sheet
 
 private struct ReactionDraft: Identifiable {
     let value: Int

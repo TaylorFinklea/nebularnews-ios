@@ -55,7 +55,16 @@ final class MobileAPIClient {
         return payload.feeds
     }
 
-    func fetchArticles(query: String = "", offset: Int = 0, limit: Int = 20) async throws -> CompanionArticlesPayload {
+    func fetchArticles(
+        query: String = "",
+        offset: Int = 0,
+        limit: Int = 20,
+        read: CompanionReadFilter = .all,
+        minScore: Int? = nil,
+        sort: CompanionSortOrder = .newest,
+        sinceDays: Int? = nil,
+        tag: String? = nil
+    ) async throws -> CompanionArticlesPayload {
         var components = URLComponents()
         components.queryItems = [
             URLQueryItem(name: "limit", value: String(limit)),
@@ -63,6 +72,21 @@ final class MobileAPIClient {
         ]
         if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             components.queryItems?.append(URLQueryItem(name: "q", value: query))
+        }
+        if read != .all {
+            components.queryItems?.append(URLQueryItem(name: "read", value: read.rawValue))
+        }
+        if let minScore {
+            components.queryItems?.append(URLQueryItem(name: "score", value: String(minScore)))
+        }
+        if sort != .newest {
+            components.queryItems?.append(URLQueryItem(name: "sort", value: sort.rawValue))
+        }
+        if let sinceDays {
+            components.queryItems?.append(URLQueryItem(name: "sinceDays", value: String(sinceDays)))
+        }
+        if let tag {
+            components.queryItems?.append(URLQueryItem(name: "tag", value: tag))
         }
         let queryString = components.percentEncodedQuery.map { "?\($0)" } ?? ""
         return try await get("/api/mobile/articles\(queryString)")
