@@ -1,6 +1,9 @@
 import SwiftUI
 import SwiftData
+import os
 import NebularNewsKit
+
+private let settingsLogger = Logger(subsystem: "com.nebularnews", category: "Settings")
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -369,7 +372,7 @@ struct SettingsView: View {
             set: { newValue in
                 settings.pollIntervalMinutes = newValue
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (pollInterval): \(error)") }
             }
         )
     }
@@ -381,7 +384,7 @@ struct SettingsView: View {
                 settings.maxArticlesPerFeed = newValue
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (maxArticles): \(error)") }
                 pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: settings.archiveAfterDays,
@@ -403,7 +406,7 @@ struct SettingsView: View {
                 settings.retentionDays = newValue
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (archiveAfter): \(error)") }
                 pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: newValue,
@@ -421,7 +424,7 @@ struct SettingsView: View {
                 settings.deleteArchivedAfterDays = newValue
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (deleteArchivedAfter): \(error)") }
                 pushSyncedPreferences()
                 enforceArticleStoragePolicies(
                     archiveAfterDays: settings.archiveAfterDays,
@@ -439,7 +442,7 @@ struct SettingsView: View {
                 settings.searchArchivedByDefault = newValue
                 _ = settings.normalizeStorageSettings()
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (searchArchivedByDefault): \(error)") }
                 pushSyncedPreferences()
             }
         )
@@ -481,7 +484,7 @@ struct SettingsView: View {
             set: { newValue in
                 settings.automaticAIMode = newValue
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (automaticAIMode): \(error)") }
             }
         )
     }
@@ -492,7 +495,7 @@ struct SettingsView: View {
             set: { newValue in
                 settings.anthropicModel = newValue
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (anthropicModel): \(error)") }
             }
         )
     }
@@ -503,7 +506,7 @@ struct SettingsView: View {
             set: { newValue in
                 settings.scoreAssistMode = newValue
                 settings.updatedAt = Date()
-                try? modelContext.save()
+                do { try modelContext.save() } catch { settingsLogger.error("Settings save failed (scoreAssistMode): \(error)") }
             }
         )
     }

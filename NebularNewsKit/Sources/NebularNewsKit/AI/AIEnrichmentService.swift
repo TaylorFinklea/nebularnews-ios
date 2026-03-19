@@ -1,5 +1,8 @@
 import Foundation
+import os
 import SwiftData
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "AIEnrichment")
 
 // MARK: - Enrichment Result
 
@@ -59,6 +62,8 @@ public actor AIEnrichmentService {
         summaryStyle: String,
         target: AIExplicitGenerationTarget = .automatic
     ) async -> EnrichmentResult {
+        logger.info("Enrichment starting: article=\(snapshot.id) target=\(String(describing: target))")
+
         let localSnapshot = ArticleSnapshot(
             id: snapshot.id,
             title: snapshot.title,
@@ -74,6 +79,7 @@ public actor AIEnrichmentService {
                 summaryStyle: summaryStyle,
                 target: target
             ) else {
+                logger.warning("Enrichment skipped: article=\(snapshot.id) reason=no_provider")
                 return EnrichmentResult(
                     articleId: snapshot.id,
                     summary: nil,
@@ -84,6 +90,7 @@ public actor AIEnrichmentService {
             }
             generated = output
         } catch {
+            logger.error("Enrichment generation failed: article=\(snapshot.id) error=\(error)")
             return EnrichmentResult(
                 articleId: snapshot.id,
                 summary: nil,
@@ -106,6 +113,7 @@ public actor AIEnrichmentService {
                 summaryModel: generated.modelIdentifier
             )
         } catch {
+            logger.error("Enrichment save failed: article=\(snapshot.id) error=\(error)")
             return EnrichmentResult(
                 articleId: snapshot.id,
                 summary: generated.summary,
@@ -115,6 +123,7 @@ public actor AIEnrichmentService {
             )
         }
 
+        logger.info("Enrichment complete: article=\(snapshot.id) provider=\(generated.provider.rawValue)")
         return EnrichmentResult(
             articleId: snapshot.id,
             summary: generated.summary,

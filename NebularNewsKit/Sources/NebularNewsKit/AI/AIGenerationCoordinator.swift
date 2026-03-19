@@ -1,5 +1,8 @@
 import Foundation
+import os
 import SwiftData
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "AIGeneration")
 
 public protocol AIGenerationCoordinating: Sendable {
     func isFoundationModelsAvailable() async -> Bool
@@ -130,12 +133,15 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
     ) async throws -> SummaryGenerationOutput? {
         switch settings.automaticAIMode {
         case .disabled:
+            logger.info("Summary skipped: article=\(snapshot.id) reason=ai_disabled")
             return nil
 
         case .onDevice:
             guard await foundationModelsEngine.isAvailable() else {
+                logger.warning("Summary skipped: article=\(snapshot.id) reason=foundation_models_unavailable")
                 return nil
             }
+            logger.info("Summary using on-device engine: article=\(snapshot.id)")
             return try await foundationModelsEngine.generateSummary(
                 snapshot: snapshot,
                 summaryStyle: summaryStyle
@@ -143,8 +149,10 @@ public actor AIGenerationCoordinator: AIGenerationCoordinating {
 
         case .anthropicLLM:
             guard let engine = makeExternalEngine(provider: .anthropic, purpose: .summary, settings: settings) else {
+                logger.warning("Summary skipped: article=\(snapshot.id) reason=no_anthropic_key")
                 return nil
             }
+            logger.info("Summary using Anthropic engine: article=\(snapshot.id)")
             return try await engine.generateSummary(snapshot: snapshot, summaryStyle: summaryStyle)
         }
     }

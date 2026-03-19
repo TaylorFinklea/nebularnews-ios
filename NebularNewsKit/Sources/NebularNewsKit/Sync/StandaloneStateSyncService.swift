@@ -172,6 +172,7 @@ public actor StandaloneStateSyncService {
 
     private func reconcileLocalFeedsWithSyncedSubscriptions() -> Bool {
         let syncedFeeds = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
+        guard !syncedFeeds.isEmpty else { return false }
         let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
 
         var localByKey: [String: Feed] = [:]

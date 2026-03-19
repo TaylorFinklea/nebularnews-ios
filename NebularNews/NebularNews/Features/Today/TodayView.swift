@@ -56,6 +56,12 @@ struct TodayView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 28)
                 }
+                .refreshable {
+                    await RefreshCoordinator.shared.runManualRefresh(
+                        modelContainer: modelContext.container,
+                        keychainService: AppConfiguration.shared.keychainService
+                    )
+                }
             }
             .navigationTitle("Today")
             .toolbar {

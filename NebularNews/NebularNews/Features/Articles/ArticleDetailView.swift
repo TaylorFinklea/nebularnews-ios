@@ -19,6 +19,7 @@ struct ArticleDetailView: View {
     @Query private var articles: [Article]
     @Query private var tagSuggestions: [ArticleTagSuggestion]
     @State private var isEnriching = false
+    @State private var enrichmentError: String?
     @State private var showTagPicker = false
     @State private var showReactionSheet = false
     @State private var scrollOffset: CGFloat = 0
@@ -49,6 +50,14 @@ struct ArticleDetailView: View {
                     }
                     .sheet(isPresented: $showReactionSheet) {
                         ReactionSheet(article: article)
+                    }
+                    .alert("Enrichment Failed", isPresented: .init(
+                        get: { enrichmentError != nil },
+                        set: { if !$0 { enrichmentError = nil } }
+                    )) {
+                        Button("OK") { enrichmentError = nil }
+                    } message: {
+                        Text(enrichmentError ?? "")
                     }
                     .onAppear {
                         let shouldSave = article.isDismissed || !article.isRead
@@ -754,11 +763,14 @@ struct ArticleDetailView: View {
         let settingsRepo = LocalSettingsRepository(modelContainer: modelContext.container)
         let settings = await settingsRepo.get()
 
-        _ = await enricher.enrichArticle(
+        let result = await enricher.enrichArticle(
             snapshot: snapshot,
             summaryStyle: settings?.summaryStyle ?? "concise",
             target: target
         )
+        if result.status == .failed, let errorMessage = result.error {
+            enrichmentError = errorMessage
+        }
     }
 
     private func acceptTagSuggestion(_ suggestion: ArticleTagSuggestion) {

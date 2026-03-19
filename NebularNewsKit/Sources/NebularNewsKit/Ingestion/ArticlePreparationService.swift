@@ -1,5 +1,8 @@
 import Foundation
 import SwiftData
+import os
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "ArticlePreparation")
 
 public actor ArticlePreparationService {
     private let articleRepo: LocalArticleRepository
@@ -144,14 +147,18 @@ private func processScoreJob(
         )
         ArticleChangeBus.postArticleChanged(id: articleID)
     } catch {
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .scoreAndTag,
-            status: .failed,
-            inputRevision: revision,
-            error: error.localizedDescription,
-            suppressNotification: true
-        )
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .scoreAndTag,
+                status: .failed,
+                inputRevision: revision,
+                error: error.localizedDescription,
+                suppressNotification: true
+            )
+        } catch {
+            logger.error("Failed to save score job failure for \(articleID): \(error)")
+        }
     }
 }
 
@@ -164,35 +171,51 @@ private func processContentJob(
 
     guard article.needsContentFetch() else {
         let status: ArticlePreparationStageStatus = article.bestAvailableContentLength >= 1_200 ? .skipped : .blocked
-        try? await dependencies.articleRepo.setPreparationState(
-            id: articleID,
-            content: status,
-            image: nil,
-            enrichment: nil
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .fetchContent,
-            status: status == .failed ? .failed : .skipped,
-            inputRevision: revision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.setPreparationState(
+                id: articleID,
+                content: status,
+                image: nil,
+                enrichment: nil
+            )
+        } catch {
+            logger.error("Failed to set content preparation state for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .fetchContent,
+                status: status == .failed ? .failed : .skipped,
+                inputRevision: revision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete content job (skip) for \(articleID): \(error)")
+        }
         return
     }
 
     let result = await dependencies.contentFetcher.fetchMissingContent(articleId: articleID)
-    try? await dependencies.articleRepo.setPreparationState(
-        id: articleID,
-        content: mapContentPreparationStatus(result.status),
-        image: nil,
-        enrichment: nil
-    )
+    do {
+        try await dependencies.articleRepo.setPreparationState(
+            id: articleID,
+            content: mapContentPreparationStatus(result.status),
+            image: nil,
+            enrichment: nil
+        )
+    } catch {
+        logger.error("Failed to set content preparation state for \(articleID): \(error)")
+    }
 
     let jobStatus: ArticleProcessingJobStatus
     switch result.status {
     case .fetched:
         jobStatus = .done
-        try? await dependencies.articleRepo.enqueueMissingProcessingJobs(for: articleID)
+        do {
+            try await dependencies.articleRepo.enqueueMissingProcessingJobs(for: articleID)
+        } catch {
+            logger.error("Failed to enqueue missing jobs for \(articleID): \(error)")
+        }
     case .skipped, .blocked:
         jobStatus = .skipped
     case .failed:
@@ -208,13 +231,17 @@ private func processContentJob(
         nil
     }
 
-    try? await dependencies.articleRepo.completeProcessingJob(
-        articleID: articleID,
-        stage: .fetchContent,
-        status: jobStatus,
-        inputRevision: revision,
-        error: jobError
-    )
+    do {
+        try await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .fetchContent,
+            status: jobStatus,
+            inputRevision: revision,
+            error: jobError
+        )
+    } catch {
+        logger.error("Failed to complete content job for \(articleID): \(error)")
+    }
 }
 
 private func processSummaryJob(
@@ -225,18 +252,26 @@ private func processSummaryJob(
     let revision = article.contentRevision
 
     guard let snapshot = await dependencies.articleRepo.enrichmentSnapshot(id: articleID) else {
-        try? await dependencies.articleRepo.markSummaryAttempt(
-            id: articleID,
-            status: .blocked,
-            revision: revision
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .generateSummary,
-            status: .skipped,
-            inputRevision: revision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.markSummaryAttempt(
+                id: articleID,
+                status: .blocked,
+                revision: revision
+            )
+        } catch {
+            logger.error("Failed to mark summary blocked for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .generateSummary,
+                status: .skipped,
+                inputRevision: revision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete summary job (blocked) for \(articleID): \(error)")
+        }
         return
     }
 
@@ -249,39 +284,59 @@ private func processSummaryJob(
 
     switch result.status {
     case .generated:
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .generateSummary,
-            status: .done,
-            inputRevision: revision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .generateSummary,
+                status: .done,
+                inputRevision: revision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete summary job (done) for \(articleID): \(error)")
+        }
     case .skipped:
-        try? await dependencies.articleRepo.markSummaryAttempt(
-            id: articleID,
-            status: .skipped,
-            revision: revision
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .generateSummary,
-            status: .skipped,
-            inputRevision: revision,
-            error: result.error
-        )
+        do {
+            try await dependencies.articleRepo.markSummaryAttempt(
+                id: articleID,
+                status: .skipped,
+                revision: revision
+            )
+        } catch {
+            logger.error("Failed to mark summary skipped for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .generateSummary,
+                status: .skipped,
+                inputRevision: revision,
+                error: result.error
+            )
+        } catch {
+            logger.error("Failed to complete summary job (skipped) for \(articleID): \(error)")
+        }
     case .failed:
-        try? await dependencies.articleRepo.markSummaryAttempt(
-            id: articleID,
-            status: .failed,
-            revision: revision
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .generateSummary,
-            status: .failed,
-            inputRevision: revision,
-            error: result.error
-        )
+        do {
+            try await dependencies.articleRepo.markSummaryAttempt(
+                id: articleID,
+                status: .failed,
+                revision: revision
+            )
+        } catch {
+            logger.error("Failed to mark summary failed for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .generateSummary,
+                status: .failed,
+                inputRevision: revision,
+                error: result.error
+            )
+        } catch {
+            logger.error("Failed to complete summary job (failed) for \(articleID): \(error)")
+        }
     }
 }
 
@@ -293,72 +348,104 @@ private func processImageJob(
     let existingFallback = article.fallbackImageUrl
 
     if article.imageUrl != nil || article.ogImageUrl != nil {
-        try? await dependencies.articleRepo.markImageAttempt(
-            id: articleID,
-            status: .succeeded,
-            revision: currentImagePreparationRevision
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .resolveImage,
-            status: .done,
-            inputRevision: currentImagePreparationRevision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.markImageAttempt(
+                id: articleID,
+                status: .succeeded,
+                revision: currentImagePreparationRevision
+            )
+        } catch {
+            logger.error("Failed to mark image succeeded for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .resolveImage,
+                status: .done,
+                inputRevision: currentImagePreparationRevision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete image job (existing) for \(articleID): \(error)")
+        }
         return
     }
 
     if let canonicalURL = article.canonicalUrl,
        await dependencies.ogImageFetcher.fetchOGImage(articleId: articleID, canonicalUrl: canonicalURL) != nil {
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .resolveImage,
-            status: .done,
-            inputRevision: currentImagePreparationRevision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .resolveImage,
+                status: .done,
+                inputRevision: currentImagePreparationRevision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete image job (og) for \(articleID): \(error)")
+        }
         return
     }
 
     if await dependencies.fallbackImageService.ensureFallbackImage(articleID: articleID) != nil {
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .resolveImage,
-            status: .done,
-            inputRevision: currentImagePreparationRevision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .resolveImage,
+                status: .done,
+                inputRevision: currentImagePreparationRevision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete image job (fallback) for \(articleID): \(error)")
+        }
         return
     }
 
     if existingFallback != nil {
-        try? await dependencies.articleRepo.markImageAttempt(
-            id: articleID,
-            status: .succeeded,
-            revision: currentImagePreparationRevision
-        )
-        try? await dependencies.articleRepo.completeProcessingJob(
-            articleID: articleID,
-            stage: .resolveImage,
-            status: .done,
-            inputRevision: currentImagePreparationRevision,
-            error: nil
-        )
+        do {
+            try await dependencies.articleRepo.markImageAttempt(
+                id: articleID,
+                status: .succeeded,
+                revision: currentImagePreparationRevision
+            )
+        } catch {
+            logger.error("Failed to mark image succeeded (existing fallback) for \(articleID): \(error)")
+        }
+        do {
+            try await dependencies.articleRepo.completeProcessingJob(
+                articleID: articleID,
+                stage: .resolveImage,
+                status: .done,
+                inputRevision: currentImagePreparationRevision,
+                error: nil
+            )
+        } catch {
+            logger.error("Failed to complete image job (existing fallback) for \(articleID): \(error)")
+        }
         return
     }
 
-    try? await dependencies.articleRepo.markImageAttempt(
-        id: articleID,
-        status: .failed,
-        revision: currentImagePreparationRevision
-    )
-    try? await dependencies.articleRepo.completeProcessingJob(
-        articleID: articleID,
-        stage: .resolveImage,
-        status: .failed,
-        inputRevision: currentImagePreparationRevision,
-        error: "No image source available"
-    )
+    do {
+        try await dependencies.articleRepo.markImageAttempt(
+            id: articleID,
+            status: .failed,
+            revision: currentImagePreparationRevision
+        )
+    } catch {
+        logger.error("Failed to mark image failed for \(articleID): \(error)")
+    }
+    do {
+        try await dependencies.articleRepo.completeProcessingJob(
+            articleID: articleID,
+            stage: .resolveImage,
+            status: .failed,
+            inputRevision: currentImagePreparationRevision,
+            error: "No image source available"
+        )
+    } catch {
+        logger.error("Failed to complete image job (no source) for \(articleID): \(error)")
+    }
 }
 
 private func parseJobKey(_ key: String) -> (articleID: String, stage: ArticleProcessingStage)? {

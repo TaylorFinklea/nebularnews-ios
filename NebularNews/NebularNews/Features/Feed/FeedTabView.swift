@@ -80,6 +80,12 @@ struct FeedTabView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .refreshable {
+                    await RefreshCoordinator.shared.runManualRefresh(
+                        modelContainer: modelContext.container,
+                        keychainService: AppConfiguration.shared.keychainService
+                    )
+                }
             }
             .navigationTitle("Feed")
             .searchable(text: $searchText, prompt: "Search articles")
@@ -204,6 +210,14 @@ struct FeedTabView: View {
                         clearAdvancedFilters()
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else if searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                ContentUnavailableView(
+                    "No Articles Yet",
+                    systemImage: "newspaper",
+                    description: Text("Pull to refresh or add feeds to start reading.")
+                )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {

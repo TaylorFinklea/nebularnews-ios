@@ -5,6 +5,7 @@ enum MobileAPIError: LocalizedError {
     case missingServerURL
     case missingRefreshToken
     case invalidResponse
+    case unexpectedEmptyResponse
     case server(String)
     case unauthorized
 
@@ -16,6 +17,8 @@ enum MobileAPIError: LocalizedError {
             return "Your sign-in session expired. Sign in again."
         case .invalidResponse:
             return "The server returned an invalid response."
+        case .unexpectedEmptyResponse:
+            return "Expected a response body but received none."
         case .server(let message):
             return message
         case .unauthorized:
@@ -160,8 +163,10 @@ final class MobileAPIClient {
         guard (200..<300).contains(httpResponse.statusCode) else {
             throw try decodeServerError(from: data, statusCode: httpResponse.statusCode)
         }
-        if decode == EmptyPayload.self {
-            return EmptyPayload() as! T
+        if decode == EmptyPayload.self, let result = EmptyPayload() as? T {
+            return result
+        } else if decode == EmptyPayload.self {
+            throw MobileAPIError.unexpectedEmptyResponse
         }
         return try decoder.decode(decode, from: data)
     }

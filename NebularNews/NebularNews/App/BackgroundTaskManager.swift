@@ -1,6 +1,9 @@
 import BackgroundTasks
+import os
 import SwiftData
 import NebularNewsKit
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "BackgroundTask")
 
 /// Manages background feed polling using the BackgroundTasks framework.
 ///
@@ -43,7 +46,7 @@ enum BackgroundTaskManager {
             try BGTaskScheduler.shared.submit(request)
         } catch {
             // Not critical — will retry on next app background transition
-            print("[BackgroundTaskManager] Failed to schedule: \(error)")
+            logger.warning("Failed to schedule refresh: \(error)")
         }
     }
 
@@ -56,7 +59,7 @@ enum BackgroundTaskManager {
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {
-            print("[BackgroundTaskManager] Failed to schedule processing: \(error)")
+            logger.warning("Failed to schedule processing: \(error)")
         }
     }
 
