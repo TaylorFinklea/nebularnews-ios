@@ -1,6 +1,9 @@
 import Foundation
 import FeedKit
+import os
 import SwiftData
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "FeedPoller")
 
 // MARK: - Result Types
 
@@ -124,11 +127,16 @@ public actor FeedPoller {
         deleteArchivedAfterDays: Int,
         maxArticlesPerFeed: Int
     ) async -> ArticleStoragePolicyResult {
-        (try? await articleRepo.enforceStoragePolicy(
-            archiveAfterDays: archiveAfterDays,
-            deleteArchivedAfterDays: deleteArchivedAfterDays,
-            maxActiveUnsavedPerFeed: maxArticlesPerFeed
-        )) ?? ArticleStoragePolicyResult()
+        do {
+            return try await articleRepo.enforceStoragePolicy(
+                archiveAfterDays: archiveAfterDays,
+                deleteArchivedAfterDays: deleteArchivedAfterDays,
+                maxActiveUnsavedPerFeed: maxArticlesPerFeed
+            )
+        } catch {
+            logger.error("enforceArticleStoragePolicies failed: \(error)")
+            return ArticleStoragePolicyResult()
+        }
     }
 
     // MARK: - Internal Pipeline

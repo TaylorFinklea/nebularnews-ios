@@ -1,5 +1,8 @@
 import Foundation
+import os
 import SwiftData
+
+private let logger = Logger(subsystem: "com.nebularnews", category: "ArticleRepository")
 
 // MARK: - Filter & Sort Types
 
@@ -1041,13 +1044,17 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
         for article in allArticles where article.isArchived && article.retentionReferenceDate >= archiveCutoff {
             article.restoreFromArchive()
-            _ = try syncProcessingJobs(for: article)
+            do { _ = try syncProcessingJobs(for: article) } catch {
+                logger.warning("syncProcessingJobs failed during restore for article \(article.id, privacy: .public): \(error)")
+            }
             restored += 1
         }
 
         for article in allArticles where !article.isArchived && article.retentionReferenceDate < archiveCutoff {
             article.archive(reason: .ageLimit, at: now)
-            _ = try syncProcessingJobs(for: article)
+            do { _ = try syncProcessingJobs(for: article) } catch {
+                logger.warning("syncProcessingJobs failed during age-archive for article \(article.id, privacy: .public): \(error)")
+            }
             archivedByAge += 1
         }
 
@@ -1071,7 +1078,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
 
             for article in unsavedArticles.dropFirst(feedLimit) where !article.isArchived {
                 article.archive(reason: .feedLimit, at: now)
-                _ = try syncProcessingJobs(for: article)
+                do { _ = try syncProcessingJobs(for: article) } catch {
+                    logger.warning("syncProcessingJobs failed during feed-limit archive for article \(article.id, privacy: .public): \(error)")
+                }
                 archivedByFeedLimit += 1
             }
         }
@@ -1085,6 +1094,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         }
 
         let changed = archivedByAge > 0 || archivedByFeedLimit > 0 || restored > 0 || deleted > 0
+        logger.info("enforceStoragePolicy: archivedByAge=\(archivedByAge) archivedByFeedLimit=\(archivedByFeedLimit) restored=\(restored) deleted=\(deleted)")
         if changed {
             try modelContext.save()
             await rebuildTodaySnapshot()
