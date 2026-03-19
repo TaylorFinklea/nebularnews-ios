@@ -230,10 +230,10 @@ struct ArticleContentExtractor {
         }
 
         let contentHtml = best.paragraphs
-            .map { "<p>\(escapeHTML($0))</p>" }
+            .map { "<p>\($0)</p>" }
             .joined(separator: "\n")
 
-        let excerpt = best.paragraphs.joined(separator: " ").truncated(to: 300)
+        let excerpt = best.paragraphs.map { $0.strippedHTML }.joined(separator: " ").truncated(to: 300)
 
         return Extraction(
             contentHtml: contentHtml,
@@ -324,18 +324,14 @@ struct ArticleContentExtractor {
 
     private static func makeCandidate(paragraphs: [String]) -> Candidate? {
         let cleaned = paragraphs
-            .map {
-                $0
-                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-            .filter { $0.count >= 40 }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.strippedHTML.count >= 40 }
 
         guard !cleaned.isEmpty else {
             return nil
         }
 
-        let textLength = cleaned.reduce(0) { $0 + $1.count }
+        let textLength = cleaned.reduce(0) { $0 + $1.strippedHTML.count }
         let score = textLength + (cleaned.count * 120)
 
         return Candidate(
@@ -355,9 +351,127 @@ struct ArticleContentExtractor {
                 return nil
             }
             let innerHTML = String(html[range])
-            let text = innerHTML.strippedHTML
-            return text.isEmpty ? nil : text
+            let sanitized = sanitizeInnerHTML(innerHTML)
+            return sanitized.strippedHTML.isEmpty ? nil : sanitized
         }
+    }
+
+    // MARK: - HTML Sanitization
+
+    /// Preserves a safe subset of inline HTML formatting tags while stripping
+    /// all other tags. Keeps: strong, b, em, i, a (href only), code, mark,
+    /// sub, sup, br, img (src and alt only). All other tags are removed but
+    /// their text content is preserved.
+    private static func sanitizeInnerHTML(_ html: String) -> String {
+        var result = html
+
+        // Normalize <a> tags — keep href attribute only
+        result = normalizeAnchorTags(in: result)
+
+        // Normalize <img> tags — keep src and alt attributes only
+        result = normalizeImageTags(in: result)
+
+        // Strip attributes from safe inline tags that need no attributes
+        for tag in ["strong", "b", "em", "i", "code", "mark", "sub", "sup"] {
+            if let re = try? NSRegularExpression(pattern: "(?i)<\(tag)\\b[^>]*>") {
+                result = re.stringByReplacingMatches(
+                    in: result,
+                    range: NSRange(result.startIndex..., in: result),
+                    withTemplate: "<\(tag)>"
+                )
+            }
+        }
+
+        // Remove all non-whitelisted tags while preserving their text content
+        let allowed = "strong|b|em|i|a|code|mark|sub|sup|br|img"
+        if let re = try? NSRegularExpression(pattern: "(?i)</?(?!\(allowed)(?:>|\\s|/))\\w[^>]*>") {
+            result = re.stringByReplacingMatches(
+                in: result,
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: ""
+            )
+        }
+
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func normalizeAnchorTags(in html: String) -> String {
+        var result = html
+
+        // Extract href from double-quoted attributes
+        if let re = try? NSRegularExpression(
+            pattern: #"<a\b[^>]*?\bhref\s*=\s*"([^"]*)"[^>]*>"#,
+            options: .caseInsensitive
+        ) {
+            result = re.stringByReplacingMatches(
+                in: result,
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: #"<a href="$1">"#
+            )
+        }
+
+        // Extract href from single-quoted attributes
+        if let re = try? NSRegularExpression(
+            pattern: #"<a\b[^>]*?\bhref\s*=\s*'([^']*)'[^>]*>"#,
+            options: .caseInsensitive
+        ) {
+            result = re.stringByReplacingMatches(
+                in: result,
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: #"<a href="$1">"#
+            )
+        }
+
+        // Remove any remaining <a ...> tags with no recognizable href
+        if let re = try? NSRegularExpression(
+            pattern: #"<a\b(?![^>]*\shref\s*=)[^>]*>"#,
+            options: .caseInsensitive
+        ) {
+            result = re.stringByReplacingMatches(
+                in: result,
+                range: NSRange(result.startIndex..., in: result),
+                withTemplate: ""
+            )
+        }
+
+        return result
+    }
+
+    private static func normalizeImageTags(in html: String) -> String {
+        guard let re = try? NSRegularExpression(pattern: #"<img\b[^>]*/?>"#, options: .caseInsensitive) else {
+            return html
+        }
+
+        var result = html
+        let matches = re.matches(in: result, range: NSRange(result.startIndex..., in: result))
+
+        for match in matches.reversed() {
+            guard let fullRange = Range(match.range, in: result) else { continue }
+            let imgTag = String(result[fullRange])
+            let src = extractAttributeValue("src", from: imgTag) ?? ""
+            let alt = extractAttributeValue("alt", from: imgTag)
+
+            if src.isEmpty {
+                result.replaceSubrange(fullRange, with: "")
+            } else if let alt, !alt.isEmpty {
+                result.replaceSubrange(fullRange, with: "<img src=\"\(src)\" alt=\"\(alt)\">")
+            } else {
+                result.replaceSubrange(fullRange, with: "<img src=\"\(src)\">")
+            }
+        }
+
+        return result
+    }
+
+    private static func extractAttributeValue(_ name: String, from tag: String) -> String? {
+        let pattern = "\\b\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)')"
+        guard let re = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = re.firstMatch(in: tag, range: NSRange(tag.startIndex..., in: tag))
+        else { return nil }
+
+        let r1 = Range(match.range(at: 1), in: tag)
+        let r2 = Range(match.range(at: 2), in: tag)
+        return r1.map { String(tag[$0]) } ?? r2.map { String(tag[$0]) }
     }
 
     private static func removeNoiseTags(from html: String) -> String {

@@ -327,7 +327,7 @@ struct ArticleDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                HTMLTextView(html: html)
+                RichArticleContentView(html: html)
             }
         } else if let excerpt = article.excerpt, !excerpt.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
@@ -858,61 +858,3 @@ private struct ScrollOffsetKey: PreferenceKey {
     }
 }
 
-// MARK: - Simple HTML → Plain Text Renderer
-
-private struct HTMLTextView: View {
-    let html: String
-    @State private var plainText: String?
-
-    var body: some View {
-        Group {
-            if let text = plainText {
-                if text.isEmpty {
-                    Text("This article didn't include readable inline text. Open it in your browser for the full version.")
-                        .font(.body)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                } else {
-                    Text(text)
-                        .font(.body)
-                        .lineSpacing(4)
-                        .textSelection(.enabled)
-                }
-            }
-        }
-        .task(id: html) {
-            plainText = renderPlainText(html)
-        }
-    }
-
-    private func renderPlainText(_ html: String) -> String {
-        html
-            .replacingOccurrences(
-                of: "(?i)<\\s*br\\s*/?\\s*>",
-                with: "\n",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: "(?i)<\\s*/\\s*(p|div|section|article|h[1-6]|ul|ol|li|blockquote|tr)\\s*>",
-                with: "\n",
-                options: .regularExpression
-            )
-            .replacingOccurrences(
-                of: "(?i)<\\s*li\\b[^>]*>",
-                with: "• ",
-                options: .regularExpression
-            )
-            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .replacingOccurrences(of: "&amp;", with: "&")
-            .replacingOccurrences(of: "&lt;", with: "<")
-            .replacingOccurrences(of: "&gt;", with: ">")
-            .replacingOccurrences(of: "&quot;", with: "\"")
-            .replacingOccurrences(of: "&#39;", with: "'")
-            .replacingOccurrences(of: "&apos;", with: "'")
-            .replacingOccurrences(of: "&nbsp;", with: " ")
-            .replacingOccurrences(of: "[ \\t\\f\\r]+", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
-            .replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
