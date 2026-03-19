@@ -18,24 +18,61 @@ struct NebularNewsApp: App {
 
     @State private var appState: AppState
     @State private var themeManager = ThemeManager()
+    @State private var lastSyncBootstrapAt: Date?
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let configuration = AppConfiguration.shared
+        var fallbackReason: AppState.ContainerFallbackReason?
+
+        if let container = Self.makeContainerWithFallback(configuration: configuration, fallbackReason: &fallbackReason) {
+            modelContainer = container
+        } else {
+            // Last resort: in-memory container so the app can at least launch
+            do {
+                modelContainer = try makeInMemoryModelContainer()
+            } catch {
+                // If even in-memory fails, there's a fundamental SwiftData issue
+                fatalError("Failed to create even an in-memory ModelContainer: \(error)")
+            }
+        }
+
+        let appState = AppState(configuration: configuration)
+        appState.containerFallbackReason = fallbackReason
+        _appState = State(initialValue: appState)
+
+        BackgroundTaskManager.register(modelContainer: modelContainer)
+    }
+
+    private static func makeContainerWithFallback(
+        configuration: AppConfiguration,
+        fallbackReason: inout AppState.ContainerFallbackReason?
+    ) -> ModelContainer? {
+        // Tier 1: Try with the requested CloudKit configuration
         do {
-            modelContainer = try makeModelContainer(
+            return try makeModelContainer(
                 cloudKitEnabled: configuration.cloudKitEnabled,
                 cloudKitContainerIdentifier: configuration.cloudKitContainerIdentifier
             )
         } catch {
-            appLogger.fault("Primary ModelContainer failed, falling back to in-memory: \(error.localizedDescription, privacy: .public)")
-            modelContainer = try! makeInMemoryModelContainer()
+            appLogger.error("ModelContainer creation failed: \(error, privacy: .public)")
+
+            // Tier 2: If CloudKit was enabled, retry without it
+            if configuration.cloudKitEnabled {
+                fallbackReason = .cloudKitUnavailable(error)
+                do {
+                    appLogger.notice("Retrying ModelContainer without CloudKit")
+                    return try makeModelContainer(cloudKitEnabled: false)
+                } catch {
+                    appLogger.error("Local-only ModelContainer also failed: \(error, privacy: .public)")
+                    fallbackReason = .diskCorrupted(error)
+                }
+            } else {
+                fallbackReason = .diskCorrupted(error)
+            }
         }
 
-        _appState = State(initialValue: AppState(configuration: configuration))
-
-        // Register background feed refresh task
-        BackgroundTaskManager.register(modelContainer: modelContainer)
+        return nil
     }
 
     var body: some Scene {
@@ -49,6 +86,11 @@ struct NebularNewsApp: App {
                     }
                 } else {
                     OnboardingView()
+                }
+            }
+            .overlay(alignment: .top) {
+                if let reason = appState.containerFallbackReason {
+                    ContainerFallbackBanner(reason: reason)
                 }
             }
             .environment(appState)
@@ -68,6 +110,7 @@ struct NebularNewsApp: App {
                 await service.bootstrap()
                 _ = await settingsRepo.getOrCreate()
                 await syncService.bootstrap()
+                lastSyncBootstrapAt = Date()
 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains(personalizationReprocessLaunchArgument) {
                     _ = await service.reprocessAllStaleArticles(batchSize: 200)
@@ -93,8 +136,13 @@ struct NebularNewsApp: App {
             case .active:
                 if appState.isStandaloneMode {
                     Task {
-                        let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
-                        await syncService.bootstrap()
+                        let now = Date()
+                        let shouldSync = lastSyncBootstrapAt.map { now.timeIntervalSince($0) > 300 } ?? true
+                        if shouldSync {
+                            let syncService = StandaloneStateSyncService(modelContainer: modelContainer)
+                            await syncService.bootstrap()
+                            lastSyncBootstrapAt = now
+                        }
                         await ProcessingQueueSupervisor.shared.activate(
                             modelContainer: modelContainer,
                             keychainService: appState.configuration.keychainService
@@ -104,6 +152,43 @@ struct NebularNewsApp: App {
             default:
                 break
             }
+        }
+    }
+}
+
+private struct ContainerFallbackBanner: View {
+    let reason: AppState.ContainerFallbackReason
+    @State private var dismissed = false
+
+    var body: some View {
+        if !dismissed {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.yellow)
+                Text(message)
+                    .font(.caption)
+                Spacer()
+                Button {
+                    withAnimation { dismissed = true }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                }
+            }
+            .padding(12)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    private var message: String {
+        switch reason {
+        case .cloudKitUnavailable:
+            "iCloud sync unavailable this session. Your data is stored locally."
+        case .diskCorrupted:
+            "Running in temporary mode. Data will not persist between launches."
         }
     }
 }

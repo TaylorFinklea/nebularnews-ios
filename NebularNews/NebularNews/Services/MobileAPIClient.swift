@@ -163,10 +163,11 @@ final class MobileAPIClient {
         guard (200..<300).contains(httpResponse.statusCode) else {
             throw try decodeServerError(from: data, statusCode: httpResponse.statusCode)
         }
-        if decode == EmptyPayload.self, let result = EmptyPayload() as? T {
-            return result
-        } else if decode == EmptyPayload.self {
-            throw MobileAPIError.unexpectedEmptyResponse
+        if decode == EmptyPayload.self {
+            guard let empty = EmptyPayload() as? T else {
+                throw MobileAPIError.unexpectedEmptyResponse
+            }
+            return empty
         }
         return try decoder.decode(decode, from: data)
     }
