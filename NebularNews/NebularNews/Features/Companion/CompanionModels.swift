@@ -80,8 +80,8 @@ struct CompanionArticleListItem: Codable, Identifiable {
     let imageUrl: String?
     let title: String?
     let author: String?
-    let publishedAt: String?
-    let fetchedAt: String?
+    let publishedAt: Int?
+    let fetchedAt: Int?
     let excerpt: String?
     let summaryText: String?
     let isRead: Int?
@@ -115,8 +115,8 @@ struct CompanionArticle: Codable {
     let imageUrl: String?
     let title: String?
     let author: String?
-    let publishedAt: String?
-    let fetchedAt: String?
+    let publishedAt: Int?
+    let fetchedAt: Int?
     let contentHtml: String?
     let contentText: String?
     let excerpt: String?
