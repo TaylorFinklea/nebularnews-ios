@@ -26,7 +26,7 @@ enum MobileOAuthError: LocalizedError {
         case .invalidRedirectURI:
             return "The OAuth redirect URI is invalid."
         case .authorizationCancelled:
-            return "Sign-in was cancelled."
+            return "Sign-in was cancelled. Try again."
         case .invalidCallback:
             return "The OAuth callback could not be validated."
         case .stateMismatch:
@@ -34,7 +34,7 @@ enum MobileOAuthError: LocalizedError {
         case .missingAuthorizationCode:
             return "The OAuth callback did not include an authorization code."
         case .invalidTokenResponse:
-            return "The server returned an invalid OAuth token response."
+            return "Server returned an invalid response. Check that your server URL is correct."
         }
     }
 }
