@@ -369,17 +369,15 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             return computeFeedReputation(feedbackCount: 0, weightedFeedbackCount: 0, ratingSum: 0)
         }
 
-        let descriptor = FetchDescriptor<SyncedArticleState>(
-            predicate: #Predicate<SyncedArticleState> { $0.feedKey == feedKey }
-        )
-        let states = (try? modelContext.fetch(descriptor)) ?? []
+        let articles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
 
         var accumulator = FeedReputationAccumulator()
-        for state in states {
+        for article in articles {
+            guard article.feed?.feedKey == feedKey else { continue }
             accumulator.add(
-                reactionValue: state.reactionValue,
-                serializedReasonCodes: state.reactionReasonCodes,
-                feedbackAt: state.reactionUpdatedAt ?? state.updatedAt
+                reactionValue: article.reactionValue,
+                serializedReasonCodes: article.reactionReasonCodes,
+                feedbackAt: article.reactionUpdatedAt
             )
         }
         return accumulator.reputation
@@ -742,7 +740,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
             article.contentRevision = 1
         }
         article.refreshQueryState()
-        applySyncedArticleStateIfPresent(to: article)
         modelContext.insert(article)
         try modelContext.save()
         try await enqueueMissingProcessingJobs(for: article.id)
@@ -771,7 +768,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         newArticle.queryIsVisible = false
         newArticle.contentRevision = 1
         newArticle.refreshQueryState()
-        applySyncedArticleStateIfPresent(to: newArticle)
 
         modelContext.insert(newArticle)
         try modelContext.save()
@@ -785,7 +781,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         } else {
             article.markUnread()
         }
-        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         await rebuildTodaySnapshot()
         ArticleChangeBus.postFeedPageMightChange()
@@ -799,7 +794,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         } else {
             article.removeFromReadingList()
         }
-        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         ArticleChangeBus.postReadingListChanged()
         ArticleChangeBus.postArticleChanged(id: id)
@@ -808,7 +802,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func react(id: String, value: Int?, reasonCodes: [String]?) async throws {
         guard let article = await get(id: id) else { return }
         article.setReaction(value: value, reasonCodes: reasonCodes)
-        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         await rebuildTodaySnapshot()
         ArticleChangeBus.postFeedPageMightChange()
@@ -818,7 +811,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
     public func syncStandaloneUserState(id: String) async throws {
         guard let article = await get(id: id) else { return }
         article.refreshQueryState()
-        upsertSyncedArticleState(from: article, updatedAt: article.userStateUpdatedAt ?? Date())
         try modelContext.save()
         await rebuildTodaySnapshot()
         ArticleChangeBus.postArticleChanged(id: id)
@@ -1778,14 +1770,9 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         return reclaimed
     }
 
-    private func allSyncedArticleStates() -> [SyncedArticleState] {
-        (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
-    }
-
     private func allFeedReputationSummaries() -> [FeedReputationSummary] {
         let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
-        let syncedSubscriptions = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
-        let syncedStates = allSyncedArticleStates()
+        let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
 
         let localByKey = Dictionary(
             uniqueKeysWithValues: localFeeds.compactMap { feed -> (String, Feed)? in
@@ -1794,39 +1781,33 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 return (feed.feedKey, feed)
             }
         )
-        let subscriptionsByKey = Dictionary(uniqueKeysWithValues: syncedSubscriptions.map { ($0.feedKey, $0) })
 
         var accumulators: [String: FeedReputationAccumulator] = [:]
-        for state in syncedStates {
-            guard !state.feedKey.isEmpty else { continue }
-            var accumulator = accumulators[state.feedKey] ?? FeedReputationAccumulator()
+        for article in localArticles {
+            guard let feedKey = article.feed?.feedKey, !feedKey.isEmpty else { continue }
+            var accumulator = accumulators[feedKey] ?? FeedReputationAccumulator()
             accumulator.add(
-                reactionValue: state.reactionValue,
-                serializedReasonCodes: state.reactionReasonCodes,
-                feedbackAt: state.reactionUpdatedAt ?? state.updatedAt
+                reactionValue: article.reactionValue,
+                serializedReasonCodes: article.reactionReasonCodes,
+                feedbackAt: article.reactionUpdatedAt
             )
-            accumulators[state.feedKey] = accumulator
+            accumulators[feedKey] = accumulator
         }
 
         let allFeedKeys = Set(localByKey.keys)
-            .union(subscriptionsByKey.keys)
             .union(accumulators.keys)
 
         return allFeedKeys.map { feedKey in
             let localFeed = localByKey[feedKey]
-            let subscription = subscriptionsByKey[feedKey]
             let accumulator = accumulators[feedKey] ?? FeedReputationAccumulator()
             let reputation = accumulator.reputation
 
             let localTitle = localFeed?.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let syncedTitle = subscription?.titleOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
             let title = (localTitle?.isEmpty == false ? localTitle : nil)
-                ?? (syncedTitle?.isEmpty == false ? syncedTitle : nil)
-                ?? subscription?.feedURL
                 ?? localFeed?.feedUrl
                 ?? feedKey
-            let feedURL = localFeed?.feedUrl ?? subscription?.feedURL ?? feedKey
-            let isEnabled = localFeed?.isEnabled ?? subscription?.isEnabled ?? true
+            let feedURL = localFeed?.feedUrl ?? feedKey
+            let isEnabled = localFeed?.isEnabled ?? true
 
             return FeedReputationSummary(
                 feedKey: feedKey,
@@ -1848,124 +1829,10 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmedTitle.isEmpty ? feedURL : trimmedTitle
     }
-
-    private func syncedArticleState(articleKey: String) -> SyncedArticleState? {
-        guard !articleKey.isEmpty else { return nil }
-        var descriptor = FetchDescriptor<SyncedArticleState>(
-            predicate: #Predicate<SyncedArticleState> { $0.articleKey == articleKey }
-        )
-        descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
-    }
-
-    private func applySyncedArticleStateIfPresent(to article: Article) {
-        guard !article.articleKey.isEmpty,
-              let synced = syncedArticleState(articleKey: article.articleKey)
-        else {
-            return
-        }
-
-        if synced.feedKey.isEmpty, let localFeedKey = article.feed?.feedKey, !localFeedKey.isEmpty {
-            synced.feedKey = localFeedKey
-        }
-
-        article.isRead = synced.isRead
-        article.readAt = synced.readAt
-        article.dismissedAt = synced.dismissedAt
-        article.readingListAddedAt = synced.readingListAddedAt
-        article.reactionValue = synced.reactionValue
-        article.reactionReasonCodes = synced.reactionReasonCodes
-        article.reactionUpdatedAt = synced.reactionUpdatedAt ?? (synced.reactionValue == nil ? nil : synced.updatedAt)
-        article.refreshQueryState()
-    }
-
-    private func upsertSyncedArticleState(from article: Article, updatedAt: Date) {
-        article.refreshQueryState()
-        guard !article.articleKey.isEmpty else {
-            return
-        }
-
-        let row = syncedArticleState(articleKey: article.articleKey) ?? {
-            let newRow = SyncedArticleState(articleKey: article.articleKey)
-            modelContext.insert(newRow)
-            return newRow
-        }()
-
-        row.isRead = article.isRead
-        row.readAt = article.readAt
-        row.dismissedAt = article.dismissedAt
-        row.readingListAddedAt = article.readingListAddedAt
-        row.reactionValue = article.reactionValue
-        row.reactionReasonCodes = article.reactionReasonCodes
-        row.feedKey = article.feed?.feedKey ?? row.feedKey
-        row.reactionUpdatedAt = article.reactionUpdatedAt
-        row.updatedAt = updatedAt
-    }
 }
 
 #if DEBUG
 extension LocalArticleRepository {
-    public func standaloneSyncDebugSnapshot() async -> StandaloneSyncDebugSnapshot {
-        let syncedFeeds = (try? modelContext.fetch(FetchDescriptor<SyncedFeedSubscription>())) ?? []
-        let syncedStates = (try? modelContext.fetch(FetchDescriptor<SyncedArticleState>())) ?? []
-        let syncedPreferencesRow = try? modelContext.fetch(FetchDescriptor<SyncedPreferences>()).first
-        let localFeeds = (try? modelContext.fetch(FetchDescriptor<Feed>())) ?? []
-        let localArticles = (try? modelContext.fetch(FetchDescriptor<Article>())) ?? []
-
-        let feedRows = syncedFeeds
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .prefix(20)
-            .map {
-                StandaloneSyncDebugFeedRow(
-                    id: $0.id,
-                    feedKey: $0.feedKey,
-                    feedURL: $0.feedURL,
-                    titleOverride: $0.titleOverride,
-                    isEnabled: $0.isEnabled,
-                    updatedAt: $0.updatedAt
-                )
-            }
-
-        let articleStateRows = syncedStates
-            .sorted { $0.updatedAt > $1.updatedAt }
-            .prefix(20)
-            .map {
-                StandaloneSyncDebugArticleStateRow(
-                    id: $0.id,
-                    articleKey: $0.articleKey,
-                    isRead: $0.isRead,
-                    isDismissed: $0.dismissedAt != nil,
-                    isSaved: $0.readingListAddedAt != nil,
-                    reactionValue: $0.reactionValue,
-                    updatedAt: $0.updatedAt
-                )
-            }
-
-        let syncedPreferences = syncedPreferencesRow.map {
-            StandaloneSyncDebugPreferences(
-                archiveAfterDays: $0.archiveAfterDays,
-                deleteArchivedAfterDays: $0.deleteArchivedAfterDays,
-                maxArticlesPerFeed: $0.maxArticlesPerFeed,
-                searchArchivedByDefault: $0.searchArchivedByDefault,
-                updatedAt: $0.updatedAt
-            )
-        }
-
-        return StandaloneSyncDebugSnapshot(
-            syncedFeedSubscriptionCount: syncedFeeds.count,
-            syncedArticleStateCount: syncedStates.count,
-            localFeedCount: localFeeds.count,
-            localArticleCount: localArticles.count,
-            localReadCount: localArticles.filter(\.isRead).count,
-            localDismissedCount: localArticles.filter { $0.dismissedAt != nil }.count,
-            localSavedCount: localArticles.filter(\.isInReadingList).count,
-            localReactedCount: localArticles.filter { $0.reactionValue != nil }.count,
-            syncedPreferences: syncedPreferences,
-            feedRows: Array(feedRows),
-            articleStateRows: Array(articleStateRows)
-        )
-    }
-
     public func processingDebugSnapshot() async -> ArticleProcessingDebugSnapshot {
         let jobs = allProcessingJobs()
         let articleTitles = Dictionary(
