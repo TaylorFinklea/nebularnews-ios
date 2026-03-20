@@ -161,6 +161,40 @@ final class MobileAPIClient {
         return try await post("/api/mobile/pull", body: Body(cycles: cycles))
     }
 
+    // MARK: - Settings
+
+    func fetchSettings() async throws -> CompanionSettingsPayload {
+        try await get("/api/mobile/settings")
+    }
+
+    func updateSettings<Body: Encodable>(body: Body) async throws -> CompanionSettingsPayload {
+        try await patch("/api/mobile/settings", body: body)
+    }
+
+    // MARK: - Tags (global)
+
+    func fetchTags(query: String? = nil, limit: Int? = nil) async throws -> CompanionTagListPayload {
+        var components = URLComponents()
+        components.queryItems = []
+        if let query, !query.isEmpty {
+            components.queryItems?.append(URLQueryItem(name: "q", value: query))
+        }
+        if let limit {
+            components.queryItems?.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        let queryString = components.percentEncodedQuery.map { "?\($0)" } ?? ""
+        return try await get("/api/mobile/tags\(queryString)")
+    }
+
+    func createTag(name: String) async throws -> CompanionCreateTagResponse {
+        struct Body: Encodable { let name: String }
+        return try await post("/api/mobile/tags", body: Body(name: name))
+    }
+
+    func deleteTag(id: String) async throws -> CompanionDeleteTagResponse {
+        try await delete("/api/mobile/tags/\(id)")
+    }
+
     // MARK: - Today + Reading list
 
     func fetchToday() async throws -> CompanionTodayPayload {
@@ -193,6 +227,10 @@ final class MobileAPIClient {
 
     private func post<T: Decodable, Body: Encodable>(_ path: String, body: Body) async throws -> T {
         try await authorizedRequest(path: path, method: "POST", bodyData: try encoder.encode(body), decode: T.self)
+    }
+
+    private func patch<T: Decodable, Body: Encodable>(_ path: String, body: Body) async throws -> T {
+        try await authorizedRequest(path: path, method: "PATCH", bodyData: try encoder.encode(body), decode: T.self)
     }
 
     private func delete<T: Decodable>(_ path: String) async throws -> T {

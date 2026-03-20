@@ -315,3 +315,45 @@ struct CompanionDismissResponse: Codable {
     let articleId: String
     let dismissed: Bool
 }
+
+// MARK: - Settings payload
+
+struct CompanionSettingsPayload: Codable {
+    var pollIntervalMinutes: Int
+    var summaryStyle: String
+    var scoringMethod: String
+    var newsBriefConfig: CompanionNewsBriefConfig
+}
+
+struct CompanionNewsBriefConfig: Codable {
+    var enabled: Bool
+    var timezone: String
+    var morningTime: String
+    var eveningTime: String
+    var lookbackHours: Int
+    var scoreCutoff: Int
+}
+
+// MARK: - Tag list payload
+
+struct CompanionTagListPayload: Codable {
+    let tags: [CompanionTagWithCount]
+}
+
+struct CompanionTagWithCount: Codable, Identifiable {
+    let id: String
+    let name: String
+    let slug: String?
+    let color: String?
+    let description: String?
+    let articleCount: Int
+}
+
+struct CompanionCreateTagResponse: Codable {
+    let ok: Bool
+    let tag: CompanionTagWithCount
+}
+
+struct CompanionDeleteTagResponse: Codable {
+    let ok: Bool
+}
