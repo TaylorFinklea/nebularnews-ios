@@ -125,7 +125,7 @@ final class MobileOAuthCoordinator: NSObject, ASWebAuthenticationPresentationCon
                 continuation.resume(returning: callbackURL)
             }
             session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = true
+            session.prefersEphemeralWebBrowserSession = false
             self.currentSession = session
             session.start()
         }
