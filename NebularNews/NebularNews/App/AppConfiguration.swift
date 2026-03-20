@@ -6,9 +6,6 @@ struct AppConfiguration {
     let bundleIdentifier: String
     let keychainService: String
     let backgroundRefreshTaskIdentifier: String
-    let backgroundProcessingTaskIdentifier: String
-    let cloudKitEnabled: Bool
-    let cloudKitContainerIdentifier: String?
     let mobileOAuthClientId: String
     let mobileOAuthClientName: String
     let mobileOAuthRedirectURI: URL
@@ -21,11 +18,6 @@ struct AppConfiguration {
         self.backgroundRefreshTaskIdentifier =
             bundle.stringValue(forInfoDictionaryKey: "BackgroundRefreshTaskIdentifier")
             ?? "\(bundleIdentifier).feedRefresh"
-        self.backgroundProcessingTaskIdentifier =
-            bundle.stringValue(forInfoDictionaryKey: "BackgroundProcessingTaskIdentifier")
-            ?? "\(bundleIdentifier).articleProcessing"
-        self.cloudKitEnabled = bundle.boolValue(forInfoDictionaryKey: "CloudKitEnabled")
-        self.cloudKitContainerIdentifier = bundle.stringValue(forInfoDictionaryKey: "CloudKitContainerIdentifier")
         self.mobileOAuthClientId = bundle.stringValue(forInfoDictionaryKey: "MobileOAuthClientId") ?? "nebular-news-ios"
         self.mobileOAuthClientName = bundle.stringValue(forInfoDictionaryKey: "MobileOAuthClientName") ?? "Nebular News iOS"
         self.mobileOAuthRedirectURI =
@@ -47,22 +39,4 @@ private extension Bundle {
         }
     }
 
-    func boolValue(forInfoDictionaryKey key: String) -> Bool {
-        guard let value = object(forInfoDictionaryKey: key) else { return false }
-        switch value {
-        case let bool as Bool:
-            return bool
-        case let number as NSNumber:
-            return number.boolValue
-        default:
-            switch String(describing: value).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-            case "true", "yes", "1":
-                return true
-            case "false", "no", "0":
-                return false
-            default:
-                return false
-            }
-        }
-    }
 }

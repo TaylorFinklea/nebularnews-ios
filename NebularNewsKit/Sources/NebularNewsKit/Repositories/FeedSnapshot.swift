@@ -3,8 +3,8 @@ import Foundation
 /// A lightweight, `Sendable` snapshot of a `Feed` for crossing actor boundaries.
 ///
 /// `@Model` objects aren't `Sendable` — they're tied to a `ModelContext` and can't
-/// safely be passed between actors. `FeedSnapshot` captures just the fields the
-/// `FeedPoller` needs without pulling in SwiftData.
+/// safely be passed between actors. `FeedSnapshot` captures feed fields without
+/// pulling in SwiftData.
 public struct FeedSnapshot: Sendable {
     public let id: String
     public let feedUrl: String

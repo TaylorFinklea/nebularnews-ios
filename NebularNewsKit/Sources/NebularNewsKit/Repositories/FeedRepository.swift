@@ -80,28 +80,24 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
 
         let feed = Feed(feedUrl: normalizedURL, title: title)
         modelContext.insert(feed)
-        upsertSyncedFeedSubscription(from: feed, updatedAt: Date())
         try modelContext.save()
         return feed
     }
 
     public func delete(id: String) async throws {
         guard let feed = await get(id: id) else { return }
-        deleteSyncedFeedSubscription(feedKey: feed.feedKey)
         modelContext.delete(feed)
         try modelContext.save()
     }
 
     public func update(_ feed: Feed) async throws {
         feed.refreshIdentity()
-        upsertSyncedFeedSubscription(from: feed, updatedAt: Date())
         try modelContext.save()
     }
 
     public func setEnabled(id: String, enabled: Bool) async throws {
         guard let feed = await get(id: id) else { return }
         feed.isEnabled = enabled
-        upsertSyncedFeedSubscription(from: feed, updatedAt: Date())
         try modelContext.save()
     }
 
@@ -113,7 +109,6 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
         }
         if let siteUrl { feed.siteUrl = siteUrl }
         if let iconUrl { feed.iconUrl = iconUrl }
-        upsertSyncedFeedSubscription(from: feed, updatedAt: Date())
         try modelContext.save()
     }
 
@@ -159,47 +154,5 @@ public actor LocalFeedRepository: FeedRepositoryProtocol {
         if didChange {
             try? modelContext.save()
         }
-    }
-
-    private func syncedFeedSubscription(feedKey: String) -> SyncedFeedSubscription? {
-        guard !feedKey.isEmpty else { return nil }
-        var descriptor = FetchDescriptor<SyncedFeedSubscription>(
-            predicate: #Predicate<SyncedFeedSubscription> { $0.feedKey == feedKey }
-        )
-        descriptor.fetchLimit = 1
-        return try? modelContext.fetch(descriptor).first
-    }
-
-    private func upsertSyncedFeedSubscription(from feed: Feed, updatedAt: Date) {
-        feed.refreshIdentity()
-        guard !feed.feedKey.isEmpty else {
-            return
-        }
-
-        let titleOverride = feed.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : feed.title
-        let row = syncedFeedSubscription(feedKey: feed.feedKey) ?? {
-            let newRow = SyncedFeedSubscription(
-                feedKey: feed.feedKey,
-                feedURL: feed.feedUrl,
-                titleOverride: titleOverride,
-                isEnabled: feed.isEnabled,
-                createdAt: feed.createdAt,
-                updatedAt: updatedAt
-            )
-            modelContext.insert(newRow)
-            return newRow
-        }()
-
-        row.feedURL = feed.feedUrl
-        row.titleOverride = titleOverride
-        row.isEnabled = feed.isEnabled
-        row.updatedAt = updatedAt
-    }
-
-    private func deleteSyncedFeedSubscription(feedKey: String) {
-        guard let row = syncedFeedSubscription(feedKey: feedKey) else {
-            return
-        }
-        modelContext.delete(row)
     }
 }

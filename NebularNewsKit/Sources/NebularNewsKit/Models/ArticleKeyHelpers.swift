@@ -44,7 +44,7 @@ func standaloneArticleKey(
         return nil
     }
 
-    let publishedComponent = publishedAt.map(standaloneArticleKeyPublishedComponent) ?? "undated"
+    let publishedComponent = publishedAt.map(articleKeyPublishedComponent) ?? "undated"
 
     let base = "\(feedKey)|\(publishedComponent)|\(normalizedTitle)"
     let digest = SHA256.hash(data: Data(base.utf8))
@@ -52,7 +52,7 @@ func standaloneArticleKey(
     return "derived:\(hash)"
 }
 
-private func standaloneArticleKeyPublishedComponent(from date: Date) -> String {
+private func articleKeyPublishedComponent(from date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     formatter.timeZone = TimeZone(secondsFromGMT: 0)

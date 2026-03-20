@@ -27,10 +27,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>CloudKitContainerIdentifier</key>
-	<string>$(CLOUDKIT_CONTAINER_IDENTIFIER)</string>
-	<key>CloudKitEnabled</key>
-	<string>$(CLOUDKIT_ENABLED)</string>
 	<key>KeychainService</key>
 	<string>$(KEYCHAIN_SERVICE)</string>
 	<key>MobileDefaultServerURL</key>

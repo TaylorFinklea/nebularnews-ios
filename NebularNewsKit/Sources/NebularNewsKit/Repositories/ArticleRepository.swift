@@ -97,8 +97,6 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func get(id: String) async -> Article?
     func getByHash(_ hash: String) async -> Article?
     func enrichmentSnapshot(id: String) async -> ArticleSnapshot?
-    func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate?
-    func listContentFetchCandidates(limit: Int, recentOnly: Bool) async -> [ArticleContentFetchCandidate]
     func pendingVisibleArticleCount() async -> Int
     func processingQueueHealth() async -> ArticleProcessingQueueHealth
     func backfillMissingProcessingJobsForInvisibleArticles(limit: Int) async throws -> Int
@@ -108,11 +106,9 @@ public protocol ArticleRepositoryProtocol: Sendable {
     func processingJob(articleID: String, stage: ArticleProcessingStage) async -> ArticleProcessingJob?
     func completeProcessingJob(articleID: String, stage: ArticleProcessingStage, status: ArticleProcessingJobStatus, inputRevision: Int, error: String?, suppressNotification: Bool) async throws
     func insert(_ article: Article) async throws
-    func insertForFeed(feedId: String, article: ParsedArticle) async throws
     func markRead(id: String, isRead: Bool) async throws
     func setReadingList(id: String, isSaved: Bool) async throws
     func react(id: String, value: Int?, reasonCodes: [String]?) async throws
-    func syncStandaloneUserState(id: String) async throws
     func addTag(articleId: String, tag: Tag) async throws
     func removeTag(articleId: String, tagId: String) async throws
     func updateAIFields(
@@ -660,10 +656,7 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         )
     }
 
-    public func contentFetchCandidate(id: String) async -> ArticleContentFetchCandidate? {
-        guard let article = await get(id: id) else { return nil }
-        return articleContentFetchCandidate(from: article)
-    }
+
 
     public func fallbackImageSnapshot(id: String) async -> ArticleFallbackImageSnapshot? {
         guard let article = await get(id: id) else { return nil }
@@ -703,29 +696,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         )
     }
 
-    public func listContentFetchCandidates(limit: Int = 10, recentOnly: Bool = true) async -> [ArticleContentFetchCandidate] {
-        let descriptor = FetchDescriptor<Article>(
-            sortBy: [SortDescriptor(\.publishedAt, order: .reverse), SortDescriptor(\.fetchedAt, order: .reverse)]
-        )
-
-        guard let articles = try? modelContext.fetch(descriptor) else {
-            return []
-        }
-
-        let recentCutoff = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? .distantPast
-
-        return articles
-            .filter { article in
-                !article.isArchived &&
-                (!recentOnly || article.retentionReferenceDate >= recentCutoff)
-            }
-            .compactMap { article in
-                articleContentFetchCandidate(from: article)
-            }
-            .prefix(limit)
-            .map { $0 }
-    }
-
     public func insert(_ article: Article) async throws {
         if article.contentPreparationStatusRaw == nil {
             article.contentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
@@ -743,35 +713,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         modelContext.insert(article)
         try modelContext.save()
         try await enqueueMissingProcessingJobs(for: article.id)
-    }
-
-    public func insertForFeed(feedId: String, article: ParsedArticle) async throws {
-        // Fetch the Feed from THIS actor's ModelContext so both objects share the same context
-        var descriptor = FetchDescriptor<Feed>(
-            predicate: #Predicate { $0.id == feedId }
-        )
-        descriptor.fetchLimit = 1
-        guard let feed = try? modelContext.fetch(descriptor).first else { return }
-
-        let newArticle = Article(canonicalUrl: article.url, title: article.title)
-        newArticle.author = article.author
-        newArticle.publishedAt = article.publishedAt
-        newArticle.contentHtml = article.contentHtml
-        newArticle.excerpt = article.excerpt
-        newArticle.imageUrl = article.imageUrl
-        newArticle.contentHash = article.contentHash
-        newArticle.feed = feed
-        newArticle.contentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
-        newArticle.imagePreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
-        newArticle.enrichmentPreparationStatusRaw = ArticlePreparationStageStatus.pending.rawValue
-        newArticle.presentationReadyAt = nil
-        newArticle.queryIsVisible = false
-        newArticle.contentRevision = 1
-        newArticle.refreshQueryState()
-
-        modelContext.insert(newArticle)
-        try modelContext.save()
-        try await enqueueMissingProcessingJobs(for: newArticle.id)
     }
 
     public func markRead(id: String, isRead: Bool) async throws {
@@ -806,16 +747,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
         await rebuildTodaySnapshot()
         ArticleChangeBus.postFeedPageMightChange()
         ArticleChangeBus.postArticleChanged(id: id)
-    }
-
-    public func syncStandaloneUserState(id: String) async throws {
-        guard let article = await get(id: id) else { return }
-        article.refreshQueryState()
-        try modelContext.save()
-        await rebuildTodaySnapshot()
-        ArticleChangeBus.postArticleChanged(id: id)
-        ArticleChangeBus.postReadingListChanged()
-        ArticleChangeBus.postFeedPageMightChange()
     }
 
     public func addTag(articleId: String, tag: Tag) async throws {
@@ -1136,24 +1067,6 @@ public actor LocalArticleRepository: ArticleRepositoryProtocol {
                 SortDescriptor(\.id, order: .reverse)
             ]
         }
-    }
-
-    private func articleContentFetchCandidate(from article: Article) -> ArticleContentFetchCandidate? {
-        guard article.needsContentFetch() else {
-            return nil
-        }
-
-        guard let canonicalUrl = article.canonicalUrl else {
-            return nil
-        }
-
-        return ArticleContentFetchCandidate(
-            id: article.id,
-            canonicalUrl: canonicalUrl,
-            title: article.title,
-            currentTextLength: article.bestAvailableContentLength,
-            sortDate: article.publishedAt ?? article.fetchedAt
-        )
     }
 
     private func applyInMemoryFilters(_ articles: [Article], filter: ArticleFilter) -> [Article] {

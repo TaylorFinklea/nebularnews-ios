@@ -38,3 +38,31 @@ public func canonicalFeedURLForStorage(_ rawValue: String) -> String? {
     components.percentEncodedPath = path
     return components.string
 }
+
+public func normalizedFeedKey(from value: String?) -> String? {
+    guard let rawValue = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !rawValue.isEmpty
+    else {
+        return nil
+    }
+
+    if let components = URLComponents(string: rawValue),
+       let host = components.host?.lowercased() {
+        let normalizedHost = host.replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        let normalizedPath = components.path
+            .lowercased()
+            .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+
+        let key = normalizedHost + normalizedPath
+        return key.isEmpty ? nil : key
+    }
+
+    let normalized = rawValue
+        .lowercased()
+        .replacingOccurrences(of: "^https?://", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "^www\\.", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "[?#].*$", with: "", options: .regularExpression)
+        .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+
+    return normalized.isEmpty ? nil : normalized
+}
