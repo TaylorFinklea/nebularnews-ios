@@ -54,16 +54,14 @@ final class AppState {
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
         self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
         self.mobileOAuthCoordinator = MobileOAuthCoordinator(configuration: resolvedConfiguration)
+    }
 
-        // Cache keychain values so computed access never blocks the main thread.
-        let serverUrl: URL? = {
-            guard let raw = keychain.get(forKey: KeychainManager.Key.syncServerUrl) else { return nil }
-            return URL(string: raw)
-        }()
-        self.companionServerURL = serverUrl
-        self.hasCompanionSession = keychain.has(key: KeychainManager.Key.syncAccessToken)
+    func loadKeychainCache() {
+        let raw = keychain.get(forKey: KeychainManager.Key.syncServerUrl)
+        companionServerURL = raw.flatMap { URL(string: $0) }
+        hasCompanionSession = keychain.has(key: KeychainManager.Key.syncAccessToken)
             && keychain.has(key: KeychainManager.Key.syncRefreshToken)
-            && serverUrl != nil
+            && companionServerURL != nil
     }
 
     func completeCompanionOnboarding(serverURL: URL, accessToken: String, refreshToken: String) throws {

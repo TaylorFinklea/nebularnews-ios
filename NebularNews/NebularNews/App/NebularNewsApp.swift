@@ -57,6 +57,7 @@ struct NebularNewsApp: App {
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .task {
+                appState.loadKeychainCache()
                 if appState.hasCompanionSession {
                     if let session = try? await appState.mobileAPI.fetchSession() {
                         appState.features = session.features
