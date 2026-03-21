@@ -278,6 +278,7 @@ struct CompanionArticleDetailView: View {
                 .navigationTitle("Article")
                 .navigationBarTitleDisplayMode(.inline)
                 .refreshable { await loadArticle() }
+                .toolbar(.hidden, for: .tabBar)
                 .toolbar {
                     ToolbarItemGroup(placement: .bottomBar) {
                         bottomActionTray(payload)
