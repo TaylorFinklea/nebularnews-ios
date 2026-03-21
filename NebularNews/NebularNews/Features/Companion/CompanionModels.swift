@@ -97,7 +97,7 @@ struct CompanionArticleListItem: Codable, Identifiable {
 }
 
 struct CompanionArticleDetailPayload: Codable {
-    let article: CompanionArticle
+    var article: CompanionArticle
     let summary: CompanionArticleSummary?
     let keyPoints: CompanionKeyPoints?
     let score: CompanionScore?
@@ -121,7 +121,7 @@ struct CompanionArticle: Codable {
     let contentText: String?
     let excerpt: String?
     let wordCount: Int?
-    let isRead: Int?
+    var isRead: Int?
 }
 
 struct CompanionArticleSummary: Codable {

@@ -80,6 +80,49 @@ struct CompanionArticleDetailView: View {
                         }
                     }
 
+                    // Summary
+                    if let summary = payload.summary?.summaryText, !summary.isEmpty {
+                        Section("Summary") {
+                            Text(summary)
+                                .font(.body)
+                                .lineSpacing(3)
+                        }
+                    }
+
+                    // Key points
+                    if let keyPoints = payload.keyPoints,
+                       let jsonString = keyPoints.keyPointsJson,
+                       !jsonString.isEmpty,
+                       let data = jsonString.data(using: .utf8),
+                       let points = try? JSONDecoder().decode([String].self, from: data),
+                       !points.isEmpty {
+                        Section("Key Points") {
+                            ForEach(points, id: \.self) { point in
+                                Label(point, systemImage: "circle.fill")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.subheadline)
+                                    .imageScale(.small)
+                            }
+                        }
+                    }
+
+                    // Article body
+                    if let contentHtml = payload.article.contentHtml, !contentHtml.isEmpty {
+                        Section {
+                            RichArticleContentView(html: contentHtml)
+                        }
+                    } else if let contentText = payload.article.contentText, !contentText.isEmpty {
+                        Section {
+                            Text(contentText)
+                                .font(.body)
+                                .lineSpacing(4)
+                        }
+                    } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
+                        Section("Excerpt") {
+                            Text(excerpt)
+                        }
+                    }
+
                     // Sources
                     if !payload.sources.isEmpty {
                         Section("Sources") {
@@ -135,49 +178,6 @@ struct CompanionArticleDetailView: View {
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    // Summary
-                    if let summary = payload.summary?.summaryText, !summary.isEmpty {
-                        Section("Summary") {
-                            Text(summary)
-                                .font(.body)
-                                .lineSpacing(3)
-                        }
-                    }
-
-                    // Key points
-                    if let keyPoints = payload.keyPoints,
-                       let jsonString = keyPoints.keyPointsJson,
-                       !jsonString.isEmpty,
-                       let data = jsonString.data(using: .utf8),
-                       let points = try? JSONDecoder().decode([String].self, from: data),
-                       !points.isEmpty {
-                        Section("Key Points") {
-                            ForEach(points, id: \.self) { point in
-                                Label(point, systemImage: "circle.fill")
-                                    .labelStyle(.titleAndIcon)
-                                    .font(.subheadline)
-                                    .imageScale(.small)
-                            }
-                        }
-                    }
-
-                    // Article body
-                    if let contentHtml = payload.article.contentHtml, !contentHtml.isEmpty {
-                        Section {
-                            RichArticleContentView(html: contentHtml)
-                        }
-                    } else if let contentText = payload.article.contentText, !contentText.isEmpty {
-                        Section {
-                            Text(contentText)
-                                .font(.body)
-                                .lineSpacing(4)
-                        }
-                    } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
-                        Section("Excerpt") {
-                            Text(excerpt)
                         }
                     }
 
@@ -359,6 +359,10 @@ struct CompanionArticleDetailView: View {
         do {
             payload = try await appState.mobileAPI.fetchArticle(id: articleId)
             errorMessage = ""
+            if payload?.article.isRead != 1 {
+                try? await appState.mobileAPI.setRead(articleId: articleId, isRead: true)
+                payload?.article.isRead = 1
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
