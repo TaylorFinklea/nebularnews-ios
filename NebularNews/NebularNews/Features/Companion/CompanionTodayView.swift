@@ -25,10 +25,35 @@ struct CompanionTodayView: View {
 
                         // Quick stats
                         HStack(spacing: 12) {
-                            StatPill(label: "Unread", value: "\(payload.stats.unreadTotal)")
-                            StatPill(label: "New today", value: "\(payload.stats.newToday)")
-                            StatPill(label: "High fit", value: "\(payload.stats.highFitUnread)")
+                            NavigationLink(destination: CompanionFilteredArticleListView(
+                                title: "Unread",
+                                read: .unread,
+                                sort: .unreadFirst,
+                                sinceDays: nil,
+                                minScore: nil
+                            )) {
+                                StatPill(label: "Unread", value: "\(payload.stats.unreadTotal)")
+                            }
+                            NavigationLink(destination: CompanionFilteredArticleListView(
+                                title: "New Today",
+                                read: .unread,
+                                sort: .unreadFirst,
+                                sinceDays: 1,
+                                minScore: nil
+                            )) {
+                                StatPill(label: "New today", value: "\(payload.stats.newToday)")
+                            }
+                            NavigationLink(destination: CompanionFilteredArticleListView(
+                                title: "High Fit",
+                                read: .unread,
+                                sort: .unreadFirst,
+                                sinceDays: 7,
+                                minScore: 3
+                            )) {
+                                StatPill(label: "High fit", value: "\(payload.stats.highFitUnread)")
+                            }
                         }
+                        .buttonStyle(.plain)
                         .padding(.horizontal)
 
                         // Hero card
