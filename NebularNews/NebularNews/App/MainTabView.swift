@@ -5,6 +5,7 @@ struct MainTabView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var companionSavedCount = 0
+    @State private var showSettings = false
 
     private var palette: NebularPalette {
         NebularPalette.forColorScheme(colorScheme)
@@ -17,26 +18,64 @@ struct MainTabView: View {
             TabView {
                 Tab("Today", systemImage: "sun.max") {
                     CompanionTodayView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                settingsButton
+                            }
+                        }
                 }
 
-                Tab("Feed", systemImage: "doc.text") {
+                Tab("Articles", systemImage: "doc.text") {
                     CompanionArticlesView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                settingsButton
+                            }
+                        }
                 }
 
-                Tab("Reading List", systemImage: "bookmark") {
+                Tab("Discover", systemImage: "safari") {
+                    CompanionDiscoverView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                settingsButton
+                            }
+                        }
+                }
+
+                Tab("Lists", systemImage: "bookmark") {
                     CompanionReadingListView()
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                settingsButton
+                            }
+                        }
                 }
                 .badge(companionSavedCount)
-
-                Tab("More", systemImage: "ellipsis") {
-                    CompanionMoreView()
-                }
             }
             .task {
                 await loadCompanionSavedCount()
             }
         }
         .tint(palette.primary)
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                CompanionSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
+            }
+        }
+    }
+
+    private var settingsButton: some View {
+        Button {
+            showSettings = true
+        } label: {
+            Image(systemName: "gear")
+        }
     }
 
     private func loadCompanionSavedCount() async {

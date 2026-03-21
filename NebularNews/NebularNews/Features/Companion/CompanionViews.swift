@@ -1261,30 +1261,6 @@ struct CompanionSettingsView: View {
     }
 }
 
-// MARK: - More
-
-struct CompanionMoreView: View {
-    var body: some View {
-        NavigationStack {
-            List {
-                NavigationLink(destination: CompanionDashboardView()) {
-                    Label("Dashboard", systemImage: "house")
-                }
-                NavigationLink(destination: CompanionFeedsView()) {
-                    Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
-                }
-                NavigationLink(destination: CompanionTagListView()) {
-                    Label("Tags", systemImage: "tag")
-                }
-                NavigationLink(destination: CompanionSettingsView()) {
-                    Label("Settings", systemImage: "gear")
-                }
-            }
-            .navigationTitle("More")
-        }
-    }
-}
-
 // MARK: - Shared subviews
 
 private struct MetricRow: View {
