@@ -37,6 +37,11 @@ struct CompanionSettingsView: View {
                             Text(method.capitalized).tag(method)
                         }
                     }
+                    Stepper(
+                        "Up Next articles: \(settings.upNextLimit)",
+                        value: upNextLimitBinding(settings),
+                        in: 1...20
+                    )
                 }
 
                 Section("News Brief") {
@@ -114,6 +119,13 @@ struct CompanionSettingsView: View {
         Binding(
             get: { current.newsBriefConfig.enabled },
             set: { val in save { $0.newsBriefConfig.enabled = val } }
+        )
+    }
+
+    private func upNextLimitBinding(_ current: CompanionSettingsPayload) -> Binding<Int> {
+        Binding(
+            get: { current.upNextLimit },
+            set: { val in save { $0.upNextLimit = val } }
         )
     }
 }

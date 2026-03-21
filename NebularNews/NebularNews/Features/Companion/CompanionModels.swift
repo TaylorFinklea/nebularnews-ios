@@ -325,6 +325,7 @@ struct CompanionSettingsPayload: Codable {
     var summaryStyle: String
     var scoringMethod: String
     var newsBriefConfig: CompanionNewsBriefConfig
+    var upNextLimit: Int
 }
 
 struct CompanionNewsBriefConfig: Codable {
