@@ -44,6 +44,22 @@ struct CompanionSettingsView: View {
                     )
                 }
 
+                Section("Retention") {
+                    Stepper(
+                        "Archive after: \(settings.retentionArchiveDays ?? 30) days",
+                        value: retentionArchiveDaysBinding(settings),
+                        in: 0...3650
+                    )
+                    Stepper(
+                        "Delete after: \(settings.retentionDeleteDays ?? 90) days",
+                        value: retentionDeleteDaysBinding(settings),
+                        in: 0...3650
+                    )
+                    Text("Saved articles are never archived or deleted. 0 disables.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("News Brief") {
                     Toggle("Enabled", isOn: newsBriefEnabledBinding(settings))
                 }
@@ -126,6 +142,20 @@ struct CompanionSettingsView: View {
         Binding(
             get: { current.upNextLimit },
             set: { val in save { $0.upNextLimit = val } }
+        )
+    }
+
+    private func retentionArchiveDaysBinding(_ current: CompanionSettingsPayload) -> Binding<Int> {
+        Binding(
+            get: { current.retentionArchiveDays ?? 30 },
+            set: { val in save { $0.retentionArchiveDays = val } }
+        )
+    }
+
+    private func retentionDeleteDaysBinding(_ current: CompanionSettingsPayload) -> Binding<Int> {
+        Binding(
+            get: { current.retentionDeleteDays ?? 90 },
+            set: { val in save { $0.retentionDeleteDays = val } }
         )
     }
 }
