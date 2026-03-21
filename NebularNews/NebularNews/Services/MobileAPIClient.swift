@@ -207,6 +207,11 @@ final class MobileAPIClient {
         return try await post("/api/mobile/articles/\(id)/save", body: Body(saved: saved))
     }
 
+    func rerunSummarize(articleId: String) async throws {
+        struct Body: Encodable {}
+        let _: EmptyPayload = try await post("/api/mobile/articles/\(articleId)/rerun", body: Body())
+    }
+
     func dismissArticle(id: String) async throws -> CompanionDismissResponse {
         struct Body: Encodable { let dismissed = true }
         return try await post("/api/mobile/articles/\(id)/dismiss", body: Body())

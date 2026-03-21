@@ -42,6 +42,7 @@ struct CompanionArticleDetailView: View {
     @State private var acceptingSuggestion: String?
     @State private var isSaved = false
     @State private var savingBookmark = false
+    @State private var isSummarizing = false
 
     var body: some View {
         Group {
@@ -322,6 +323,21 @@ struct CompanionArticleDetailView: View {
 
         Spacer()
 
+        if payload.summary?.summaryText?.isEmpty != false {
+            Button {
+                Task { await summarize() }
+            } label: {
+                if isSummarizing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Label("Summarize", systemImage: "sparkles")
+                }
+            }
+            .disabled(isSummarizing)
+
+            Spacer()
+        }
+
         Button {
             Task { await toggleSaved() }
         } label: {
@@ -428,6 +444,17 @@ struct CompanionArticleDetailView: View {
             let reaction = try await appState.mobileAPI.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
             payload?.reaction = reaction
             reactionDraft = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func summarize() async {
+        isSummarizing = true
+        defer { isSummarizing = false }
+        do {
+            try await appState.mobileAPI.rerunSummarize(articleId: articleId)
+            await loadArticle()
         } catch {
             errorMessage = error.localizedDescription
         }
