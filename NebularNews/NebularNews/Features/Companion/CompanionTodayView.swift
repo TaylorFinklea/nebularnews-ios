@@ -40,22 +40,6 @@ struct CompanionTodayView: View {
                             .padding(.horizontal)
                         }
 
-                        // Up next
-                        if !payload.upNext.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Up next")
-                                    .font(.headline)
-                                    .padding(.horizontal)
-
-                                ForEach(payload.upNext) { article in
-                                    NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
-                                        CompactUpNextRow(article: article)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-
                         // News brief
                         if let newsBrief = payload.newsBrief, appState.features?.newsBrief == true {
                             GlassCard(style: .standard) {
@@ -82,6 +66,22 @@ struct CompanionTodayView: View {
                                 }
                             }
                             .padding(.horizontal)
+                        }
+
+                        // Up next
+                        if !payload.upNext.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Up next")
+                                    .font(.headline)
+                                    .padding(.horizontal)
+
+                                ForEach(payload.upNext) { article in
+                                    NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
+                                        CompactUpNextRow(article: article)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
                     }
                 }
