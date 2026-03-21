@@ -233,13 +233,15 @@ enum CompanionReadFilter: String, CaseIterable {
 enum CompanionSortOrder: String, CaseIterable {
     case newest = "newest"
     case oldest = "oldest"
-    case score = "score"
+    case score = "score_desc"
+    case unreadFirst = "unread_first"
 
     var label: String {
         switch self {
         case .newest: "Newest"
         case .oldest: "Oldest"
         case .score: "Best fit"
+        case .unreadFirst: "Unread first"
         }
     }
 }

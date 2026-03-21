@@ -77,7 +77,7 @@ final class MobileAPIClient {
             components.queryItems?.append(URLQueryItem(name: "read", value: read.rawValue))
         }
         if let minScore {
-            components.queryItems?.append(URLQueryItem(name: "score", value: String(minScore)))
+            components.queryItems?.append(URLQueryItem(name: "score", value: "\(minScore)plus"))
         }
         if sort != .newest {
             components.queryItems?.append(URLQueryItem(name: "sort", value: sort.rawValue))
@@ -86,7 +86,7 @@ final class MobileAPIClient {
             components.queryItems?.append(URLQueryItem(name: "sinceDays", value: String(sinceDays)))
         }
         if let tag {
-            components.queryItems?.append(URLQueryItem(name: "tag", value: tag))
+            components.queryItems?.append(URLQueryItem(name: "tags", value: tag))
         }
         let queryString = components.percentEncodedQuery.map { "?\($0)" } ?? ""
         return try await get("/api/mobile/articles\(queryString)")
@@ -174,14 +174,15 @@ final class MobileAPIClient {
     // MARK: - Tags (global)
 
     func fetchTags(query: String? = nil, limit: Int? = nil) async throws -> CompanionTagListPayload {
-        var components = URLComponents()
-        components.queryItems = []
+        var items: [URLQueryItem] = []
         if let query, !query.isEmpty {
-            components.queryItems?.append(URLQueryItem(name: "q", value: query))
+            items.append(URLQueryItem(name: "q", value: query))
         }
         if let limit {
-            components.queryItems?.append(URLQueryItem(name: "limit", value: String(limit)))
+            items.append(URLQueryItem(name: "limit", value: String(limit)))
         }
+        var components = URLComponents()
+        if !items.isEmpty { components.queryItems = items }
         let queryString = components.percentEncodedQuery.map { "?\($0)" } ?? ""
         return try await get("/api/mobile/tags\(queryString)")
     }
@@ -237,10 +238,23 @@ final class MobileAPIClient {
         try await authorizedRequest(path: path, method: "DELETE", bodyData: nil, decode: T.self)
     }
 
+    private func buildURL(serverURL: URL, path: String) -> URL {
+        let questionMark = path.firstIndex(of: "?")
+        let pathPart = questionMark.map { String(path[path.startIndex..<$0]) } ?? path
+        let queryPart = questionMark.map { String(path[path.index(after: $0)...]) }
+        var base = serverURL.appending(path: pathPart)
+        if let queryPart, !queryPart.isEmpty {
+            var comps = URLComponents(url: base, resolvingAgainstBaseURL: false) ?? URLComponents()
+            comps.percentEncodedQuery = queryPart
+            base = comps.url ?? base
+        }
+        return base
+    }
+
     private func getRawString(_ path: String) async throws -> String {
         let serverURL = try serverURL()
         let accessToken = try await accessToken()
-        var request = URLRequest(url: serverURL.appending(path: path))
+        var request = URLRequest(url: buildURL(serverURL: serverURL, path: path))
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -265,7 +279,7 @@ final class MobileAPIClient {
     ) async throws -> T {
         let serverURL = try serverURL()
         let accessToken = try await accessToken()
-        var request = URLRequest(url: serverURL.appending(path: path))
+        var request = URLRequest(url: buildURL(serverURL: serverURL, path: path))
         request.httpMethod = method
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         if bodyData != nil {
