@@ -12,7 +12,7 @@ struct MainTabView: View {
                 CompanionTodayView(showSettings: $showSettings)
             }
 
-            Tab("Articles", systemImage: "doc.text") {
+            Tab("Feeds", systemImage: "doc.text") {
                 CompanionArticlesView(showSettings: $showSettings)
             }
 
