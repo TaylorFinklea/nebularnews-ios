@@ -23,15 +23,12 @@ struct OnboardingView: View {
                             .font(.system(size: 60, weight: .semibold))
                             .foregroundStyle(palette.primary)
                             .frame(width: 96, height: 96)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                            .background(palette.surfaceStrong, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                             .background(palette.primarySoft, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 30, style: .continuous)
                                     .strokeBorder(palette.primary.opacity(0.18))
                             )
-                            .background {
-                                NebularHeaderHalo(color: palette.primary)
-                            }
 
                         Text("Nebular News")
                             .font(.largeTitle.bold())
