@@ -180,16 +180,19 @@ private struct TodayHeroCardView: View {
         GlassImageCard(style: .hero) {
             ZStack(alignment: .bottomLeading) {
                 if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().aspectRatio(contentMode: .fill)
-                        default:
-                            Rectangle().fill(Color(.tertiarySystemFill))
+                    Color.clear
+                        .frame(height: 220)
+                        .overlay {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image.resizable().aspectRatio(contentMode: .fill)
+                                default:
+                                    Rectangle().fill(Color(.tertiarySystemFill))
+                                }
+                            }
                         }
-                    }
-                    .frame(height: 220)
-                    .clipped()
+                        .clipped()
                 } else {
                     Rectangle()
                         .fill(Color(.tertiarySystemFill))
