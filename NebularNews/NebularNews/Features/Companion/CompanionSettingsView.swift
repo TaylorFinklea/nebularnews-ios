@@ -39,24 +39,37 @@ struct CompanionSettingsView: View {
                             Text(method.capitalized).tag(method)
                         }
                     }
-                    Stepper(
-                        "Up Next articles: \(settings.upNextLimit)",
-                        value: upNextLimitBinding(settings),
-                        in: 1...20
-                    )
+                    HStack {
+                        Text("Up Next articles")
+                        Spacer()
+                        TextField("6", value: upNextLimitBinding(settings), format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                    }
                 }
 
                 Section("Retention") {
-                    Stepper(
-                        "Archive after: \(settings.retentionArchiveDays ?? 30) days",
-                        value: retentionArchiveDaysBinding(settings),
-                        in: 0...3650
-                    )
-                    Stepper(
-                        "Delete after: \(settings.retentionDeleteDays ?? 90) days",
-                        value: retentionDeleteDaysBinding(settings),
-                        in: 0...3650
-                    )
+                    HStack {
+                        Text("Archive after")
+                        Spacer()
+                        TextField("30", value: retentionArchiveDaysBinding(settings), format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Text("days")
+                            .foregroundStyle(.secondary)
+                    }
+                    HStack {
+                        Text("Delete after")
+                        Spacer()
+                        TextField("90", value: retentionDeleteDaysBinding(settings), format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 60)
+                        Text("days")
+                            .foregroundStyle(.secondary)
+                    }
                     Text("Saved articles are never archived or deleted. 0 disables.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
