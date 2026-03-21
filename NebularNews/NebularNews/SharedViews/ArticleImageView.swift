@@ -10,7 +10,6 @@ struct ArticleImageView: View {
     var showGradientOverlay: Bool = false
     var dimmingOpacity: Double = 0
 
-    @Environment(\.colorScheme) private var colorScheme
     @State private var remoteImage: UIImage?
     @State private var loadedURLString: String?
     @State private var isLoadingRemoteImage = false
@@ -23,8 +22,6 @@ struct ArticleImageView: View {
     }
 
     var body: some View {
-        let palette = NebularPalette.forColorScheme(colorScheme)
-
         GeometryReader { proxy in
             Group {
                 if let remoteImage {
@@ -33,11 +30,10 @@ struct ArticleImageView: View {
                         .aspectRatio(contentMode: .fill)
                 } else if article.resolvedImageUrl != nil {
                     Rectangle()
-                        .fill(palette.surfaceSoft)
+                        .fill(Color(.tertiarySystemFill))
                         .overlay {
                             if isLoadingRemoteImage {
                                 ProgressView()
-                                    .tint(palette.primary)
                             } else {
                                 Image(systemName: "photo")
                                     .font(.title3)
@@ -62,7 +58,7 @@ struct ArticleImageView: View {
         .overlay {
             if showGradientOverlay {
                 LinearGradient(
-                    colors: [.clear, palette.cardImageOverlay],
+                    colors: [.clear, Color(.systemBackground).opacity(0.6)],
                     startPoint: .center,
                     endPoint: .bottom
                 )

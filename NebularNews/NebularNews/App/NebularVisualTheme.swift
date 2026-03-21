@@ -91,18 +91,6 @@ struct NebularPalette {
     }
 }
 
-// MARK: - Typography
-
-struct NebularTypography {
-    static let heroTitle: Font = .system(size: 28, weight: .bold)
-    static let mediumCardTitle: Font = .system(size: 17, weight: .semibold)
-    static let compactTitle: Font = .system(size: 15, weight: .medium)
-    static let feedSource: Font = .caption.weight(.semibold)
-    static let briefingHeadline: Font = .title2.bold()
-    static let sectionHeader: Font = .title3.bold()
-    static let statValue: Font = .system(size: 34, weight: .bold, design: .rounded)
-}
-
 // MARK: - Backdrop
 
 enum NebularBackdropEmphasis {

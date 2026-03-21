@@ -3,7 +3,6 @@ import NebularNewsKit
 
 struct CompanionReadingListView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.colorScheme) private var colorScheme
 
     @Binding var showSettings: Bool
 
@@ -15,18 +14,9 @@ struct CompanionReadingListView: View {
         NavigationStack {
             List {
                 if !errorMessage.isEmpty {
-                    HStack(spacing: 12) {
-                        Image(systemName: "wifi.exclamationmark")
-                            .foregroundStyle(.red)
-                        Text(errorMessage)
-                            .font(.subheadline)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Button("Retry") { Task { await loadSaved() } }
-                            .font(.subheadline.weight(.semibold))
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                    }
-                    .listRowBackground(Color.clear)
+                    ErrorBanner(message: errorMessage) { Task { await loadSaved() } }
+                        .listRowInsets(.init())
+                        .listRowBackground(Color.clear)
                 }
 
                 if articles.isEmpty && !isLoading {
@@ -102,7 +92,6 @@ struct CompanionReadingListView: View {
 
 private struct ReadingListRow: View {
     let article: CompanionArticleListItem
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

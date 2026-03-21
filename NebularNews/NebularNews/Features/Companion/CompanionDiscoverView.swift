@@ -58,8 +58,15 @@ struct CompanionDiscoverView: View {
                                         .font(.headline)
                                         .padding(.horizontal)
 
-                                    TagChipGrid(tags: tags)
-                                        .padding(.horizontal)
+                                    FlowLayout(spacing: 8) {
+                                        ForEach(tags) { tag in
+                                            NavigationLink(destination: TagArticlesView(tag: tag)) {
+                                                TagChip(tag: tag)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.horizontal)
                                 }
                             }
                         }
@@ -91,51 +98,8 @@ struct CompanionDiscoverView: View {
     }
 }
 
-// MARK: - Tag chip grid
-
-private struct TagChipGrid: View {
-    let tags: [CompanionTagWithCount]
-
-    var body: some View {
-        // Manual flow layout using wrapped HStacks
-        let rows = chunkIntoRows(tags: tags)
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(rows.indices, id: \.self) { rowIndex in
-                HStack(spacing: 8) {
-                    ForEach(rows[rowIndex]) { tag in
-                        NavigationLink(destination: TagArticlesView(tag: tag)) {
-                            TagChip(tag: tag)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private func chunkIntoRows(tags: [CompanionTagWithCount]) -> [[CompanionTagWithCount]] {
-        var rows: [[CompanionTagWithCount]] = []
-        var currentRow: [CompanionTagWithCount] = []
-        var currentWidth = 0
-        let maxWidth = 3 // approximate chips per row
-
-        for tag in tags {
-            currentRow.append(tag)
-            currentWidth += 1
-            if currentWidth >= maxWidth {
-                rows.append(currentRow)
-                currentRow = []
-                currentWidth = 0
-            }
-        }
-        if !currentRow.isEmpty { rows.append(currentRow) }
-        return rows
-    }
-}
-
 private struct TagChip: View {
     let tag: CompanionTagWithCount
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         HStack(spacing: 6) {

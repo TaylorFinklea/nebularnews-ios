@@ -3,7 +3,6 @@ import NebularNewsKit
 
 struct CompanionTodayView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.colorScheme) private var colorScheme
 
     @Binding var showSettings: Bool
 
@@ -11,19 +10,17 @@ struct CompanionTodayView: View {
     @State private var errorMessage = ""
     @State private var isLoading = false
 
-    private var palette: NebularPalette { NebularPalette.forColorScheme(colorScheme) }
-
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if !errorMessage.isEmpty && payload == nil {
-                        errorBanner
+                        ErrorBanner(message: errorMessage) { Task { await loadToday() } }
                     }
 
                     if let payload {
                         if !errorMessage.isEmpty {
-                            errorBanner
+                            ErrorBanner(message: errorMessage) { Task { await loadToday() } }
                         }
 
                         // Quick stats
@@ -77,7 +74,7 @@ struct CompanionTodayView: View {
                                                 NavigationLink(destination: CompanionArticleDetailView(articleId: source.articleId)) {
                                                     Text(source.title)
                                                         .font(.caption)
-                                                        .foregroundStyle(palette.primary)
+                                                        .foregroundStyle(.accent)
                                                 }
                                             }
                                         }
@@ -90,7 +87,6 @@ struct CompanionTodayView: View {
                 }
                 .padding(.vertical)
             }
-            .background(NebularBackdrop())
             .overlay {
                 if isLoading && payload == nil {
                     ProgressView("Loading today…")
@@ -115,23 +111,6 @@ struct CompanionTodayView: View {
                 await loadToday()
             }
         }
-    }
-
-    private var errorBanner: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "wifi.exclamationmark")
-                .foregroundStyle(.red)
-            Text(errorMessage)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button("Retry") { Task { await loadToday() } }
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-        }
-        .padding()
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .padding(.horizontal)
     }
 
     private func loadToday() async {
@@ -171,11 +150,8 @@ private struct StatPill: View {
 
 private struct TodayHeroCardView: View {
     let article: CompanionArticleListItem
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        let palette = NebularPalette.forColorScheme(colorScheme)
-
         GlassImageCard(style: .hero) {
             ZStack(alignment: .bottomLeading) {
                 if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
@@ -184,14 +160,14 @@ private struct TodayHeroCardView: View {
                         case .success(let image):
                             image.resizable().aspectRatio(contentMode: .fill)
                         default:
-                            Rectangle().fill(palette.surfaceSoft)
+                            Rectangle().fill(Color(.tertiarySystemFill))
                         }
                     }
                     .frame(height: 220)
                     .clipped()
                 } else {
                     Rectangle()
-                        .fill(palette.surfaceSoft)
+                        .fill(Color(.tertiarySystemFill))
                         .frame(height: 220)
                 }
 

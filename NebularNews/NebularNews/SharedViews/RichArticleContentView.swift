@@ -286,7 +286,6 @@ struct RichArticleContentView: View {
     let html: String
 
     @State private var blocks: [ContentBlock]? = nil
-    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
@@ -310,28 +309,27 @@ struct RichArticleContentView: View {
 
     @ViewBuilder
     private func renderedBlocks(_ blocks: [ContentBlock]) -> some View {
-        let palette = NebularPalette.forColorScheme(colorScheme)
         VStack(alignment: .leading, spacing: 14) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                blockView(block, palette: palette)
+                blockView(block)
             }
         }
     }
 
     @ViewBuilder
-    private func blockView(_ block: ContentBlock, palette: NebularPalette) -> some View {
+    private func blockView(_ block: ContentBlock) -> some View {
         switch block {
         case .paragraph(let text):
             Text(text)
                 .font(.body)
-                .foregroundStyle(palette.textPrimary)
+                .foregroundStyle(.primary)
                 .lineSpacing(4)
                 .textSelection(.enabled)
 
         case .heading(let level, let text):
             Text(text)
                 .font(headingFont(for: level))
-                .foregroundStyle(palette.textPrimary)
+                .foregroundStyle(.primary)
                 .fontWeight(.semibold)
                 .padding(.top, level <= 2 ? 8 : 4)
                 .textSelection(.enabled)
@@ -339,11 +337,11 @@ struct RichArticleContentView: View {
         case .blockquote(let text):
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(palette.primary)
+                    .fill(Color.accentColor)
                     .frame(width: 3)
                 Text(text)
                     .font(.body.italic())
-                    .foregroundStyle(palette.textSecondary)
+                    .foregroundStyle(.secondary)
                     .lineSpacing(3)
                     .textSelection(.enabled)
             }
@@ -353,10 +351,10 @@ struct RichArticleContentView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 Text(code)
                     .font(.caption.monospaced())
-                    .foregroundStyle(palette.textPrimary)
+                    .foregroundStyle(.primary)
                     .padding(12)
             }
-            .background(palette.surfaceStrong, in: RoundedRectangle(cornerRadius: 8))
+            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 8))
 
         case .image(let url, let alt):
             AsyncImage(url: url) { phase in
@@ -370,7 +368,7 @@ struct RichArticleContentView: View {
                     EmptyView()
                 case .empty:
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(palette.surfaceSoft)
+                        .fill(Color(.tertiarySystemFill))
                         .frame(height: 160)
                 @unknown default:
                     EmptyView()
@@ -379,10 +377,10 @@ struct RichArticleContentView: View {
             .accessibilityLabel(alt ?? "Image")
 
         case .unorderedList(let items):
-            listView(items: items, ordered: false, palette: palette)
+            listView(items: items, ordered: false)
 
         case .orderedList(let items):
-            listView(items: items, ordered: true, palette: palette)
+            listView(items: items, ordered: true)
 
         case .divider:
             Divider()
@@ -391,17 +389,17 @@ struct RichArticleContentView: View {
     }
 
     @ViewBuilder
-    private func listView(items: [AttributedString], ordered: Bool, palette: NebularPalette) -> some View {
+    private func listView(items: [AttributedString], ordered: Bool) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(ordered ? "\(index + 1)." : "•")
                         .font(.body)
-                        .foregroundStyle(palette.textSecondary)
+                        .foregroundStyle(.secondary)
                         .frame(minWidth: 20, alignment: .trailing)
                     Text(item)
                         .font(.body)
-                        .foregroundStyle(palette.textPrimary)
+                        .foregroundStyle(.primary)
                         .lineSpacing(3)
                         .textSelection(.enabled)
                 }

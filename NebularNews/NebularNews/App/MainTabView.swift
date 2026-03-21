@@ -2,42 +2,33 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.colorScheme) private var colorScheme
 
     @State private var companionSavedCount = 0
     @State private var showSettings = false
 
-    private var palette: NebularPalette {
-        NebularPalette.forColorScheme(colorScheme)
-    }
-
     var body: some View {
-        ZStack {
-            NebularBackdrop()
-
-            TabView {
-                Tab("Today", systemImage: "sun.max") {
-                    CompanionTodayView(showSettings: $showSettings)
-                }
-
-                Tab("Articles", systemImage: "doc.text") {
-                    CompanionArticlesView(showSettings: $showSettings)
-                }
-
-                Tab("Discover", systemImage: "safari") {
-                    CompanionDiscoverView(showSettings: $showSettings)
-                }
-
-                Tab("Lists", systemImage: "bookmark") {
-                    CompanionReadingListView(showSettings: $showSettings)
-                }
-                .badge(companionSavedCount)
+        TabView {
+            Tab("Today", systemImage: "sun.max") {
+                CompanionTodayView(showSettings: $showSettings)
             }
-            .task {
-                await loadCompanionSavedCount()
+
+            Tab("Articles", systemImage: "doc.text") {
+                CompanionArticlesView(showSettings: $showSettings)
             }
+
+            Tab("Discover", systemImage: "safari") {
+                CompanionDiscoverView(showSettings: $showSettings)
+            }
+
+            Tab("Lists", systemImage: "bookmark") {
+                CompanionReadingListView(showSettings: $showSettings)
+            }
+            .badge(companionSavedCount)
         }
-        .tint(palette.primary)
+        .task {
+            await loadCompanionSavedCount()
+        }
+        .tint(.accent)
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 CompanionSettingsView()
