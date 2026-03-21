@@ -178,7 +178,6 @@ struct NebularBackdrop: View {
                     endPoint: .center
                 )
             }
-            .drawingGroup()
             .ignoresSafeArea()
     }
 
