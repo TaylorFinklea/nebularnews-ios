@@ -4,7 +4,6 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var companionServerURL = AppConfiguration.shared.mobileDefaultServerURL?.absoluteString ?? "https://api.example.com"
     @State private var companionError = ""
     @State private var companionLoading = false
 
@@ -51,15 +50,12 @@ struct OnboardingView: View {
     private var companionCard: some View {
         GlassCard(cornerRadius: 30, style: .raised, tintColor: palette.primary) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Connect to a Nebular News server", systemImage: "iphone.and.arrow.forward")
+                Label("Connect to your server", systemImage: "iphone.and.arrow.forward")
                     .font(.headline)
 
-                TextField("https://api.example.com", text: $companionServerURL)
-                    .textFieldStyle(.roundedBorder)
-                    .textContentType(.URL)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                Text(appState.configuration.mobileDefaultServerURL.host() ?? appState.configuration.mobileDefaultServerURL.absoluteString)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
 
                 if !companionError.isEmpty {
                     Text(companionError)
@@ -74,7 +70,7 @@ struct OnboardingView: View {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                     } else {
-                        Text("Sign in to server")
+                        Text("Sign in")
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -89,11 +85,7 @@ struct OnboardingView: View {
         companionError = ""
         defer { companionLoading = false }
 
-        let trimmed = companionServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else {
-            companionError = "Enter a valid server URL."
-            return
-        }
+        let url = appState.configuration.mobileDefaultServerURL
 
         do {
             let session = try await appState.mobileOAuthCoordinator.signIn(serverURL: url)

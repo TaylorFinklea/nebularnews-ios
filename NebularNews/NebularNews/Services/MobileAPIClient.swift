@@ -257,7 +257,7 @@ final class MobileAPIClient {
     }
 
     private func getRawString(_ path: String) async throws -> String {
-        let serverURL = try serverURL()
+        let serverURL = serverURL()
         let accessToken = try await accessToken()
         var request = URLRequest(url: buildURL(serverURL: serverURL, path: path))
         request.httpMethod = "GET"
@@ -282,7 +282,7 @@ final class MobileAPIClient {
         decode: T.Type,
         retryingAfterRefresh: Bool = false
     ) async throws -> T {
-        let serverURL = try serverURL()
+        let serverURL = serverURL()
         let accessToken = try await accessToken()
         var request = URLRequest(url: buildURL(serverURL: serverURL, path: path))
         request.httpMethod = method
@@ -329,7 +329,7 @@ final class MobileAPIClient {
     }
 
     private func refreshAccessToken() async throws -> String {
-        let serverURL = try serverURL()
+        let serverURL = serverURL()
         guard let refreshToken = keychain.get(forKey: KeychainManager.Key.syncRefreshToken), !refreshToken.isEmpty else {
             throw MobileAPIError.missingRefreshToken
         }
@@ -359,15 +359,12 @@ final class MobileAPIClient {
         return tokenResponse.accessToken
     }
 
-    private func serverURL() throws -> URL {
+    private func serverURL() -> URL {
         if let rawValue = keychain.get(forKey: KeychainManager.Key.syncServerUrl),
            let url = URL(string: rawValue) {
             return url
         }
-        if let defaultServerURL = configuration.mobileDefaultServerURL {
-            return defaultServerURL
-        }
-        throw MobileAPIError.missingServerURL
+        return configuration.mobileDefaultServerURL
     }
 
     private func decodeServerError(from data: Data, statusCode: Int) throws -> MobileAPIError {

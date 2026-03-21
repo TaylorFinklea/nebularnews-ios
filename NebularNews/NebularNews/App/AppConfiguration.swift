@@ -9,7 +9,7 @@ struct AppConfiguration {
     let mobileOAuthClientId: String
     let mobileOAuthClientName: String
     let mobileOAuthRedirectURI: URL
-    let mobileDefaultServerURL: URL?
+    let mobileDefaultServerURL: URL
 
     init(bundle: Bundle) {
         let bundleIdentifier = bundle.bundleIdentifier ?? "com.example.nebularnews.ios"
@@ -23,10 +23,12 @@ struct AppConfiguration {
         self.mobileOAuthRedirectURI =
             URL(string: bundle.stringValue(forInfoDictionaryKey: "MobileOAuthRedirectURI") ?? "nebularnews://oauth/callback")
             ?? URL(string: "nebularnews://oauth/callback")!
-        if let serverURL = bundle.stringValue(forInfoDictionaryKey: "MobileDefaultServerURL"), !serverURL.isEmpty {
-            self.mobileDefaultServerURL = URL(string: serverURL)
+        if let serverURL = bundle.stringValue(forInfoDictionaryKey: "MobileDefaultServerURL"),
+           !serverURL.isEmpty,
+           let url = URL(string: serverURL) {
+            self.mobileDefaultServerURL = url
         } else {
-            self.mobileDefaultServerURL = nil
+            self.mobileDefaultServerURL = URL(string: "https://api.news.finklea.dev")!
         }
     }
 }
