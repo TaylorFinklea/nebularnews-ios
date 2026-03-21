@@ -3,6 +3,8 @@ import SwiftUI
 struct CompanionDiscoverView: View {
     @Environment(AppState.self) private var appState
 
+    @Binding var showSettings: Bool
+
     @State private var tags: [CompanionTagWithCount] = []
     @State private var isLoading = true
     @State private var error: String?
@@ -66,6 +68,11 @@ struct CompanionDiscoverView: View {
                 }
             }
             .navigationTitle("Discover")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+            }
             .refreshable { await loadTags() }
             .task { await loadTags() }
         }

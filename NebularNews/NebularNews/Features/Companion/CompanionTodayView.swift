@@ -5,6 +5,8 @@ struct CompanionTodayView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
+    @Binding var showSettings: Bool
+
     @State private var payload: CompanionTodayPayload?
     @State private var errorMessage = ""
     @State private var isLoading = false
@@ -95,6 +97,11 @@ struct CompanionTodayView: View {
                 }
             }
             .navigationTitle("Today")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+            }
             .refreshable {
                 _ = try? await appState.mobileAPI.triggerPull()
                 try? await Task.sleep(for: .seconds(2))

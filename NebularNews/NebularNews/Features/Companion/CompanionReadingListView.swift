@@ -5,6 +5,8 @@ struct CompanionReadingListView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
+    @Binding var showSettings: Bool
+
     @State private var articles: [CompanionArticleListItem] = []
     @State private var errorMessage = ""
     @State private var isLoading = false
@@ -56,6 +58,11 @@ struct CompanionReadingListView: View {
                 }
             }
             .navigationTitle("Reading List")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+            }
             .refreshable { await loadSaved() }
             .task {
                 if articles.isEmpty {

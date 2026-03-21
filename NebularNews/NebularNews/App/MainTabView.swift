@@ -17,39 +17,19 @@ struct MainTabView: View {
 
             TabView {
                 Tab("Today", systemImage: "sun.max") {
-                    CompanionTodayView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                settingsButton
-                            }
-                        }
+                    CompanionTodayView(showSettings: $showSettings)
                 }
 
                 Tab("Articles", systemImage: "doc.text") {
-                    CompanionArticlesView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                settingsButton
-                            }
-                        }
+                    CompanionArticlesView(showSettings: $showSettings)
                 }
 
                 Tab("Discover", systemImage: "safari") {
-                    CompanionDiscoverView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                settingsButton
-                            }
-                        }
+                    CompanionDiscoverView(showSettings: $showSettings)
                 }
 
                 Tab("Lists", systemImage: "bookmark") {
-                    CompanionReadingListView()
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                settingsButton
-                            }
-                        }
+                    CompanionReadingListView(showSettings: $showSettings)
                 }
                 .badge(companionSavedCount)
             }
@@ -67,14 +47,6 @@ struct MainTabView: View {
                         }
                     }
             }
-        }
-    }
-
-    private var settingsButton: some View {
-        Button {
-            showSettings = true
-        } label: {
-            Image(systemName: "gear")
         }
     }
 

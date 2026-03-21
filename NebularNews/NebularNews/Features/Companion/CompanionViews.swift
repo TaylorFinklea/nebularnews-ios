@@ -248,6 +248,8 @@ private struct CompanionFilterBar: View {
 struct CompanionArticlesView: View {
     @Environment(AppState.self) private var appState
 
+    @Binding var showSettings: Bool
+
     @State private var query = ""
     @State private var articles: [CompanionArticleListItem] = []
     @State private var total = 0
@@ -320,6 +322,11 @@ struct CompanionArticlesView: View {
                 }
             }
             .navigationTitle("Articles")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+            }
             .searchable(text: $query, prompt: "Search articles")
             .searchSuggestions {
                 if query.isEmpty && !recentSearches.isEmpty {
