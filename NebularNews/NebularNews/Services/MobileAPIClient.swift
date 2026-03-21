@@ -168,7 +168,15 @@ final class MobileAPIClient {
     }
 
     func updateSettings<Body: Encodable>(body: Body) async throws -> CompanionSettingsPayload {
-        try await patch("/api/mobile/settings", body: body)
+        // Server expects camelCase keys; the shared encoder uses convertToSnakeCase.
+        // Use a plain encoder here so property names match the server's expectations.
+        let camelCaseEncoder = JSONEncoder()
+        return try await authorizedRequest(
+            path: "/api/mobile/settings",
+            method: "PATCH",
+            bodyData: try camelCaseEncoder.encode(body),
+            decode: CompanionSettingsPayload.self
+        )
     }
 
     // MARK: - Tags (global)
