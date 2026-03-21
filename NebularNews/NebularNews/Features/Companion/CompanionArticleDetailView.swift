@@ -323,20 +323,19 @@ struct CompanionArticleDetailView: View {
 
         Spacer()
 
-        if payload.summary?.summaryText?.isEmpty != false {
-            Button {
-                Task { await summarize() }
-            } label: {
-                if isSummarizing {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label("Summarize", systemImage: "sparkles")
-                }
+        Button {
+            Task { await summarize() }
+        } label: {
+            if isSummarizing {
+                ProgressView().controlSize(.small)
+            } else {
+                let hasSummary = payload.summary?.summaryText?.isEmpty == false
+                Label(hasSummary ? "Re-summarize" : "Summarize", systemImage: "sparkles")
             }
-            .disabled(isSummarizing)
-
-            Spacer()
         }
+        .disabled(isSummarizing)
+
+        Spacer()
 
         Button {
             Task { await toggleSaved() }
