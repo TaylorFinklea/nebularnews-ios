@@ -247,16 +247,16 @@ enum CompanionSortOrder: String, CaseIterable {
 }
 
 struct CompanionArticleFilter: Equatable {
-    var readFilter: CompanionReadFilter = .all
+    var readFilter: CompanionReadFilter = .unread
     var minScore: Int? = nil
     var sortOrder: CompanionSortOrder = .newest
 
     var isActive: Bool {
-        readFilter != .all || minScore != nil || sortOrder != .newest
+        readFilter != .unread || minScore != nil || sortOrder != .newest
     }
 
     mutating func reset() {
-        readFilter = .all
+        readFilter = .unread
         minScore = nil
         sortOrder = .newest
     }
