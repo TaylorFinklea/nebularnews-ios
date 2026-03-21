@@ -15,6 +15,10 @@
 - Do not push unless the user explicitly asks.
 - Use repository-native edit workflows and avoid broad rewrites unless required.
 
+## Shell Commands
+- Run one command at a time unless the output of one must pipe into the next.
+- Never chain independent commands with `&&`. Use `git -C <path>` instead of `cd <path> && git`.
+
 ## Verification
 - Build or test the smallest relevant target after changes.
 - Mention clearly if something could not be verified.

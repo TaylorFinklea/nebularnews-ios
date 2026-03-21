@@ -16,6 +16,10 @@
 - Use `apply_patch` for manual file edits.
 - Prefer ASCII unless a file already requires other characters.
 
+## Shell Commands
+- Run one command at a time unless the output of one must pipe into the next.
+- Never chain independent commands with `&&`. Use `git -C <path>` instead of `cd <path> && git`.
+
 ## Verification
 - Build or test the smallest relevant target after changes.
 - Mention clearly if something could not be verified.
