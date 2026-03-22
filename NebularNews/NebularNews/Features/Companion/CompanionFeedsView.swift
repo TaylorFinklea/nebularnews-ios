@@ -144,8 +144,8 @@ struct CompanionFeedsView: View {
     }
 
     private func feedStatusColor(_ feed: CompanionFeed) -> Color {
-        if feed.disabled == 1 { return .red }
-        if let errorCount = feed.errorCount, errorCount >= 3 { return .orange }
+        if feed.disabled == 1 { return .gray }
+        if let errorCount = feed.errorCount, errorCount >= 3 { return .red }
         if let errorCount = feed.errorCount, errorCount > 0 { return .yellow }
         return .green
     }
