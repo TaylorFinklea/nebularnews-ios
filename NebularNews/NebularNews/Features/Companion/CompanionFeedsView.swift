@@ -26,27 +26,36 @@ struct CompanionFeedsView: View {
             }
 
             ForEach(feeds) { feed in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(feed.title?.isEmpty == false ? feed.title! : feed.url)
-                        .font(.headline)
-                    Text(feed.url)
+                HStack(spacing: 12) {
+                    Circle()
+                        .fill(feedStatusColor(feed))
+                        .frame(width: 8, height: 8)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(feed.title?.isEmpty == false ? feed.title! : feed.url)
+                            .font(.headline)
+
+                        HStack(spacing: 8) {
+                            if let articleCount = feed.articleCount {
+                                Text("\(articleCount) articles")
+                            }
+                            if let lastPolled = feed.lastPolledAt {
+                                Text("Updated \(relativeTime(lastPolled))")
+                            }
+                        }
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    HStack(spacing: 8) {
-                        if let articleCount = feed.articleCount {
-                            Text("\(articleCount) article\(articleCount == 1 ? "" : "s")")
-                        }
-                        if let errorCount = feed.errorCount, errorCount > 0 {
-                            Label("\(errorCount) error\(errorCount == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
+
+                        if feed.disabled == 1 {
+                            Label("Disabled", systemImage: "pause.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        } else if let errorCount = feed.errorCount, errorCount > 0 {
+                            Label("\(errorCount) consecutive error\(errorCount == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption)
                                 .foregroundStyle(.orange)
                         }
-                        if feed.disabled == 1 {
-                            Text("Disabled")
-                                .foregroundStyle(.red)
-                        }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
                 .padding(.vertical, 4)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -132,6 +141,20 @@ struct CompanionFeedsView: View {
         } message: { feed in
             Text("Delete \"\(feed.title ?? feed.url)\" and all its exclusive articles?")
         }
+    }
+
+    private func feedStatusColor(_ feed: CompanionFeed) -> Color {
+        if feed.disabled == 1 { return .red }
+        if let errorCount = feed.errorCount, errorCount >= 3 { return .orange }
+        if let errorCount = feed.errorCount, errorCount > 0 { return .yellow }
+        return .green
+    }
+
+    private func relativeTime(_ timestamp: Int) -> String {
+        let date = Date(timeIntervalSince1970: Double(timestamp) / 1000)
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: .now)
     }
 
     private func loadFeeds() async {
