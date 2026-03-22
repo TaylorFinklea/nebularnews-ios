@@ -35,13 +35,13 @@ struct CompanionTodayView: View {
                                 StatPill(label: "Unread", value: "\(payload.stats.unreadTotal)")
                             }
                             NavigationLink(destination: CompanionFilteredArticleListView(
-                                title: "New Today",
+                                title: "Last 24 Hours",
                                 read: .unread,
                                 sort: .unreadFirst,
                                 sinceDays: 1,
                                 minScore: nil
                             )) {
-                                StatPill(label: "New today", value: "\(payload.stats.newToday)")
+                                StatPill(label: "Last 24h", value: "\(payload.stats.newToday)")
                             }
                             NavigationLink(destination: CompanionFilteredArticleListView(
                                 title: "High Fit",
