@@ -10,6 +10,8 @@ private let appLogger = Logger(
 
 @main
 struct NebularNewsApp: App {
+    @UIApplicationDelegateAdaptor(NotificationManager.self) var notificationManager
+
     let modelContainer: ModelContainer
 
     @State private var appState: AppState
@@ -62,6 +64,10 @@ struct NebularNewsApp: App {
                     if let session = try? await appState.mobileAPI.fetchSession() {
                         appState.features = session.features
                     }
+                    NotificationManager.shared.requestPermissionAndRegister()
+                    // Allow time for APNs to return the token
+                    try? await Task.sleep(for: .seconds(2))
+                    await NotificationManager.shared.uploadTokenIfNeeded(api: appState.mobileAPI)
                 }
             }
         }

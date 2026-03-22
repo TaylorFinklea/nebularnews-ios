@@ -215,6 +215,23 @@ final class MobileAPIClient {
         return try await post("/api/mobile/articles/\(id)/save", body: Body(saved: saved))
     }
 
+    // MARK: - Push notifications
+
+    func registerDeviceToken(token: String) async throws {
+        struct Body: Encodable { let token: String; let platform: String }
+        let _: EmptyPayload = try await post("/api/mobile/device-token", body: Body(token: token, platform: "ios"))
+    }
+
+    func removeDeviceToken(token: String) async throws {
+        struct Body: Encodable { let token: String }
+        let _: EmptyPayload = try await authorizedRequest(
+            path: "/api/mobile/device-token",
+            method: "DELETE",
+            bodyData: try encoder.encode(Body(token: token)),
+            decode: EmptyPayload.self
+        )
+    }
+
     func rerunSummarize(articleId: String) async throws {
         struct Body: Encodable {}
         let _: EmptyPayload = try await post("/api/mobile/articles/\(articleId)/rerun", body: Body())
