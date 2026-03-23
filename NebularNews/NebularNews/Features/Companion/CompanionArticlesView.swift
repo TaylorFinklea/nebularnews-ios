@@ -115,7 +115,30 @@ struct CompanionArticlesView: View {
                 Section {
                     ForEach(articles) { article in
                         NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
-                            ArticleRow(article: article)
+                            ArticleCard(article: article)
+                        }
+                        .buttonStyle(.plain)
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                Task { await toggleRead(article) }
+                            } label: {
+                                Label(article.isRead == 1 ? "Unread" : "Read", systemImage: article.isRead == 1 ? "eye" : "eye.slash")
+                            }
+                            .tint(article.isRead == 1 ? .blue : .gray)
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button {
+                                Task { await react(article, value: 1) }
+                            } label: {
+                                Label("Like", systemImage: "hand.thumbsup")
+                            }
+                            .tint(.green)
+                            Button {
+                                Task { await react(article, value: -1) }
+                            } label: {
+                                Label("Dislike", systemImage: "hand.thumbsdown")
+                            }
+                            .tint(.red)
                         }
                     }
 
@@ -219,6 +242,28 @@ struct CompanionArticlesView: View {
         }
     }
 
+    private func toggleRead(_ article: CompanionArticleListItem) async {
+        let newReadState = article.isRead != 1
+        do {
+            try await appState.mobileAPI.setRead(articleId: article.id, isRead: newReadState)
+            await loadArticles()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func react(_ article: CompanionArticleListItem, value: Int) async {
+        do {
+            _ = try await appState.mobileAPI.setReaction(
+                articleId: article.id,
+                value: value,
+                reasonCodes: []
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func saveRecentSearch(_ term: String) {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
@@ -234,52 +279,3 @@ private struct FilterKey: Equatable {
     let filter: CompanionArticleFilter
 }
 
-// MARK: - Article Row
-
-private struct ArticleRow: View {
-    let article: CompanionArticleListItem
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 3)
-                .frame(height: 56)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(article.title ?? "Untitled article")
-                    .font(.headline)
-                    .lineLimit(2)
-                HStack(spacing: 8) {
-                    if let sourceName = article.sourceName, !sourceName.isEmpty {
-                        Text(sourceName)
-                    }
-                    if let score = article.score {
-                        ScoreBadge(score: score)
-                    }
-                    if article.isRead == 1 {
-                        Text("Read")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color(.tertiarySystemFill)
-                    }
-                }
-                .frame(width: 60, height: 60)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            }
-        }
-        .padding(.vertical, 2)
-    }
-}

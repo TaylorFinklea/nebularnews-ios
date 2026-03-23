@@ -59,7 +59,7 @@ struct CompanionTodayView: View {
                         // Hero card
                         if let hero = payload.hero {
                             NavigationLink(destination: CompanionArticleDetailView(articleId: hero.id)) {
-                                TodayHeroCardView(article: hero)
+                                ArticleCard(article: hero, style: .hero)
                             }
                             .buttonStyle(.plain)
                             .padding(.horizontal)
@@ -102,9 +102,10 @@ struct CompanionTodayView: View {
 
                                 ForEach(payload.upNext) { article in
                                     NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
-                                        CompactUpNextRow(article: article)
+                                        ArticleCard(article: article, style: .compact)
                                     }
                                     .buttonStyle(.plain)
+                                    .padding(.horizontal)
                                 }
                             }
                         }
@@ -173,80 +174,3 @@ private struct StatPill: View {
     }
 }
 
-private struct TodayHeroCardView: View {
-    let article: CompanionArticleListItem
-
-    var body: some View {
-        GlassImageCard(style: .hero) {
-            ZStack(alignment: .bottomLeading) {
-                if let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
-                    Color.clear
-                        .frame(height: 220)
-                        .overlay {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let image):
-                                    image.resizable().aspectRatio(contentMode: .fill)
-                                default:
-                                    Rectangle().fill(Color(.tertiarySystemFill))
-                                }
-                            }
-                        }
-                        .clipped()
-                } else {
-                    Rectangle()
-                        .fill(Color(.tertiarySystemFill))
-                        .frame(height: 220)
-                }
-
-                LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    if let score = article.score {
-                        ScoreBadge(score: score)
-                    }
-                    Text(article.title ?? "Untitled")
-                        .font(.title3.bold())
-                        .foregroundStyle(.white)
-                        .lineLimit(3)
-                    if let source = article.sourceName {
-                        Text(source)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
-                }
-                .padding()
-            }
-        }
-    }
-}
-
-private struct CompactUpNextRow: View {
-    let article: CompanionArticleListItem
-
-    var body: some View {
-        HStack(spacing: 12) {
-            ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 3)
-                .frame(height: 44)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(article.title ?? "Untitled")
-                    .font(.subheadline.weight(.medium))
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    if let source = article.sourceName {
-                        Text(source)
-                    }
-                    if let score = article.score {
-                        Text("\(score)/5")
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal)
-    }
-}

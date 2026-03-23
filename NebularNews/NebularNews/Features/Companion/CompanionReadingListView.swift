@@ -30,8 +30,9 @@ struct CompanionReadingListView: View {
 
                 ForEach(articles) { article in
                     NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
-                        ReadingListRow(article: article)
+                        ArticleCard(article: article)
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         Button {
                             Task { await unsaveArticle(article) }
@@ -90,36 +91,3 @@ struct CompanionReadingListView: View {
     }
 }
 
-private struct ReadingListRow: View {
-    let article: CompanionArticleListItem
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 3)
-                .frame(height: 56)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(article.title ?? "Untitled article")
-                    .font(.headline)
-                    .lineLimit(2)
-                HStack(spacing: 8) {
-                    if let sourceName = article.sourceName, !sourceName.isEmpty {
-                        Text(sourceName)
-                    }
-                    if let score = article.score {
-                        ScoreBadge(score: score)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Image(systemName: "bookmark.fill")
-                .foregroundStyle(.secondary)
-                .font(.caption)
-        }
-        .padding(.vertical, 2)
-    }
-}
