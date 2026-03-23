@@ -281,6 +281,14 @@ struct CompanionArticleDetailView: View {
                 .refreshable { await loadArticle() }
                 .toolbar(.hidden, for: .tabBar)
                 .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            Task { await toggleSaved() }
+                        } label: {
+                            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                        }
+                        .disabled(savingBookmark)
+                    }
                     ToolbarItemGroup(placement: .bottomBar) {
                         bottomActionTray(payload)
                     }
@@ -338,16 +346,9 @@ struct CompanionArticleDetailView: View {
         Spacer()
 
         Button {
-            Task { await toggleSaved() }
-        } label: {
-            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
-        }
-        .disabled(savingBookmark)
-
-        Spacer()
-
-        Button(payload.article.isRead == 1 ? "Mark unread" : "Mark read") {
             Task { await toggleRead() }
+        } label: {
+            Image(systemName: payload.article.isRead == 1 ? "eye.slash" : "eye")
         }
         .disabled(savingRead)
 
