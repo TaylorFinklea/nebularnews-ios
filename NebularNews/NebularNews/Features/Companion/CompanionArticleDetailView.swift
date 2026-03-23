@@ -28,6 +28,7 @@ private let downReactionReasonOptions = [
 
 struct CompanionArticleDetailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     let articleId: String
 
@@ -281,7 +282,14 @@ struct CompanionArticleDetailView: View {
                 .refreshable { await loadArticle() }
                 .toolbar(.hidden, for: .tabBar)
                 .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button {
+                            Task { await toggleReadAndGoBack() }
+                        } label: {
+                            Image(systemName: payload.article.isRead == 1 ? "eye.slash" : "eye")
+                        }
+                        .disabled(savingRead)
+
                         Button {
                             Task { await toggleSaved() }
                         } label: {
@@ -343,15 +351,6 @@ struct CompanionArticleDetailView: View {
         }
         .disabled(isSummarizing)
 
-        Spacer()
-
-        Button {
-            Task { await toggleRead() }
-        } label: {
-            Image(systemName: payload.article.isRead == 1 ? "eye.slash" : "eye")
-        }
-        .disabled(savingRead)
-
         if appState.features?.reactions == true {
             Spacer()
 
@@ -384,16 +383,18 @@ struct CompanionArticleDetailView: View {
         }
     }
 
-    private func toggleRead() async {
+    private func toggleReadAndGoBack() async {
         guard let payload else { return }
         savingRead = true
-        defer { savingRead = false }
+        let newIsRead = payload.article.isRead != 1
         do {
-            try await appState.mobileAPI.setRead(articleId: articleId, isRead: payload.article.isRead != 1)
-            await loadArticle()
+            try await appState.mobileAPI.setRead(articleId: articleId, isRead: newIsRead)
         } catch {
+            savingRead = false
             errorMessage = error.localizedDescription
+            return
         }
+        dismiss()
     }
 
     private func addTag() async {
