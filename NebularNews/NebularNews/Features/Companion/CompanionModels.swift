@@ -362,3 +362,29 @@ struct CompanionCreateTagResponse: Codable {
 struct CompanionDeleteTagResponse: Codable {
     let ok: Bool
 }
+
+// MARK: - Chat
+
+struct CompanionChatThread: Codable {
+    let id: String
+    let articleId: String?
+    let title: String?
+    let createdAt: Int
+    let updatedAt: Int
+}
+
+struct CompanionChatMessage: Codable, Identifiable {
+    let id: String
+    let threadId: String
+    let role: String
+    let content: String
+    let tokenCount: Int?
+    let provider: String?
+    let model: String?
+    let createdAt: Int
+}
+
+struct CompanionChatPayload: Codable {
+    let thread: CompanionChatThread?
+    let messages: [CompanionChatMessage]
+}

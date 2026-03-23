@@ -43,6 +43,7 @@ struct CompanionArticleDetailView: View {
     @State private var acceptingSuggestion: String?
     @State private var isSaved = false
     @State private var savingBookmark = false
+    @State private var showingChat = false
     @State private var isSummarizing = false
 
     var body: some View {
@@ -306,6 +307,12 @@ struct CompanionArticleDetailView: View {
                         Task { await saveReaction(value: draft.value, reasonCodes: selectedCodes) }
                     }
                 }
+                .sheet(isPresented: $showingChat) {
+                    CompanionArticleChatView(
+                        articleId: articleId,
+                        articleTitle: payload.article.title
+                    )
+                }
             } else {
                 VStack(spacing: 20) {
                     ContentUnavailableView(
@@ -350,6 +357,14 @@ struct CompanionArticleDetailView: View {
             }
         }
         .disabled(isSummarizing)
+
+        Spacer()
+
+        Button {
+            showingChat = true
+        } label: {
+            Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
+        }
 
         if appState.features?.reactions == true {
             Spacer()

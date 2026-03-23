@@ -237,6 +237,17 @@ final class MobileAPIClient {
         let _: EmptyPayload = try await post("/api/mobile/articles/\(articleId)/rerun", body: Body())
     }
 
+    // MARK: - Article Chat
+
+    func fetchChat(articleId: String) async throws -> CompanionChatPayload {
+        try await get("/api/mobile/articles/\(articleId)/chat")
+    }
+
+    func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
+        struct Body: Encodable { let content: String }
+        return try await post("/api/mobile/articles/\(articleId)/chat", body: Body(content: content))
+    }
+
     func dismissArticle(id: String) async throws -> CompanionDismissResponse {
         struct Body: Encodable { let dismissed = true }
         return try await post("/api/mobile/articles/\(id)/dismiss", body: Body())
