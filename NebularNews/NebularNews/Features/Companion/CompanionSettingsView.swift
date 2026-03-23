@@ -75,8 +75,25 @@ struct CompanionSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("News Brief") {
+                Section("News Brief & Notifications") {
                     Toggle("Enabled", isOn: newsBriefEnabledBinding(settings))
+                    HStack {
+                        Text("Morning")
+                        Spacer()
+                        TextField("08:00", text: morningTimeBinding(settings))
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 70)
+                    }
+                    HStack {
+                        Text("Evening")
+                        Spacer()
+                        TextField("17:00", text: eveningTimeBinding(settings))
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 70)
+                    }
+                    Text("News briefs and notification digests are sent at these times. Use HH:mm format.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -184,6 +201,20 @@ struct CompanionSettingsView: View {
         Binding(
             get: { current.newsBriefConfig.enabled },
             set: { val in save { $0.newsBriefConfig.enabled = val } }
+        )
+    }
+
+    private func morningTimeBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
+        Binding(
+            get: { current.newsBriefConfig.morningTime },
+            set: { val in save { $0.newsBriefConfig.morningTime = val } }
+        )
+    }
+
+    private func eveningTimeBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
+        Binding(
+            get: { current.newsBriefConfig.eveningTime },
+            set: { val in save { $0.newsBriefConfig.eveningTime = val } }
         )
     }
 
