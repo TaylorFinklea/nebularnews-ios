@@ -24,6 +24,12 @@
 - Build or test the smallest relevant target after changes.
 - Mention clearly if something could not be verified.
 
+## Mobile API Encoding
+- `MobileAPIClient` uses `JSONEncoder` with `.convertToSnakeCase`. This means all POST/PATCH/DELETE bodies send snake_case keys (`is_read`, `feed_id`, `add_tag_names`).
+- The NebularNews server endpoints parse raw JSON and expect camelCase keys (`isRead`, `feedId`, `addTagNames`).
+- **Every server endpoint under `/api/mobile/` MUST accept both camelCase and snake_case keys**: `body?.isRead ?? body?.is_read`.
+- The `updateSettings` method is a special case — it uses a plain `JSONEncoder()` (no snake_case) because the settings payload must match the server's camelCase field names exactly.
+
 ## Project Notes
 - `OPENAI_API_KEY` is expected in the macOS Keychain, not in source control.
 - Standalone CloudKit sync is state-only. Heavy article cache/runtime data stays local unless the architecture is intentionally changed.

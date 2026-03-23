@@ -7,5 +7,6 @@
 - After code changes, create a small descriptive commit by default.
 - Do not push unless explicitly asked.
 - Build or test the smallest relevant target after changes.
+- `MobileAPIClient` encodes bodies as snake_case. Server endpoints must accept BOTH camelCase and snake_case keys (e.g., `body?.isRead ?? body?.is_read`).
 - `OPENAI_API_KEY` belongs in the macOS Keychain, not in source control.
 - Standalone CloudKit sync is state-only; heavy article cache/runtime data should stay local unless intentionally redesigned.
