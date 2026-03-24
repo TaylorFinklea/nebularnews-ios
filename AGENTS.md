@@ -30,6 +30,11 @@
 - **Every server endpoint under `/api/mobile/` MUST accept both camelCase and snake_case keys**: `body?.isRead ?? body?.is_read`.
 - The `updateSettings` method is a special case — it uses a plain `JSONEncoder()` (no snake_case) because the settings payload must match the server's camelCase field names exactly.
 
+## Release / TestFlight
+- Run `./scripts/release.sh` to archive and upload to TestFlight.
+- The script auto-increments both `MARKETING_VERSION` (patch) and `CURRENT_PROJECT_VERSION` (build number) via `agvtool`, archives, exports with automatic signing, uploads to App Store Connect, and commits the version bump.
+- No manual Xcode archive workflow needed.
+
 ## Project Notes
 - `OPENAI_API_KEY` is expected in the macOS Keychain, not in source control.
 - Standalone CloudKit sync is state-only. Heavy article cache/runtime data stays local unless the architecture is intentionally changed.
