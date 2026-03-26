@@ -28,7 +28,7 @@ struct AppConfiguration {
            let url = URL(string: serverURL) {
             self.mobileDefaultServerURL = url
         } else {
-            self.mobileDefaultServerURL = URL(string: "https://api.news.finklea.dev")!
+            self.mobileDefaultServerURL = URL(string: "https://api.nebularnews.com")!
         }
     }
 }
