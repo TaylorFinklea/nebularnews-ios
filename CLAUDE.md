@@ -1,5 +1,9 @@
 # NebularNews iOS Claude Instructions
 
+## Session Workflow
+- **Start of session**: Read `docs/ai/roadmap.md`, `docs/ai/current-state.md`, and `docs/ai/next-steps.md` before doing any work. These are the source of truth for project state.
+- **End of session**: Update `docs/ai/current-state.md` and `docs/ai/next-steps.md` with what changed. Add to `docs/ai/decisions.md` if any architectural decisions were made. Use `docs/ai/handoff-template.md` as a guide.
+
 ## Instruction File Sync
 - When you change this `CLAUDE.md`, also review and update `AGENTS.md`, `.cursorrules`, and `.github/copilot-instructions.md` in the same change when the guidance overlaps.
 - Shared guidance in these files should stay consistent unless a file is intentionally tool-specific.
