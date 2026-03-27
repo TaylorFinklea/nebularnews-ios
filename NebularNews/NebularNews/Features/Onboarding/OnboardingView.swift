@@ -4,6 +4,7 @@ struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
+    @State private var serverURLText = AppConfiguration.shared.mobileDefaultServerURL.absoluteString
     @State private var companionError = ""
     @State private var companionLoading = false
 
@@ -53,9 +54,12 @@ struct OnboardingView: View {
                 Label("Connect to your server", systemImage: "iphone.and.arrow.forward")
                     .font(.headline)
 
-                Text(appState.configuration.mobileDefaultServerURL.host() ?? appState.configuration.mobileDefaultServerURL.absoluteString)
+                TextField("Server URL", text: $serverURLText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
 
                 if !companionError.isEmpty {
                     Text(companionError)
@@ -85,7 +89,11 @@ struct OnboardingView: View {
         companionError = ""
         defer { companionLoading = false }
 
-        let url = appState.configuration.mobileDefaultServerURL
+        guard let url = URL(string: serverURLText.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.scheme != nil, url.host() != nil else {
+            companionError = "Please enter a valid server URL."
+            return
+        }
 
         do {
             let session = try await appState.mobileOAuthCoordinator.signIn(serverURL: url)
