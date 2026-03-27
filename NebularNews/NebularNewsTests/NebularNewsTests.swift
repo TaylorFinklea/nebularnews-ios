@@ -25,7 +25,7 @@ struct NebularNewsTests {
         #expect(configuration.mobileOAuthClientId == "nebular-news-ios")
         #expect(configuration.mobileOAuthClientName == "Nebular News iOS")
         #expect(configuration.mobileOAuthRedirectURI.absoluteString == "nebularnews://oauth/callback")
-        #expect(configuration.mobileDefaultServerURL.absoluteString == "https://api.nebularnews.com")
+        #expect(configuration.mobileDefaultServerURL.absoluteString == "https://app.nebularnews.com")
     }
 
     @Test func articleScoreHelpersReflectReadyAndLearningStates() async throws {
