@@ -44,10 +44,12 @@ struct NebularNewsApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if appState.hasCompletedOnboarding {
-                    MainTabView()
-                } else {
+                if !appState.hasCompletedOnboarding {
                     OnboardingView()
+                } else if !appState.hasCompletedFeedSelection {
+                    FeedSelectionView()
+                } else {
+                    MainTabView()
                 }
             }
             .overlay(alignment: .top) {

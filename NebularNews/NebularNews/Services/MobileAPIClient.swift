@@ -257,6 +257,15 @@ final class MobileAPIClient {
         try await get("/api/mobile/articles?saved=true&limit=\(limit)&offset=\(offset)")
     }
 
+    func fetchOnboardingSuggestions() async throws -> OnboardingCatalog {
+        try await get("/api/mobile/onboarding/suggestions")
+    }
+
+    func bulkSubscribe(feedUrls: [String]) async throws -> OnboardingSubscribeResponse {
+        struct Body: Encodable { let feedUrls: [String] }
+        return try await post("/api/mobile/onboarding/subscribe", body: Body(feedUrls: feedUrls))
+    }
+
     func clearSession() {
         keychain.delete(forKey: KeychainManager.Key.syncAccessToken)
         keychain.delete(forKey: KeychainManager.Key.syncRefreshToken)

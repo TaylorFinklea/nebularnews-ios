@@ -388,3 +388,31 @@ struct CompanionChatPayload: Codable {
     let thread: CompanionChatThread?
     let messages: [CompanionChatMessage]
 }
+
+// MARK: - Onboarding catalog
+
+struct OnboardingCatalog: Codable {
+    let categories: [OnboardingCategory]
+}
+
+struct OnboardingCategory: Codable, Identifiable {
+    let id: String
+    let name: String
+    let icon: String
+    let feeds: [OnboardingFeed]
+}
+
+struct OnboardingFeed: Codable, Identifiable {
+    let url: String
+    let title: String
+    let description: String?
+    let siteUrl: String?
+
+    var id: String { url }
+}
+
+struct OnboardingSubscribeResponse: Codable {
+    let ok: Bool
+    let subscribed: Int
+    let runId: String?
+}

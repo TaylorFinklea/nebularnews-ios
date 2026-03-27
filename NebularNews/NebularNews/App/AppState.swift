@@ -11,6 +11,7 @@ final class AppState {
 
     private enum DefaultsKey {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
+        static let hasCompletedFeedSelection = "hasCompletedFeedSelection"
 #if DEBUG
         static let isDeveloperModeEnabled = "isDeveloperModeEnabled"
 #endif
@@ -33,6 +34,12 @@ final class AppState {
         }
     }
 
+    var hasCompletedFeedSelection: Bool {
+        didSet {
+            defaults.set(hasCompletedFeedSelection, forKey: DefaultsKey.hasCompletedFeedSelection)
+        }
+    }
+
 #if DEBUG
     var isDeveloperModeEnabled: Bool {
         didSet {
@@ -48,6 +55,7 @@ final class AppState {
         self.defaults = resolvedDefaults
         self.configuration = resolvedConfiguration
         self.hasCompletedOnboarding = resolvedDefaults.bool(forKey: DefaultsKey.hasCompletedOnboarding)
+        self.hasCompletedFeedSelection = resolvedDefaults.bool(forKey: DefaultsKey.hasCompletedFeedSelection)
 #if DEBUG
         self.isDeveloperModeEnabled = resolvedDefaults.bool(forKey: DefaultsKey.isDeveloperModeEnabled)
 #endif
@@ -73,6 +81,10 @@ final class AppState {
         hasCompletedOnboarding = true
     }
 
+    func completeFeedSelection() {
+        hasCompletedFeedSelection = true
+    }
+
     func disconnectCompanion() {
         keychain.delete(forKey: KeychainManager.Key.syncAccessToken)
         keychain.delete(forKey: KeychainManager.Key.syncRefreshToken)
@@ -80,5 +92,6 @@ final class AppState {
         companionServerURL = nil
         hasCompanionSession = false
         hasCompletedOnboarding = false
+        hasCompletedFeedSelection = false
     }
 }
