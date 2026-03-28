@@ -4,15 +4,15 @@
 
 ## Immediate
 
-- [ ] Test web onboarding end-to-end with a fresh account (Apple Sign In -> feed selection -> subscribe -> dashboard populates)
-- [ ] Build and release iOS to TestFlight with onboarding flow
-- [ ] Verify Apple Sign In client secret works (expires ~Sep 2026)
+- [ ] Build and release iOS to TestFlight with all onboarding + empty state changes
+- [ ] Test full web flow: new user Apple Sign In -> auto-redirect to /onboarding -> subscribe -> dashboard
+- [ ] Test full iOS flow: sign in -> feed selection -> subscribe -> Today tab populates
 
 ## Short-term
 
-- [ ] Add empty-state messages to iOS tabs (Today, Feeds, Articles) for users who skip feed selection
-- [ ] Consider auto-redirecting new web users to `/onboarding` after first login instead of requiring them to click "Choose feeds"
-- [ ] Add user administration capabilities (view users, reset accounts)
+- [x] ~~Add empty-state messages to iOS tabs~~ (done)
+- [x] ~~Auto-redirect new web users to `/onboarding`~~ (done)
+- [x] ~~User admin~~ (already existed at `/settings/users`)
 
 ## Planned
 
