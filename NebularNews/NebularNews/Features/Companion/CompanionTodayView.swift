@@ -93,6 +93,16 @@ struct CompanionTodayView: View {
                             .padding(.horizontal)
                         }
 
+                        // Empty state
+                        if payload.hero == nil && payload.upNext.isEmpty {
+                            ContentUnavailableView(
+                                "No articles yet",
+                                systemImage: "newspaper",
+                                description: Text("Articles will appear here once your feeds are polled. Pull to refresh.")
+                            )
+                            .padding(.top, 20)
+                        }
+
                         // Up next
                         if !payload.upNext.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {

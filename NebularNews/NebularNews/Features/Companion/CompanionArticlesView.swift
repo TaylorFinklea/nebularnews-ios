@@ -113,6 +113,15 @@ struct CompanionArticlesView: View {
                 }
 
                 Section {
+                    if articles.isEmpty && !isLoading && errorMessage.isEmpty {
+                        ContentUnavailableView(
+                            "No articles",
+                            systemImage: "doc.text",
+                            description: Text(filter.isActive ? "No articles match your filters." : "Articles will appear here once your feeds are polled.")
+                        )
+                        .listRowBackground(Color.clear)
+                    }
+
                     ForEach(articles) { article in
                         NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
                             ArticleCard(article: article)

@@ -25,6 +25,15 @@ struct CompanionFeedsView: View {
                 .listRowBackground(Color.clear)
             }
 
+            if feeds.isEmpty && !isLoading && errorMessage.isEmpty {
+                ContentUnavailableView(
+                    "No feeds",
+                    systemImage: "antenna.radiowaves.left.and.right",
+                    description: Text("Add an RSS feed to start reading.")
+                )
+                .listRowBackground(Color.clear)
+            }
+
             ForEach(feeds) { feed in
                 HStack(spacing: 12) {
                     Circle()
