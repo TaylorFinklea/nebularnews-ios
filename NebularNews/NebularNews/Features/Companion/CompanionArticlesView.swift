@@ -183,7 +183,7 @@ struct CompanionArticlesView: View {
                     ProgressView("Loading articles…")
                 }
             }
-            .navigationTitle("Feeds")
+            .navigationTitle("Articles")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
