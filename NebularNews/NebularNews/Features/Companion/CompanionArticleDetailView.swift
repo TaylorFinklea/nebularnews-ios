@@ -387,10 +387,10 @@ struct CompanionArticleDetailView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            payload = try await appState.mobileAPI.fetchArticle(id: articleId)
+            payload = try await appState.supabase.fetchArticle(id: articleId)
             errorMessage = ""
             if payload?.article.isRead != 1 {
-                try? await appState.mobileAPI.setRead(articleId: articleId, isRead: true)
+                try? await appState.supabase.setRead(articleId: articleId, isRead: true)
                 payload?.article.isRead = 1
             }
         } catch {
@@ -403,7 +403,7 @@ struct CompanionArticleDetailView: View {
         savingRead = true
         let newIsRead = payload.article.isRead != 1
         do {
-            try await appState.mobileAPI.setRead(articleId: articleId, isRead: newIsRead)
+            try await appState.supabase.setRead(articleId: articleId, isRead: newIsRead)
         } catch {
             savingRead = false
             errorMessage = error.localizedDescription
@@ -418,7 +418,7 @@ struct CompanionArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.mobileAPI.addTag(articleId: articleId, name: trimmed)
+            let tags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
             payload?.tags = tags
             pendingTagName = ""
         } catch {
@@ -430,7 +430,7 @@ struct CompanionArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.mobileAPI.removeTag(articleId: articleId, tagId: tag.id)
+            let tags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
             payload?.tags = tags
         } catch {
             errorMessage = error.localizedDescription
@@ -441,7 +441,7 @@ struct CompanionArticleDetailView: View {
         acceptingSuggestion = suggestion.id
         defer { acceptingSuggestion = nil }
         do {
-            let tags = try await appState.mobileAPI.addTag(articleId: articleId, name: suggestion.name)
+            let tags = try await appState.supabase.addTag(articleId: articleId, name: suggestion.name)
             payload?.tags = tags
         } catch {
             errorMessage = error.localizedDescription
@@ -457,8 +457,14 @@ struct CompanionArticleDetailView: View {
         savingReaction = true
         defer { savingReaction = false }
         do {
-            let reaction = try await appState.mobileAPI.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
-            payload?.reaction = reaction
+            let response = try await appState.supabase.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
+            payload?.reaction = CompanionReaction(
+                articleId: response.articleId,
+                feedId: nil,
+                value: response.value,
+                createdAt: response.createdAt.flatMap { timestampMillisFromISO($0) },
+                reasonCodes: response.reasonCodes
+            )
             reactionDraft = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -469,7 +475,7 @@ struct CompanionArticleDetailView: View {
         isSummarizing = true
         defer { isSummarizing = false }
         do {
-            try await appState.mobileAPI.rerunSummarize(articleId: articleId)
+            try await appState.supabase.rerunSummarize(articleId: articleId)
             await loadArticle()
         } catch {
             errorMessage = error.localizedDescription
@@ -480,12 +486,26 @@ struct CompanionArticleDetailView: View {
         savingBookmark = true
         defer { savingBookmark = false }
         do {
-            let response = try await appState.mobileAPI.saveArticle(id: articleId, saved: !isSaved)
+            let response = try await appState.supabase.saveArticle(id: articleId, saved: !isSaved)
             isSaved = response.saved
         } catch {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+/// Parse an ISO 8601 timestamp string into milliseconds since epoch.
+private func timestampMillisFromISO(_ isoString: String) -> Int? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: isoString) {
+        return Int(date.timeIntervalSince1970 * 1000)
+    }
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: isoString) {
+        return Int(date.timeIntervalSince1970 * 1000)
+    }
+    return nil
 }
 
 // MARK: - Companion Hero Image

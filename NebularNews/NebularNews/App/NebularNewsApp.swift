@@ -61,15 +61,28 @@ struct NebularNewsApp: App {
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .task {
-                appState.loadKeychainCache()
-                if appState.hasCompanionSession {
-                    if let session = try? await appState.mobileAPI.fetchSession() {
-                        appState.features = session.features
+                // Try loading existing Supabase session first
+                await appState.loadSession()
+
+                if appState.hasSession {
+                    // Session exists — mark onboarding complete
+                    if !appState.hasCompletedOnboarding {
+                        appState.completeSignIn()
                     }
                     NotificationManager.shared.requestPermissionAndRegister()
-                    // Allow time for APNs to return the token
                     try? await Task.sleep(for: .seconds(2))
-                    await NotificationManager.shared.uploadTokenIfNeeded(api: appState.mobileAPI)
+                    await NotificationManager.shared.uploadTokenIfNeeded(supabase: appState.supabase)
+                } else {
+                    // Fall back to legacy companion session check
+                    appState.loadKeychainCache()
+                    if appState.hasCompanionSession {
+                        if let session = try? await appState.mobileAPI.fetchSession() {
+                            appState.features = session.features
+                        }
+                        NotificationManager.shared.requestPermissionAndRegister()
+                        try? await Task.sleep(for: .seconds(2))
+                        await NotificationManager.shared.uploadTokenIfNeeded(api: appState.mobileAPI)
+                    }
                 }
             }
         }

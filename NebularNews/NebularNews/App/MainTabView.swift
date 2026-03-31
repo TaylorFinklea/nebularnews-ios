@@ -42,7 +42,7 @@ struct MainTabView: View {
     }
 
     private func loadCompanionSavedCount() async {
-        if let payload = try? await appState.mobileAPI.fetchSavedArticles(limit: 0) {
+        if let payload = try? await appState.supabase.fetchArticles(limit: 1, saved: true) {
             companionSavedCount = payload.total
         }
     }

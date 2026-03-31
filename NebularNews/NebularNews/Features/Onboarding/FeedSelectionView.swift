@@ -155,7 +155,7 @@ struct FeedSelectionView: View {
 
     private func loadCatalog() async {
         do {
-            catalog = try await appState.mobileAPI.fetchOnboardingSuggestions()
+            catalog = try await appState.supabase.fetchOnboardingSuggestions()
         } catch {
             self.error = "Failed to load feed suggestions."
         }
@@ -168,7 +168,7 @@ struct FeedSelectionView: View {
         defer { subscribing = false }
 
         do {
-            _ = try await appState.mobileAPI.bulkSubscribe(feedUrls: Array(selectedUrls))
+            _ = try await appState.supabase.bulkSubscribe(feedUrls: Array(selectedUrls))
             appState.completeFeedSelection()
         } catch {
             self.error = "Failed to subscribe. Please try again."

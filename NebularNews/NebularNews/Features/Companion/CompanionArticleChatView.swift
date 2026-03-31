@@ -112,7 +112,7 @@ struct CompanionArticleChatView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.mobileAPI.fetchChat(articleId: articleId)
+            let payload = try await appState.supabase.fetchChat(articleId: articleId)
             messages = payload.messages
         } catch {
             errorMessage = error.localizedDescription
@@ -143,7 +143,7 @@ struct CompanionArticleChatView: View {
         messages.append(optimistic)
 
         do {
-            let payload = try await appState.mobileAPI.sendChatMessage(articleId: articleId, content: content)
+            let payload = try await appState.supabase.sendChatMessage(articleId: articleId, content: content)
             messages = payload.messages
         } catch {
             // Remove optimistic message on failure

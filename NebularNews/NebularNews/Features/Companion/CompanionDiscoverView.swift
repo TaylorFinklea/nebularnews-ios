@@ -89,8 +89,7 @@ struct CompanionDiscoverView: View {
         isLoading = true
         error = nil
         do {
-            let payload = try await appState.mobileAPI.fetchTags()
-            tags = payload.tags
+            tags = try await appState.supabase.fetchTags()
         } catch {
             self.error = error.localizedDescription
         }
@@ -179,7 +178,7 @@ private struct TagArticlesView: View {
         isLoading = true
         error = nil
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(tag: tag.id)
+            let payload = try await appState.supabase.fetchArticles(tag: tag.id)
             articles = payload.articles
             total = payload.total
         } catch {
@@ -191,7 +190,7 @@ private struct TagArticlesView: View {
     private func loadMore() async {
         guard hasMore else { return }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(offset: articles.count, tag: tag.id)
+            let payload = try await appState.supabase.fetchArticles(offset: articles.count, tag: tag.id)
             articles.append(contentsOf: payload.articles)
             total = payload.total
         } catch {

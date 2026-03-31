@@ -205,7 +205,7 @@ struct CompanionArticlesView: View {
                 await loadArticles()
             }
             .refreshable {
-                _ = try? await appState.mobileAPI.triggerPull()
+                try? await appState.supabase.triggerPull()
                 try? await Task.sleep(for: .seconds(2))
                 await loadArticles()
             }
@@ -216,7 +216,7 @@ struct CompanionArticlesView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(
+            let payload = try await appState.supabase.fetchArticles(
                 query: query,
                 offset: 0,
                 read: filter.readFilter,
@@ -236,7 +236,7 @@ struct CompanionArticlesView: View {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(
+            let payload = try await appState.supabase.fetchArticles(
                 query: query,
                 offset: articles.count,
                 read: filter.readFilter,
@@ -254,7 +254,7 @@ struct CompanionArticlesView: View {
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newReadState = article.isRead != 1
         do {
-            try await appState.mobileAPI.setRead(articleId: article.id, isRead: newReadState)
+            try await appState.supabase.setRead(articleId: article.id, isRead: newReadState)
             await loadArticles()
         } catch {
             errorMessage = error.localizedDescription
@@ -263,7 +263,7 @@ struct CompanionArticlesView: View {
 
     private func react(_ article: CompanionArticleListItem, value: Int) async {
         do {
-            _ = try await appState.mobileAPI.setReaction(
+            _ = try await appState.supabase.setReaction(
                 articleId: article.id,
                 value: value,
                 reasonCodes: []
@@ -287,4 +287,3 @@ private struct FilterKey: Equatable {
     let query: String
     let filter: CompanionArticleFilter
 }
-

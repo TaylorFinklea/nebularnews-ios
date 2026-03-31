@@ -62,8 +62,7 @@ struct CompanionTagListView: View {
         isLoading = true
         error = nil
         do {
-            let payload = try await appState.mobileAPI.fetchTags()
-            tags = payload.tags
+            tags = try await appState.supabase.fetchTags()
         } catch {
             self.error = error.localizedDescription
         }
@@ -75,7 +74,7 @@ struct CompanionTagListView: View {
         newTagName = ""
         guard !name.isEmpty else { return }
         do {
-            _ = try await appState.mobileAPI.createTag(name: name)
+            _ = try await appState.supabase.createTag(name: name)
             await loadTags()
         } catch {
             self.error = error.localizedDescription
@@ -87,7 +86,7 @@ struct CompanionTagListView: View {
         Task {
             for tag in toDelete {
                 do {
-                    _ = try await appState.mobileAPI.deleteTag(id: tag.id)
+                    try await appState.supabase.deleteTag(id: tag.id)
                 } catch {
                     self.error = error.localizedDescription
                     return

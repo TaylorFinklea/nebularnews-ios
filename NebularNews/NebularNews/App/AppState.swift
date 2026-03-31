@@ -20,13 +20,17 @@ final class AppState {
     private let defaults: UserDefaults
     let configuration: AppConfiguration
     let keychain: KeychainManager
+    let supabase: SupabaseManager
+
+    // Keep MobileAPIClient available for a transition period so existing
+    // call-sites that haven't been migrated yet can still compile.
+    // Once every view is migrated, this property can be removed.
     let mobileAPI: MobileAPIClient
-    let mobileOAuthCoordinator: MobileOAuthCoordinator
 
     var containerFallbackReason: ContainerFallbackReason?
-    var features: CompanionFeatureFlags?
-    private(set) var companionServerURL: URL?
-    private(set) var hasCompanionSession: Bool = false
+
+    /// Whether the user has an active Supabase session.
+    private(set) var hasSession: Bool = false
 
     var hasCompletedOnboarding: Bool {
         didSet {
@@ -48,6 +52,14 @@ final class AppState {
     }
 #endif
 
+    // Feature flags — all enabled by default with Supabase (no server feature gating)
+    var features: CompanionFeatureFlags? = CompanionFeatureFlags(
+        dashboard: true,
+        newsBrief: true,
+        reactions: true,
+        tags: true
+    )
+
     init(configuration: AppConfiguration? = nil, defaults: UserDefaults = .standard) {
         let resolvedConfiguration = configuration ?? .shared
         let resolvedDefaults = defaults
@@ -60,9 +72,41 @@ final class AppState {
         self.isDeveloperModeEnabled = resolvedDefaults.bool(forKey: DefaultsKey.isDeveloperModeEnabled)
 #endif
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
+        self.supabase = SupabaseManager.shared
         self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
-        self.mobileOAuthCoordinator = MobileOAuthCoordinator(configuration: resolvedConfiguration)
     }
+
+    /// Check if the user already has an active Supabase auth session.
+    func loadSession() async {
+        do {
+            _ = try await supabase.session()
+            hasSession = true
+        } catch {
+            hasSession = false
+        }
+    }
+
+    func completeSignIn() {
+        hasSession = true
+        hasCompletedOnboarding = true
+    }
+
+    func completeFeedSelection() {
+        hasCompletedFeedSelection = true
+    }
+
+    func signOut() async {
+        try? await supabase.signOut()
+        hasSession = false
+        hasCompletedOnboarding = false
+        hasCompletedFeedSelection = false
+    }
+
+    // MARK: - Legacy companion session support (for backward compat during transition)
+
+    private(set) var companionServerURL: URL?
+    private(set) var hasCompanionSession: Bool = false
+    let mobileOAuthCoordinator: MobileOAuthCoordinator = MobileOAuthCoordinator(configuration: .shared)
 
     func loadKeychainCache() {
         let raw = keychain.get(forKey: KeychainManager.Key.syncServerUrl)
@@ -79,10 +123,6 @@ final class AppState {
         companionServerURL = serverURL
         hasCompanionSession = true
         hasCompletedOnboarding = true
-    }
-
-    func completeFeedSelection() {
-        hasCompletedFeedSelection = true
     }
 
     func disconnectCompanion() {

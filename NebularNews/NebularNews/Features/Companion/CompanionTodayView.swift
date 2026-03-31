@@ -135,7 +135,7 @@ struct CompanionTodayView: View {
                 }
             }
             .refreshable {
-                _ = try? await appState.mobileAPI.triggerPull()
+                try? await appState.supabase.triggerPull()
                 try? await Task.sleep(for: .seconds(2))
                 await loadToday()
             }
@@ -153,7 +153,7 @@ struct CompanionTodayView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let result = try await appState.mobileAPI.fetchToday()
+            let result = try await appState.supabase.fetchToday()
             payload = result
             errorMessage = ""
             await CompanionCache.shared.store(result, category: .today)
@@ -183,4 +183,3 @@ private struct StatPill: View {
         .modifier(GlassRoundedBackground(cornerRadius: 12))
     }
 }
-

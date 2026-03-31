@@ -115,7 +115,7 @@ struct CompanionFeedsView: View {
             CompanionAddFeedSheet { url in
                 Task {
                     do {
-                        _ = try await appState.mobileAPI.addFeed(url: url)
+                        _ = try await appState.supabase.addFeed(url: url)
                         await loadFeeds()
                     } catch {
                         errorMessage = error.localizedDescription
@@ -127,7 +127,7 @@ struct CompanionFeedsView: View {
             CompanionOPMLImportSheet { xml in
                 Task {
                     do {
-                        _ = try await appState.mobileAPI.importOPML(xml: xml)
+                        _ = try await appState.supabase.importOPML(xml: xml)
                         await loadFeeds()
                     } catch {
                         errorMessage = error.localizedDescription
@@ -170,7 +170,7 @@ struct CompanionFeedsView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            feeds = try await appState.mobileAPI.fetchFeeds()
+            feeds = try await appState.supabase.fetchFeeds()
             errorMessage = ""
         } catch {
             errorMessage = error.localizedDescription
@@ -179,7 +179,7 @@ struct CompanionFeedsView: View {
 
     private func deleteFeed(_ feed: CompanionFeed) async {
         do {
-            _ = try await appState.mobileAPI.deleteFeed(id: feed.id)
+            try await appState.supabase.deleteFeed(id: feed.id)
             feeds.removeAll { $0.id == feed.id }
         } catch {
             errorMessage = error.localizedDescription
@@ -188,7 +188,7 @@ struct CompanionFeedsView: View {
 
     private func exportOPML() async {
         do {
-            let xml = try await appState.mobileAPI.exportOPML()
+            let xml = try await appState.supabase.exportOPML()
             let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("nebular-news.opml")
             try xml.write(to: tempURL, atomically: true, encoding: .utf8)
 

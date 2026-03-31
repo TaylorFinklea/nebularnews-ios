@@ -94,7 +94,7 @@ struct CompanionFilteredArticleListView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(
+            let payload = try await appState.supabase.fetchArticles(
                 offset: 0,
                 read: read,
                 minScore: minScore,
@@ -112,7 +112,7 @@ struct CompanionFilteredArticleListView: View {
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newReadState = article.isRead != 1
         do {
-            try await appState.mobileAPI.setRead(articleId: article.id, isRead: newReadState)
+            try await appState.supabase.setRead(articleId: article.id, isRead: newReadState)
             await load()
         } catch {
             errorMessage = error.localizedDescription
@@ -124,7 +124,7 @@ struct CompanionFilteredArticleListView: View {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let payload = try await appState.mobileAPI.fetchArticles(
+            let payload = try await appState.supabase.fetchArticles(
                 offset: articles.count,
                 read: read,
                 minScore: minScore,
@@ -139,4 +139,3 @@ struct CompanionFilteredArticleListView: View {
         }
     }
 }
-

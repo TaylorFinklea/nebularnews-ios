@@ -71,7 +71,7 @@ struct CompanionReadingListView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.mobileAPI.fetchSavedArticles()
+            let payload = try await appState.supabase.fetchArticles(saved: true)
             articles = payload.articles
             errorMessage = ""
             await CompanionCache.shared.store(payload.articles, category: .savedArticles)
@@ -82,7 +82,7 @@ struct CompanionReadingListView: View {
 
     private func unsaveArticle(_ article: CompanionArticleListItem) async {
         do {
-            _ = try await appState.mobileAPI.saveArticle(id: article.id, saved: false)
+            _ = try await appState.supabase.saveArticle(id: article.id, saved: false)
             articles.removeAll { $0.id == article.id }
             await CompanionCache.shared.store(articles, category: .savedArticles)
         } catch {
@@ -90,4 +90,3 @@ struct CompanionReadingListView: View {
         }
     }
 }
-

@@ -1,12 +1,14 @@
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 struct OnboardingView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var serverURLText = AppConfiguration.shared.mobileDefaultServerURL.absoluteString
-    @State private var companionError = ""
-    @State private var companionLoading = false
+    @State private var signInError = ""
+    @State private var signInLoading = false
+    @State private var currentNonce: String?
 
     private var palette: NebularPalette {
         NebularPalette.forColorScheme(colorScheme)
@@ -34,13 +36,13 @@ struct OnboardingView: View {
                             .font(.largeTitle.bold())
                             .tracking(-0.8)
 
-                        Text("Connect to your Nebular News server to get started. Sign in once and read the same dashboard, News Brief, articles, reactions, and tags as the web app.")
+                        Text("AI-powered RSS reader with personalized scoring, summaries, and News Briefs. Sign in with Apple to get started.")
                             .font(.body)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
 
-                    companionCard
+                    signInCard
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 48)
@@ -48,62 +50,94 @@ struct OnboardingView: View {
         }
     }
 
-    private var companionCard: some View {
+    private var signInCard: some View {
         GlassCard(cornerRadius: 30, style: .raised, tintColor: palette.primary) {
             VStack(alignment: .leading, spacing: 16) {
-                Label("Connect to your server", systemImage: "iphone.and.arrow.forward")
+                Label("Sign in to continue", systemImage: "person.crop.circle")
                     .font(.headline)
 
-                TextField("Server URL", text: $serverURLText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-
-                if !companionError.isEmpty {
-                    Text(companionError)
+                if !signInError.isEmpty {
+                    Text(signInError)
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
 
-                Button {
-                    Task { await connectCompanionMode() }
-                } label: {
-                    if companionLoading {
+                if signInLoading {
+                    HStack {
+                        Spacer()
                         ProgressView()
-                            .frame(maxWidth: .infinity)
-                    } else {
-                        Text("Sign in")
-                            .frame(maxWidth: .infinity)
+                        Spacer()
                     }
+                } else {
+                    SignInWithAppleButton(.signIn) { request in
+                        let nonce = randomNonce()
+                        currentNonce = nonce
+                        request.requestedScopes = [.email, .fullName]
+                        request.nonce = sha256Hash(nonce)
+                    } onCompletion: { result in
+                        Task { await handleAppleSignIn(result) }
+                    }
+                    .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                    .frame(height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(companionLoading)
             }
         }
     }
 
-    private func connectCompanionMode() async {
-        companionLoading = true
-        companionError = ""
-        defer { companionLoading = false }
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) async {
+        signInLoading = true
+        signInError = ""
+        defer { signInLoading = false }
 
-        guard let url = URL(string: serverURLText.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme != nil, url.host() != nil else {
-            companionError = "Please enter a valid server URL."
-            return
-        }
+        switch result {
+        case .success(let authorization):
+            guard let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                  let identityTokenData = appleIDCredential.identityToken,
+                  let idToken = String(data: identityTokenData, encoding: .utf8),
+                  let nonce = currentNonce else {
+                signInError = "Could not retrieve Apple ID token."
+                return
+            }
 
-        do {
-            let session = try await appState.mobileOAuthCoordinator.signIn(serverURL: url)
-            try appState.completeCompanionOnboarding(
-                serverURL: session.serverURL,
-                accessToken: session.accessToken,
-                refreshToken: session.refreshToken
-            )
-        } catch {
-            companionError = error.localizedDescription
+            do {
+                _ = try await appState.supabase.signInWithApple(idToken: idToken, nonce: nonce)
+                appState.completeSignIn()
+            } catch {
+                signInError = error.localizedDescription
+            }
+
+        case .failure(let error):
+            // Don't show error for user-cancelled
+            if (error as? ASAuthorizationError)?.code == .canceled {
+                return
+            }
+            signInError = error.localizedDescription
         }
     }
+}
+
+// MARK: - Nonce helpers
+
+private func randomNonce(length: Int = 32) -> String {
+    let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+    var result = ""
+    var remainingLength = length
+    while remainingLength > 0 {
+        let randoms: [UInt8] = (0..<16).map { _ in UInt8.random(in: .min ... .max) }
+        for random in randoms {
+            if remainingLength == 0 { break }
+            if random < charset.count {
+                result.append(charset[Int(random)])
+                remainingLength -= 1
+            }
+        }
+    }
+    return result
+}
+
+private func sha256Hash(_ input: String) -> String {
+    let data = Data(input.utf8)
+    let hash = SHA256.hash(data: data)
+    return hash.compactMap { String(format: "%02x", $0) }.joined()
 }

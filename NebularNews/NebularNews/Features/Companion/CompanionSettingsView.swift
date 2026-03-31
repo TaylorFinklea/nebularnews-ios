@@ -9,8 +9,6 @@ struct CompanionSettingsView: View {
     @State private var settings: CompanionSettingsPayload?
     @State private var error: String?
     @State private var isLoading = true
-    @State private var serverURLDraft = ""
-    @State private var isReconnecting = false
 
     private static let pollIntervalRange = [5, 10, 15, 30, 60]
     private static let summaryStyles = ["concise", "detailed", "bullet"]
@@ -106,49 +104,16 @@ struct CompanionSettingsView: View {
                 }
             }
 
-            Section("Connection") {
-                TextField("Server URL", text: $serverURLDraft)
-                    .textContentType(.URL)
-                    .keyboardType(.URL)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                if serverURLDraft != (appState.companionServerURL?.absoluteString ?? "") {
-                    Button("Reconnect to new server") {
-                        Task { await reconnect() }
-                    }
-                    .disabled(isReconnecting)
-                }
-                Button("Disconnect server", role: .destructive) {
-                    appState.disconnectCompanion()
+            Section("Account") {
+                Button("Sign Out", role: .destructive) {
+                    Task { await appState.signOut() }
                 }
             }
         }
         .navigationTitle("Settings")
         .overlay { if isLoading { ProgressView() } }
         .task {
-            serverURLDraft = appState.companionServerURL?.absoluteString ?? ""
             await loadSettings()
-        }
-    }
-
-    private func reconnect() async {
-        let trimmed = serverURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed) else {
-            error = "Enter a valid server URL."
-            return
-        }
-        isReconnecting = true
-        defer { isReconnecting = false }
-        do {
-            appState.disconnectCompanion()
-            let session = try await appState.mobileOAuthCoordinator.signIn(serverURL: url)
-            try appState.completeCompanionOnboarding(
-                serverURL: session.serverURL,
-                accessToken: session.accessToken,
-                refreshToken: session.refreshToken
-            )
-        } catch {
-            self.error = error.localizedDescription
         }
     }
 
@@ -156,7 +121,7 @@ struct CompanionSettingsView: View {
         isLoading = true
         error = nil
         do {
-            settings = try await appState.mobileAPI.fetchSettings()
+            settings = try await appState.supabase.fetchSettings()
         } catch {
             self.error = error.localizedDescription
         }
@@ -169,7 +134,7 @@ struct CompanionSettingsView: View {
         settings = draft
         Task {
             do {
-                settings = try await appState.mobileAPI.updateSettings(body: draft)
+                settings = try await appState.supabase.updateSettings(draft)
             } catch {
                 self.error = error.localizedDescription
             }

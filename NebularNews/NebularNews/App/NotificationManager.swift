@@ -49,7 +49,29 @@ final class NotificationManager: NSObject, UIApplicationDelegate, UNUserNotifica
         }
     }
 
-    // MARK: - Token Upload
+    // MARK: - Token Upload (Supabase)
+
+    func uploadTokenIfNeeded(supabase: SupabaseManager) async {
+        guard let token = deviceToken else { return }
+        do {
+            try await supabase.registerDeviceToken(token: token)
+            logger.info("Device token uploaded via Supabase")
+        } catch {
+            logger.error("Failed to upload device token via Supabase: \(error.localizedDescription)")
+        }
+    }
+
+    func removeToken(supabase: SupabaseManager) async {
+        guard let token = deviceToken else { return }
+        do {
+            try await supabase.removeDeviceToken(token: token)
+            logger.info("Device token removed via Supabase")
+        } catch {
+            logger.error("Failed to remove device token via Supabase: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - Token Upload (Legacy MobileAPI)
 
     func uploadTokenIfNeeded(api: MobileAPIClient) async {
         guard let token = deviceToken else { return }

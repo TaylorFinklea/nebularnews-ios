@@ -33,24 +33,24 @@ enum BackgroundTaskManager {
     private static func handleRefreshTask(_ task: BGAppRefreshTask) {
         scheduleNextRefresh()
 
-        let appState = AppState(configuration: AppConfiguration.shared)
-        guard appState.hasCompanionSession else {
-            task.setTaskCompleted(success: true)
-            return
-        }
+        let supabase = SupabaseManager.shared
 
         let refreshTask = Task {
-            let api = appState.mobileAPI
-            _ = try? await api.triggerPull()
+            // Check if we have an active session
+            guard let _ = try? await supabase.session() else {
+                return
+            }
+
+            try? await supabase.triggerPull()
             try? await Task.sleep(for: .seconds(3))
 
-            if let today = try? await api.fetchToday() {
+            if let today = try? await supabase.fetchToday() {
                 await CompanionCache.shared.store(today, category: .today)
             }
-            if let articles = try? await api.fetchArticles() {
+            if let articles = try? await supabase.fetchArticles() {
                 await CompanionCache.shared.store(articles.articles, category: .articleList)
             }
-            if let saved = try? await api.fetchSavedArticles() {
+            if let saved = try? await supabase.fetchArticles(saved: true) {
                 await CompanionCache.shared.store(saved.articles, category: .savedArticles)
             }
 
