@@ -1,0 +1,17 @@
+[    1813ms] [ERROR] Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked. @ https://app.nebularnews.com/login:0
+[    1848ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://app.nebularnews.com/login:0
+[    6948ms] [ERROR] qt: Not found: /auth/apple
+    at dt (https://app.nebularnews.com/_app/immutable/chunks/entry.-CQLpqeU.js:1:22394)
+    at HTMLHtmlElement.<anonymous> (https://app.nebularnews.com/_app/immutable/chunks/entry.-CQLpqeU.js:1:27450) @ https://app.nebularnews.com/_app/immutable/entry/app.CpKZP0zt.js:1
+[    8873ms] Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'call')
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:76743)
+    at W (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:76669)
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:231731)
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:201972)
+[   30748ms] Uncaught (in promise) TypeError: Cannot read properties of undefined (reading 'call')
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:76743)
+    at W (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:76669)
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:231731)
+    at <anonymous> (https://appleid.cdn-apple.com/appleauth/static/jsj/N1641899617/profile/app.js:665:201972)
+[   37566ms] [ERROR] Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked. @ https://app.nebularnews.com/:0
+[   37963ms] [WARNING] <meta name="apple-mobile-web-app-capable" content="yes"> is deprecated. Please include <meta name="mobile-web-app-capable" content="yes"> @ https://app.nebularnews.com/:0

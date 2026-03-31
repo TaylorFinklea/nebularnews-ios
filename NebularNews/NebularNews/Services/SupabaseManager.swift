@@ -19,8 +19,8 @@ final class SupabaseManager: Sendable {
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanJjbHhleWpzcXlxc2p6amZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTk0OTIsImV4cCI6MjA5MDUzNTQ5Mn0.9j644tw6xud8GNW-J0X_sgtR_oyXGEoi59cN-O7wTHY",
             options: SupabaseClientOptions(
                 auth: .init(
-                    flowType: .pkce,
-                    redirectToURL: URL(string: "nebularnews://auth-callback")
+                    redirectToURL: URL(string: "nebularnews://auth-callback"),
+                    flowType: .pkce
                 )
             )
         )
@@ -91,10 +91,9 @@ final class SupabaseManager: Sendable {
 
         // Read filter
         if read == .unread {
-            // Articles that either have no read_state row or is_read = false
-            request = request.or("article_read_state.is_null,article_read_state.is_read.eq.false")
+            request = request.or("article_read_state.is.null,article_read_state.is_read.eq.false")
         } else if read == .read {
-            request = request.filter("article_read_state.is_read", operator: .eq, value: true)
+            request = request.eq("article_read_state.is_read", value: true)
         }
 
         // Saved filter
@@ -115,26 +114,26 @@ final class SupabaseManager: Sendable {
 
         // Tag filter
         if let tag {
-            request = request.filter("article_tags.tag_id", operator: .eq, value: tag)
+            request = request.eq("article_tags.tag_id", value: tag)
         }
 
-        // Sort
+        // Sort + Pagination
+        let effectiveLimit = max(limit, 1)
+        let sorted: PostgrestTransformBuilder
         switch sort {
         case .newest:
-            request = request.order("fetched_at", ascending: false)
+            sorted = request.order("fetched_at", ascending: false)
         case .oldest:
-            request = request.order("fetched_at", ascending: true)
+            sorted = request.order("fetched_at", ascending: true)
         case .score:
-            request = request.order("fetched_at", ascending: false)
+            sorted = request.order("fetched_at", ascending: false)
         case .unreadFirst:
-            request = request.order("fetched_at", ascending: false)
+            sorted = request.order("fetched_at", ascending: false)
         }
 
-        // Pagination
-        let effectiveLimit = max(limit, 1)
-        request = request.range(from: offset, to: offset + effectiveLimit - 1)
+        let finalRequest = sorted.range(from: offset, to: offset + effectiveLimit - 1)
 
-        let articles: [SupabaseArticleRow] = try await request.execute().value
+        let articles: [SupabaseArticleRow] = try await finalRequest.execute().value
         let items = articles.map { $0.toArticleListItem() }
 
         // Estimate total: if we got a full page, there are likely more
@@ -327,16 +326,17 @@ final class SupabaseManager: Sendable {
     func fetchTags(query: String? = nil, limit: Int? = nil) async throws -> [CompanionTagWithCount] {
         var request = client.from("tags")
             .select("id, name, slug, color, description, article_tags(count)")
-            .order("name")
 
         if let query, !query.isEmpty {
-            request = request.ilike("name", pattern: "%\(query)%")
-        }
-        if let limit {
-            request = request.limit(limit)
+            request = request.ilike("name", value: "%\(query)%")
         }
 
-        let rows: [SupabaseTagWithCountRow] = try await request.execute().value
+        var finalReq = request.order("name")
+        if let limit {
+            finalReq = finalReq.limit(limit)
+        }
+
+        let rows: [SupabaseTagWithCountRow] = try await finalReq.execute().value
         return rows.map { $0.toTagWithCount() }
     }
 
@@ -875,7 +875,7 @@ private struct SupabaseArticleRow: Decodable {
             score: score?.score,
             scoreLabel: score?.label,
             scoreStatus: score?.scoreStatus,
-            scoreConfidence: score?.confidence,
+            scoreConfidence: score?.confidence.map { Double($0) },
             sourceName: source?.feeds?.title,
             sourceFeedId: source?.feedId,
             tags: tags
