@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A2C57C4A2F7C4F7B0058043E /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C492F7C4F7B0058043E /* Auth */; };
+		A2C57C4C2F7C4F7B0058043E /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C4B2F7C4F7B0058043E /* Functions */; };
+		A2C57C4E2F7C4F7B0058043E /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C4D2F7C4F7B0058043E /* PostgREST */; };
+		A2C57C512F7C5D7C0058043E /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C502F7C5D7C0058043E /* Supabase */; };
 		A2D0B91B2F5A062A001EB670 /* NebularNewsKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2D0B91A2F5A062A001EB670 /* NebularNewsKit */; };
 /* End PBXBuildFile section */
 
@@ -56,6 +60,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A2C57C512F7C5D7C0058043E /* Supabase in Frameworks */,
+				A2C57C4E2F7C4F7B0058043E /* PostgREST in Frameworks */,
+				A2C57C4C2F7C4F7B0058043E /* Functions in Frameworks */,
+				A2C57C4A2F7C4F7B0058043E /* Auth in Frameworks */,
 				A2D0B91B2F5A062A001EB670 /* NebularNewsKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -77,12 +85,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		A2C57C4F2F7C5D7C0058043E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		A2D0B8E62F5A05FB001EB670 = {
 			isa = PBXGroup;
 			children = (
 				A2D0B8F12F5A05FB001EB670 /* NebularNews */,
 				A2D0B8FF2F5A05FB001EB670 /* NebularNewsTests */,
 				A2D0B9092F5A05FB001EB670 /* NebularNewsUITests */,
+				A2C57C4F2F7C5D7C0058043E /* Frameworks */,
 				A2D0B8F02F5A05FB001EB670 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -118,6 +134,10 @@
 			name = NebularNews;
 			packageProductDependencies = (
 				A2D0B91A2F5A062A001EB670 /* NebularNewsKit */,
+				A2C57C492F7C4F7B0058043E /* Auth */,
+				A2C57C4B2F7C4F7B0058043E /* Functions */,
+				A2C57C4D2F7C4F7B0058043E /* PostgREST */,
+				A2C57C502F7C5D7C0058043E /* Supabase */,
 			);
 			productName = NebularNews;
 			productReference = A2D0B8EF2F5A05FB001EB670 /* NebularNews.app */;
@@ -203,6 +223,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A2D0B9192F5A062A001EB670 /* XCLocalSwiftPackageReference "../NebularNewsKit" */,
+				A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A2D0B8F02F5A05FB001EB670 /* Products */;
@@ -605,7 +626,38 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		A2C57C492F7C4F7B0058043E /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		A2C57C4B2F7C4F7B0058043E /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		A2C57C4D2F7C4F7B0058043E /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		A2C57C502F7C5D7C0058043E /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A2C57C482F7C4F7B0058043E /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
 		A2D0B91A2F5A062A001EB670 /* NebularNewsKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NebularNewsKit;
