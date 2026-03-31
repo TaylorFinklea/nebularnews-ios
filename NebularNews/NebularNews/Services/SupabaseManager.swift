@@ -90,12 +90,9 @@ final class SupabaseManager: Sendable {
             request = request.textSearch("search_vector", query: query)
         }
 
-        // Read filter
-        if read == .unread {
-            request = request.or("article_read_state.is.null,article_read_state.is_read.eq.false")
-        } else if read == .read {
-            request = request.eq("article_read_state.is_read", value: true)
-        }
+        // Read filter — PostgREST can't do OR across joined tables,
+        // so we filter client-side after fetching
+        let readFilterClientSide = read
 
         // Saved filter
         if saved {
@@ -135,7 +132,17 @@ final class SupabaseManager: Sendable {
         let finalRequest = sorted.range(from: offset, to: offset + effectiveLimit - 1)
 
         let articles: [SupabaseArticleRow] = try await finalRequest.execute().value
-        let items = articles.map { $0.toArticleListItem() }
+        var items = articles.map { $0.toArticleListItem() }
+
+        // Apply read filter client-side (PostgREST can't OR across joined tables)
+        switch readFilterClientSide {
+        case .unread:
+            items = items.filter { $0.isRead != 1 }
+        case .read:
+            items = items.filter { $0.isRead == 1 }
+        case .all:
+            break
+        }
 
         // Estimate total: if we got a full page, there are likely more
         let total: Int
