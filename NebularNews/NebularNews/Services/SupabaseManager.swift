@@ -20,7 +20,8 @@ final class SupabaseManager: Sendable {
             options: SupabaseClientOptions(
                 auth: .init(
                     redirectToURL: URL(string: "nebularnews://auth-callback"),
-                    flowType: .pkce
+                    flowType: .pkce,
+                    emitLocalSessionAsInitialSession: true
                 )
             )
         )
