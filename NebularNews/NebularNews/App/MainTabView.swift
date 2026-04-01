@@ -31,7 +31,7 @@ struct MainTabView: View {
         .tint(.accent)
         .sheet(isPresented: $showSettings) {
             NavigationStack {
-                CompanionSettingsView()
+                ProfileView()
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Done") { showSettings = false }

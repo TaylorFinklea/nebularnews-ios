@@ -1,17 +1,19 @@
 import SwiftUI
 import NebularNewsKit
 
-// MARK: - Settings
+// MARK: - Advanced / Admin Settings
 
+/// Platform-wide settings for server polling, AI scoring, and retention.
+///
+/// Accessed from ``ProfileView`` via the "Advanced Settings" link.
+/// This will be gated behind an admin role check in a future update.
 struct CompanionSettingsView: View {
     @Environment(AppState.self) private var appState
-    @Environment(ThemeManager.self) private var themeManager
     @State private var settings: CompanionSettingsPayload?
     @State private var error: String?
     @State private var isLoading = true
 
     private static let pollIntervalRange = [5, 10, 15, 30, 60]
-    private static let summaryStyles = ["concise", "detailed", "bullet"]
     private static let scoringMethods = ["ai", "algorithmic", "hybrid"]
 
     var body: some View {
@@ -21,20 +23,26 @@ struct CompanionSettingsView: View {
             }
 
             if let settings {
-                Section("Server") {
-                    Picker("Poll interval", selection: pollIntervalBinding(settings)) {
-                        ForEach(Self.pollIntervalRange, id: \.self) { min in
-                            Text("\(min) min").tag(min)
-                        }
-                    }
-                    Picker("Summary style", selection: summaryStyleBinding(settings)) {
-                        ForEach(Self.summaryStyles, id: \.self) { style in
-                            Text(style.capitalized).tag(style)
-                        }
-                    }
+                // MARK: - AI Configuration
+
+                Section {
                     Picker("Scoring method", selection: scoringMethodBinding(settings)) {
                         ForEach(Self.scoringMethods, id: \.self) { method in
                             Text(method.capitalized).tag(method)
+                        }
+                    }
+                } header: {
+                    Label("AI Configuration", systemImage: "brain")
+                } footer: {
+                    Text("Controls how article relevance scores are computed.")
+                }
+
+                // MARK: - Feed Polling
+
+                Section {
+                    Picker("Poll interval", selection: pollIntervalBinding(settings)) {
+                        ForEach(Self.pollIntervalRange, id: \.self) { min in
+                            Text("\(min) min").tag(min)
                         }
                     }
                     HStack {
@@ -45,9 +53,15 @@ struct CompanionSettingsView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 60)
                     }
+                } header: {
+                    Label("Feed Polling", systemImage: "arrow.triangle.2.circlepath")
+                } footer: {
+                    Text("How often the server checks feeds for new articles.")
                 }
 
-                Section("Retention") {
+                // MARK: - Retention
+
+                Section {
                     HStack {
                         Text("Archive after")
                         Spacer()
@@ -68,50 +82,15 @@ struct CompanionSettingsView: View {
                         Text("days")
                             .foregroundStyle(.secondary)
                     }
-                    Text("Saved articles are never archived or deleted. 0 disables.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("News Brief & Notifications") {
-                    Toggle("Enabled", isOn: newsBriefEnabledBinding(settings))
-                    HStack {
-                        Text("Morning")
-                        Spacer()
-                        TextField("08:00", text: morningTimeBinding(settings))
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 70)
-                    }
-                    HStack {
-                        Text("Evening")
-                        Spacer()
-                        TextField("17:00", text: eveningTimeBinding(settings))
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 70)
-                    }
-                    Text("News briefs and notification digests are sent at these times. Use HH:mm format.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Section("Appearance") {
-                @Bindable var tm = themeManager
-                Picker("Theme", selection: $tm.mode) {
-                    ForEach(ThemeManager.Mode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-            }
-
-            Section("Account") {
-                Button("Sign Out", role: .destructive) {
-                    Task { await appState.signOut() }
+                } header: {
+                    Label("Retention", systemImage: "clock.arrow.circlepath")
+                } footer: {
+                    Text("Saved articles are never archived or deleted. Set 0 to disable.")
                 }
             }
         }
-        .navigationTitle("Settings")
-        .overlay { if isLoading { ProgressView() } }
+        .navigationTitle("Advanced Settings")
+        .overlay { if isLoading && settings == nil { ProgressView() } }
         .task {
             await loadSettings()
         }
@@ -148,38 +127,10 @@ struct CompanionSettingsView: View {
         )
     }
 
-    private func summaryStyleBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
-        Binding(
-            get: { current.summaryStyle },
-            set: { val in save { $0.summaryStyle = val } }
-        )
-    }
-
     private func scoringMethodBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
         Binding(
             get: { current.scoringMethod },
             set: { val in save { $0.scoringMethod = val } }
-        )
-    }
-
-    private func newsBriefEnabledBinding(_ current: CompanionSettingsPayload) -> Binding<Bool> {
-        Binding(
-            get: { current.newsBriefConfig.enabled },
-            set: { val in save { $0.newsBriefConfig.enabled = val } }
-        )
-    }
-
-    private func morningTimeBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
-        Binding(
-            get: { current.newsBriefConfig.morningTime },
-            set: { val in save { $0.newsBriefConfig.morningTime = val } }
-        )
-    }
-
-    private func eveningTimeBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
-        Binding(
-            get: { current.newsBriefConfig.eveningTime },
-            set: { val in save { $0.newsBriefConfig.eveningTime = val } }
         )
     }
 
