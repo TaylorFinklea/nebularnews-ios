@@ -94,10 +94,9 @@ final class SupabaseManager: Sendable {
         // so we filter client-side after fetching
         let readFilterClientSide = read
 
-        // Saved filter
-        if saved {
-            request = request.not("article_read_state.saved_at", operator: .is, value: "null")
-        }
+        // Saved filter — PostgREST can't filter on left-joined columns,
+        // so we filter client-side after fetching
+        let savedFilterClientSide = saved
 
         // Score filter
         if let minScore {
@@ -131,18 +130,23 @@ final class SupabaseManager: Sendable {
 
         let finalRequest = sorted.range(from: offset, to: offset + effectiveLimit - 1)
 
-        let articles: [SupabaseArticleRow] = try await finalRequest.execute().value
-        var items = articles.map { $0.toArticleListItem() }
+        var articles: [SupabaseArticleRow] = try await finalRequest.execute().value
 
-        // Apply read filter client-side (PostgREST can't OR across joined tables)
+        // Apply filters client-side (PostgREST can't filter on left-joined columns)
         switch readFilterClientSide {
         case .unread:
-            items = items.filter { $0.isRead != 1 }
+            articles = articles.filter { $0.articleReadState?.first?.isRead != true }
         case .read:
-            items = items.filter { $0.isRead == 1 }
+            articles = articles.filter { $0.articleReadState?.first?.isRead == true }
         case .all:
             break
         }
+
+        if savedFilterClientSide {
+            articles = articles.filter { $0.articleReadState?.first?.savedAt != nil }
+        }
+
+        let items = articles.map { $0.toArticleListItem() }
 
         // Estimate total: if we got a full page, there are likely more
         let total: Int
