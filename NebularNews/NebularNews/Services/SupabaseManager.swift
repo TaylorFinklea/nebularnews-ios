@@ -197,7 +197,7 @@ final class SupabaseManager: Sendable {
                 userId: userId.uuidString,
                 isRead: isRead,
                 readAt: isRead ? Date().ISO8601Format() : nil
-            ))
+            ), onConflict: "article_id,user_id")
             .execute()
     }
 
@@ -211,7 +211,7 @@ final class SupabaseManager: Sendable {
                 articleId: id,
                 userId: userId.uuidString,
                 savedAt: savedAt
-            ))
+            ), onConflict: "article_id,user_id")
             .execute()
 
         return SaveResponse(articleId: id, saved: saved, savedAt: savedAt)
@@ -231,7 +231,7 @@ final class SupabaseManager: Sendable {
                 articleId: articleId,
                 userId: userId.uuidString,
                 value: value
-            ))
+            ), onConflict: "article_id,user_id")
             .select()
             .single()
             .execute()
@@ -300,7 +300,7 @@ final class SupabaseManager: Sendable {
                 tagId: tagId,
                 userId: userId.uuidString,
                 source: "manual"
-            ))
+            ), onConflict: "article_id,tag_id,user_id")
             .execute()
 
         // Return updated tags for this article
@@ -419,7 +419,7 @@ final class SupabaseManager: Sendable {
 
         // Subscribe the user
         try await client.from("user_feed_subscriptions")
-            .upsert(FeedSubscriptionInsert(userId: userId.uuidString, feedId: feedId))
+            .upsert(FeedSubscriptionInsert(userId: userId.uuidString, feedId: feedId), onConflict: "user_id,feed_id")
             .execute()
 
         return feedId
@@ -637,7 +637,7 @@ final class SupabaseManager: Sendable {
         }
 
         try await client.from("user_settings")
-            .upsert(upserts)
+            .upsert(upserts, onConflict: "user_id,key")
             .execute()
 
         return settings
@@ -755,7 +755,7 @@ final class SupabaseManager: Sendable {
         guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
 
         try await client.from("device_tokens")
-            .upsert(DeviceTokenUpsert(userId: userId.uuidString, token: token, platform: "ios"))
+            .upsert(DeviceTokenUpsert(userId: userId.uuidString, token: token, platform: "ios"), onConflict: "token")
             .execute()
     }
 
