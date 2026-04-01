@@ -13,6 +13,7 @@ struct NebularNewsApp: App {
     @UIApplicationDelegateAdaptor(NotificationManager.self) var notificationManager
 
     let modelContainer: ModelContainer
+    let cacheContainer: ModelContainer
 
     @State private var appState: AppState
     @State private var themeManager = ThemeManager()
@@ -34,8 +35,37 @@ struct NebularNewsApp: App {
             }
         }
 
+        // Separate SwiftData container for the Supabase cache layer
+        do {
+            let cacheSchema = Schema([CachedArticle.self, CachedFeed.self])
+            let cacheConfig = ModelConfiguration(
+                "Cache",
+                schema: cacheSchema,
+                isStoredInMemoryOnly: false,
+                allowsSave: true,
+                groupContainer: .none,
+                cloudKitDatabase: .none
+            )
+            cacheContainer = try ModelContainer(for: cacheSchema, configurations: [cacheConfig])
+        } catch {
+            appLogger.error("Cache ModelContainer creation failed: \(error, privacy: .public)")
+            // Fall back to in-memory cache
+            do {
+                let cacheSchema = Schema([CachedArticle.self, CachedFeed.self])
+                let cacheConfig = ModelConfiguration(
+                    schema: cacheSchema,
+                    isStoredInMemoryOnly: true,
+                    cloudKitDatabase: .none
+                )
+                cacheContainer = try ModelContainer(for: cacheSchema, configurations: [cacheConfig])
+            } catch {
+                fatalError("Failed to create even an in-memory cache container: \(error)")
+            }
+        }
+
         let appState = AppState(configuration: configuration)
         appState.containerFallbackReason = fallbackReason
+        appState.setupArticleCache(modelContext: cacheContainer.mainContext)
         _appState = State(initialValue: appState)
 
         BackgroundTaskManager.register(modelContainer: modelContainer)

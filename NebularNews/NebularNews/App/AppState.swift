@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 import NebularNewsKit
 
 @MainActor
@@ -26,6 +27,9 @@ final class AppState {
     // call-sites that haven't been migrated yet can still compile.
     // Once every view is migrated, this property can be removed.
     let mobileAPI: MobileAPIClient
+
+    /// SwiftData local cache for instant loads and offline reading.
+    private(set) var articleCache: ArticleCache?
 
     var containerFallbackReason: ContainerFallbackReason?
 
@@ -74,6 +78,12 @@ final class AppState {
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
         self.supabase = SupabaseManager.shared
         self.mobileAPI = MobileAPIClient(configuration: resolvedConfiguration, keychain: keychain)
+    }
+
+    /// Initialize the SwiftData article cache. Call once after the model container is available.
+    func setupArticleCache(modelContext: ModelContext) {
+        guard articleCache == nil else { return }
+        articleCache = ArticleCache(modelContext: modelContext)
     }
 
     /// Check if the user already has an active Supabase auth session.

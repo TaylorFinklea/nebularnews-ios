@@ -213,21 +213,52 @@ struct CompanionArticlesView: View {
     }
 
     private func loadArticles() async {
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let payload = try await appState.supabase.fetchArticles(
-                query: query,
-                offset: 0,
-                read: filter.readFilter,
+        // Show cached data instantly while network request is in flight
+        if articles.isEmpty, let cache = appState.articleCache {
+            let cached = cache.getCachedArticles(
+                readFilter: filter.readFilter,
                 minScore: filter.minScore,
-                sort: filter.sortOrder
+                sortOrder: filter.sortOrder,
+                query: query
             )
+            if !cached.isEmpty {
+                articles = ArticleCache.toListItems(cached)
+                total = cached.count
+            }
+        }
+
+        isLoading = articles.isEmpty
+        defer { isLoading = false }
+
+        do {
+            let payload: CompanionArticlesPayload
+            if let cache = appState.articleCache {
+                payload = try await cache.syncArticles(
+                    from: appState.supabase,
+                    query: query,
+                    read: filter.readFilter,
+                    minScore: filter.minScore,
+                    sort: filter.sortOrder
+                )
+            } else {
+                payload = try await appState.supabase.fetchArticles(
+                    query: query,
+                    offset: 0,
+                    read: filter.readFilter,
+                    minScore: filter.minScore,
+                    sort: filter.sortOrder
+                )
+            }
             articles = payload.articles
             total = payload.total
             errorMessage = ""
         } catch {
-            errorMessage = error.localizedDescription
+            // Keep showing cached data on error
+            if articles.isEmpty {
+                errorMessage = error.localizedDescription
+            } else {
+                errorMessage = "Offline — showing cached articles"
+            }
         }
     }
 
@@ -236,13 +267,25 @@ struct CompanionArticlesView: View {
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let payload = try await appState.supabase.fetchArticles(
-                query: query,
-                offset: articles.count,
-                read: filter.readFilter,
-                minScore: filter.minScore,
-                sort: filter.sortOrder
-            )
+            let payload: CompanionArticlesPayload
+            if let cache = appState.articleCache {
+                payload = try await cache.syncArticles(
+                    from: appState.supabase,
+                    query: query,
+                    read: filter.readFilter,
+                    minScore: filter.minScore,
+                    sort: filter.sortOrder,
+                    offset: articles.count
+                )
+            } else {
+                payload = try await appState.supabase.fetchArticles(
+                    query: query,
+                    offset: articles.count,
+                    read: filter.readFilter,
+                    minScore: filter.minScore,
+                    sort: filter.sortOrder
+                )
+            }
             articles.append(contentsOf: payload.articles)
             total = payload.total
             errorMessage = ""
@@ -253,15 +296,21 @@ struct CompanionArticlesView: View {
 
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newReadState = article.isRead != 1
+        // Optimistically update cache
+        appState.articleCache?.updateArticle(id: article.id, isRead: newReadState)
         do {
             try await appState.supabase.setRead(articleId: article.id, isRead: newReadState)
             await loadArticles()
         } catch {
+            // Revert on failure
+            appState.articleCache?.updateArticle(id: article.id, isRead: !newReadState)
             errorMessage = error.localizedDescription
         }
     }
 
     private func react(_ article: CompanionArticleListItem, value: Int) async {
+        // Optimistically update cache
+        appState.articleCache?.updateArticle(id: article.id, reactionValue: value)
         do {
             _ = try await appState.supabase.setReaction(
                 articleId: article.id,

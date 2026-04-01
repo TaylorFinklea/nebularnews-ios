@@ -157,6 +157,16 @@ struct CompanionTodayView: View {
             payload = result
             errorMessage = ""
             await CompanionCache.shared.store(result, category: .today)
+
+            // Cache today's articles in SwiftData for offline access
+            if let cache = appState.articleCache {
+                var todayArticles: [CompanionArticleListItem] = []
+                if let hero = result.hero { todayArticles.append(hero) }
+                todayArticles.append(contentsOf: result.upNext)
+                for item in todayArticles {
+                    cache.updateArticleFromListItem(item)
+                }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
