@@ -274,7 +274,7 @@ private struct CompanionOPMLImportSheet: View {
             }
             .fileImporter(
                 isPresented: $showingFilePicker,
-                allowedContentTypes: [.xml, .plainText],
+                allowedContentTypes: [.xml, .plainText, .data],
                 allowsMultipleSelection: false
             ) { result in
                 guard let url = try? result.get().first else { return }
