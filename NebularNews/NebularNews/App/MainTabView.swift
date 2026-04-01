@@ -9,11 +9,11 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             Tab("Today", systemImage: "sun.max") {
-                DashboardView()
+                CompanionTodayView(showSettings: $showSettings)
             }
 
             Tab("Articles", systemImage: "doc.text") {
-                ArticleListView()
+                CompanionArticlesView(showSettings: $showSettings)
             }
 
             Tab("Discover", systemImage: "safari") {
@@ -31,7 +31,7 @@ struct MainTabView: View {
         .tint(.accent)
         .sheet(isPresented: $showSettings) {
             NavigationStack {
-                SettingsView()
+                CompanionSettingsView()
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("Done") { showSettings = false }
