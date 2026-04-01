@@ -384,7 +384,7 @@ final class SupabaseManager: Sendable {
 
         let rows: [SupabaseFeedRow] = try await client.from("user_feed_subscriptions")
             .select("""
-                feed_id,
+                feed_id, paused, max_articles_per_day, min_score,
                 feeds(id, url, title, site_url, last_polled_at, next_poll_at, error_count, disabled, article_sources(count))
             """)
             .eq("user_id", value: userId.uuidString)
@@ -433,6 +433,30 @@ final class SupabaseManager: Sendable {
             .delete()
             .eq("user_id", value: userId.uuidString)
             .eq("feed_id", value: id)
+            .execute()
+    }
+
+    func updateFeedSettings(feedId: String, paused: Bool? = nil, maxArticlesPerDay: Int? = nil, minScore: Int? = nil) async throws {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        var updates: [String: AnyJSON] = [
+            "updated_at": AnyJSON.string(Date().ISO8601Format())
+        ]
+        if let paused {
+            updates["paused"] = AnyJSON.bool(paused)
+            updates["paused_at"] = paused ? AnyJSON.string(Date().ISO8601Format()) : AnyJSON.null
+        }
+        if let maxArticlesPerDay {
+            updates["max_articles_per_day"] = maxArticlesPerDay > 0 ? AnyJSON.integer(maxArticlesPerDay) : AnyJSON.null
+        }
+        if let minScore {
+            updates["min_score"] = minScore > 0 ? AnyJSON.integer(minScore) : AnyJSON.null
+        }
+
+        try await client.from("user_feed_subscriptions")
+            .update(updates)
+            .eq("user_id", value: userId.uuidString)
+            .eq("feed_id", value: feedId)
             .execute()
     }
 
@@ -1197,10 +1221,16 @@ private struct SupabaseArticleTagJoinRow: Decodable {
 private struct SupabaseFeedRow: Decodable {
     let feedId: String?
     let feeds: FeedDetailRow?
+    let paused: Bool?
+    let maxArticlesPerDay: Int?
+    let minScore: Int?
 
     enum CodingKeys: String, CodingKey {
         case feedId = "feed_id"
         case feeds
+        case paused
+        case maxArticlesPerDay = "max_articles_per_day"
+        case minScore = "min_score"
     }
 
     func toCompanionFeed() -> CompanionFeed? {
@@ -1214,7 +1244,10 @@ private struct SupabaseFeedRow: Decodable {
             nextPollAt: feed.nextPollAt.flatMap { timestampMillis($0) },
             errorCount: feed.errorCount,
             disabled: feed.disabled == true ? 1 : 0,
-            articleCount: feed.articleSources?.first?.count
+            articleCount: feed.articleSources?.first?.count,
+            paused: paused,
+            maxArticlesPerDay: maxArticlesPerDay,
+            minScore: minScore
         )
     }
 }

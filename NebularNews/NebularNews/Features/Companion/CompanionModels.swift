@@ -203,6 +203,10 @@ struct CompanionFeed: Codable, Identifiable {
     let errorCount: Int?
     let disabled: Int?
     let articleCount: Int?
+    // Per-feed user controls
+    var paused: Bool?
+    var maxArticlesPerDay: Int?
+    var minScore: Int?
 }
 
 struct CompanionReactionResponse: Codable {

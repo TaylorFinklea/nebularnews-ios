@@ -14,6 +14,7 @@ struct CompanionFeedsView: View {
     @State private var showingAddFeed = false
     @State private var showingImport = false
     @State private var deletingFeed: CompanionFeed?
+    @State private var editingFeed: CompanionFeed?
 
     var body: some View {
         List {
@@ -55,8 +56,12 @@ struct CompanionFeedsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                        if feed.disabled == 1 {
-                            Label("Disabled", systemImage: "pause.circle.fill")
+                        if feed.paused == true {
+                            Label("Paused", systemImage: "pause.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        } else if feed.disabled == 1 {
+                            Label("Disabled", systemImage: "xmark.circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(.red)
                         } else if let errorCount = feed.errorCount, errorCount > 0 {
@@ -67,11 +72,45 @@ struct CompanionFeedsView: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .opacity(feed.paused == true ? 0.5 : 1.0)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
                         deletingFeed = feed
                     } label: {
                         Label("Delete", systemImage: "trash")
+                    }
+                }
+                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                    Button {
+                        Task {
+                            let newPaused = !(feed.paused ?? false)
+                            try? await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            await loadFeeds()
+                        }
+                    } label: {
+                        Label(feed.paused == true ? "Resume" : "Pause", systemImage: feed.paused == true ? "play.fill" : "pause.fill")
+                    }
+                    .tint(feed.paused == true ? .green : .orange)
+                }
+                .contextMenu {
+                    Button {
+                        editingFeed = feed
+                    } label: {
+                        Label("Feed Settings", systemImage: "slider.horizontal.3")
+                    }
+                    Button {
+                        Task {
+                            let newPaused = !(feed.paused ?? false)
+                            try? await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            await loadFeeds()
+                        }
+                    } label: {
+                        Label(feed.paused == true ? "Resume Feed" : "Pause Feed", systemImage: feed.paused == true ? "play.fill" : "pause.fill")
+                    }
+                    Button(role: .destructive) {
+                        deletingFeed = feed
+                    } label: {
+                        Label("Unsubscribe", systemImage: "trash")
                     }
                 }
             }
@@ -150,9 +189,15 @@ struct CompanionFeedsView: View {
         } message: { feed in
             Text("Delete \"\(feed.title ?? feed.url)\" and all its exclusive articles?")
         }
+        .sheet(item: $editingFeed) { feed in
+            FeedSettingsSheet(feed: feed) {
+                Task { await loadFeeds() }
+            }
+        }
     }
 
     private func feedStatusColor(_ feed: CompanionFeed) -> Color {
+        if feed.paused == true { return .orange }
         if feed.disabled == 1 { return .gray }
         if let errorCount = feed.errorCount, errorCount >= 3 { return .red }
         if let errorCount = feed.errorCount, errorCount > 0 { return .yellow }
@@ -287,5 +332,97 @@ private struct CompanionOPMLImportSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+// MARK: - Feed Settings Sheet
+
+private struct FeedSettingsSheet: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    let feed: CompanionFeed
+    let onSave: () -> Void
+
+    @State private var paused: Bool
+    @State private var maxArticlesPerDay: String
+    @State private var minScore: Int
+    @State private var isSaving = false
+
+    init(feed: CompanionFeed, onSave: @escaping () -> Void) {
+        self.feed = feed
+        self.onSave = onSave
+        _paused = State(initialValue: feed.paused ?? false)
+        _maxArticlesPerDay = State(initialValue: feed.maxArticlesPerDay.map { String($0) } ?? "")
+        _minScore = State(initialValue: feed.minScore ?? 0)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("Paused", isOn: $paused)
+                } header: {
+                    Text("Status")
+                } footer: {
+                    Text("Paused feeds stay subscribed but their articles are hidden until you resume.")
+                }
+
+                Section {
+                    HStack {
+                        Text("Max articles per day")
+                        Spacer()
+                        TextField("Unlimited", text: $maxArticlesPerDay)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+                } footer: {
+                    Text("Limit how many articles you see from this feed per day. Leave blank for unlimited.")
+                }
+
+                Section {
+                    Picker("Minimum score", selection: $minScore) {
+                        Text("Any").tag(0)
+                        Text("1+").tag(1)
+                        Text("2+").tag(2)
+                        Text("3+").tag(3)
+                        Text("4+").tag(4)
+                        Text("5 only").tag(5)
+                    }
+                } footer: {
+                    Text("Only show articles from this feed that meet the minimum score threshold.")
+                }
+            }
+            .navigationTitle(feed.title ?? "Feed Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task { await save() }
+                    }
+                    .disabled(isSaving)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        let maxPerDay = Int(maxArticlesPerDay) ?? 0
+        try? await appState.supabase.updateFeedSettings(
+            feedId: feed.id,
+            paused: paused,
+            maxArticlesPerDay: maxPerDay,
+            minScore: minScore
+        )
+        onSave()
+        dismiss()
     }
 }
