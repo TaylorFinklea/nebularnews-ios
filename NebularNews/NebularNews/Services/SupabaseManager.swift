@@ -115,8 +115,12 @@ final class SupabaseManager: Sendable {
             request = request.eq("article_tags.tag_id", value: tag)
         }
 
-        // Sort + Pagination
+        // Overfetch to compensate for client-side filtering (read state, saved, feed limits).
+        // We fetch 4x the requested limit to ensure we have enough after filtering.
         let effectiveLimit = max(limit, 1)
+        let fetchLimit = effectiveLimit * 4
+        let feedLimits = try await getFeedLimits(userId: userId)
+
         let sorted: PostgrestTransformBuilder
         switch sort {
         case .newest:
@@ -129,7 +133,7 @@ final class SupabaseManager: Sendable {
             sorted = request.order("fetched_at", ascending: false)
         }
 
-        let finalRequest = sorted.range(from: offset, to: offset + effectiveLimit - 1)
+        let finalRequest = sorted.range(from: offset, to: offset + fetchLimit - 1)
 
         var articles: [SupabaseArticleRow] = try await finalRequest.execute().value
 
@@ -148,35 +152,29 @@ final class SupabaseManager: Sendable {
         }
 
         // Apply per-feed daily article limits
-        if !savedFilterClientSide {
-            let feedLimits = try await getFeedLimits(userId: userId)
-            if !feedLimits.isEmpty {
-                var feedCounts: [String: Int] = [:]
-                articles = articles.filter { article in
-                    guard let source = article.articleSources?.first,
-                          let feedId = source.feedId ?? source.feeds?.id else { return true }
-                    guard let limit = feedLimits[feedId] else { return true }
-                    let count = feedCounts[feedId, default: 0]
-                    if count >= limit { return false }
-                    feedCounts[feedId] = count + 1
-                    return true
-                }
+        if !savedFilterClientSide && !feedLimits.isEmpty {
+            var feedCounts: [String: Int] = [:]
+            articles = articles.filter { article in
+                guard let source = article.articleSources?.first,
+                      let feedId = source.feedId ?? source.feeds?.id else { return true }
+                guard let limit = feedLimits[feedId] else { return true }
+                let count = feedCounts[feedId, default: 0]
+                if count >= limit { return false }
+                feedCounts[feedId] = count + 1
+                return true
             }
         }
 
-        let items = articles.map { $0.toArticleListItem() }
+        // Trim to requested page size after all client-side filtering
+        let trimmed = Array(articles.prefix(effectiveLimit))
+        let items = trimmed.map { $0.toArticleListItem() }
 
-        // Estimate total: if we got a full page, there are likely more
+        // Total estimate: use the pre-filter count from the server
         let total: Int
-        if items.count < effectiveLimit {
-            total = offset + items.count
-        } else {
-            // Use a count query for accurate total
-            let countResponse = try await client.from("articles")
-                .select("id", head: true, count: .exact)
-                .execute()
-            total = countResponse.count ?? (offset + items.count)
-        }
+        let countResponse = try await client.from("articles")
+            .select("id", head: true, count: .exact)
+            .execute()
+        total = countResponse.count ?? (offset + items.count)
 
         return ArticlesPayload(
             articles: items,
