@@ -147,6 +147,23 @@ final class SupabaseManager: Sendable {
             articles = articles.filter { $0.articleReadState?.first?.savedAt != nil }
         }
 
+        // Apply per-feed daily article limits
+        if !savedFilterClientSide {
+            let feedLimits = try await getFeedLimits(userId: userId)
+            if !feedLimits.isEmpty {
+                var feedCounts: [String: Int] = [:]
+                articles = articles.filter { article in
+                    guard let source = article.articleSources?.first,
+                          let feedId = source.feedId ?? source.feeds?.id else { return true }
+                    guard let limit = feedLimits[feedId] else { return true }
+                    let count = feedCounts[feedId, default: 0]
+                    if count >= limit { return false }
+                    feedCounts[feedId] = count + 1
+                    return true
+                }
+            }
+        }
+
         let items = articles.map { $0.toArticleListItem() }
 
         // Estimate total: if we got a full page, there are likely more
@@ -380,6 +397,31 @@ final class SupabaseManager: Sendable {
             .delete()
             .eq("id", value: id)
             .execute()
+    }
+
+    /// Returns feed_id → max_articles_per_day for feeds that have a limit set.
+    private func getFeedLimits(userId: UUID) async throws -> [String: Int] {
+        struct FeedLimitRow: Decodable {
+            let feedId: String
+            let maxArticlesPerDay: Int?
+            enum CodingKeys: String, CodingKey {
+                case feedId = "feed_id"
+                case maxArticlesPerDay = "max_articles_per_day"
+            }
+        }
+        let rows: [FeedLimitRow] = try await client.from("user_feed_subscriptions")
+            .select("feed_id, max_articles_per_day")
+            .eq("user_id", value: userId.uuidString)
+            .not("max_articles_per_day", operator: .is, value: "null")
+            .execute()
+            .value
+        var limits: [String: Int] = [:]
+        for row in rows {
+            if let max = row.maxArticlesPerDay, max > 0 {
+                limits[row.feedId] = max
+            }
+        }
+        return limits
     }
 
     // MARK: - Feeds
