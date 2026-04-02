@@ -244,6 +244,7 @@ struct CompanionArticlesView: View {
                 payload = try await appState.supabase.fetchArticles(
                     query: query,
                     offset: 0,
+                    limit: 100,
                     read: filter.readFilter,
                     minScore: filter.minScore,
                     sort: filter.sortOrder
@@ -281,6 +282,7 @@ struct CompanionArticlesView: View {
                 payload = try await appState.supabase.fetchArticles(
                     query: query,
                     offset: articles.count,
+                    limit: 100,
                     read: filter.readFilter,
                     minScore: filter.minScore,
                     sort: filter.sortOrder
