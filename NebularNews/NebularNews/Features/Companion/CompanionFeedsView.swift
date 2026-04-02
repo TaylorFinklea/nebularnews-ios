@@ -73,6 +73,12 @@ struct CompanionFeedsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                         }
+
+                        if let mode = feed.scrapeMode, mode != "rss_only" {
+                            Label(mode == "link_target" ? "Link scraper" : "Page scraper", systemImage: "globe")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -360,6 +366,9 @@ private struct FeedSettingsSheet: View {
     @State private var paused: Bool
     @State private var maxArticlesPerDay: String
     @State private var minScore: Int
+    @State private var scrapeMode: String
+    @State private var scrapeProvider: String
+    @State private var feedType: String
     @State private var isSaving = false
 
     init(feed: CompanionFeed, onSave: @escaping () -> Void) {
@@ -368,6 +377,9 @@ private struct FeedSettingsSheet: View {
         _paused = State(initialValue: feed.paused ?? false)
         _maxArticlesPerDay = State(initialValue: feed.maxArticlesPerDay.map { String($0) } ?? "")
         _minScore = State(initialValue: feed.minScore ?? 0)
+        _scrapeMode = State(initialValue: feed.scrapeMode ?? "rss_only")
+        _scrapeProvider = State(initialValue: feed.scrapeProvider ?? "")
+        _feedType = State(initialValue: feed.feedType ?? "standard")
     }
 
     var body: some View {
@@ -408,6 +420,57 @@ private struct FeedSettingsSheet: View {
                 } footer: {
                     Text("Only show articles from this feed that meet the minimum score threshold.")
                 }
+
+                Section {
+                    Picker("Scrape mode", selection: $scrapeMode) {
+                        Text("RSS Only").tag("rss_only")
+                        Text("Full Page").tag("full_page")
+                        Text("Link Target").tag("link_target")
+                    }
+
+                    if scrapeMode != "rss_only" {
+                        Picker("Provider", selection: $scrapeProvider) {
+                            Text("Auto").tag("")
+                            Text("Steel").tag("steel")
+                            Text("Browserless").tag("browserless")
+                        }
+
+                        Picker("Feed type", selection: $feedType) {
+                            Text("Standard").tag("standard")
+                            Text("Aggregator").tag("aggregator")
+                        }
+                    }
+                } header: {
+                    Text("Content Extraction")
+                } footer: {
+                    switch scrapeMode {
+                    case "full_page":
+                        Text("Fetches and extracts the full article from the feed's own page.")
+                    case "link_target":
+                        Text("Follows outbound links (for aggregators like Hacker News) and extracts the target article.")
+                    default:
+                        Text("Uses only the content provided in the RSS feed.")
+                    }
+                }
+
+                if (feed.avgExtractionQuality ?? 0) > 0 || (feed.scrapeArticleCount ?? 0) > 0 {
+                    Section("Extraction Stats") {
+                        if let quality = feed.avgExtractionQuality, quality > 0 {
+                            LabeledContent("Avg quality", value: "\(Int(quality * 100))%")
+                        }
+                        if let count = feed.scrapeArticleCount, count > 0 {
+                            LabeledContent("Scraped articles", value: "\(count)")
+                        }
+                        if let errors = feed.scrapeErrorCount, errors > 0 {
+                            LabeledContent("Errors", value: "\(errors)")
+                        }
+                        if let lastError = feed.lastScrapeError, !lastError.isEmpty {
+                            Text(lastError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+                }
             }
             .navigationTitle(feed.title ?? "Feed Settings")
             .inlineNavigationBarTitle()
@@ -423,7 +486,7 @@ private struct FeedSettingsSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func save() async {
@@ -437,6 +500,19 @@ private struct FeedSettingsSheet: View {
             maxArticlesPerDay: maxPerDay,
             minScore: minScore
         )
+
+        let scrapeChanged = scrapeMode != (feed.scrapeMode ?? "rss_only")
+            || scrapeProvider != (feed.scrapeProvider ?? "")
+            || feedType != (feed.feedType ?? "standard")
+        if scrapeChanged {
+            try? await appState.supabase.updateFeedScrapeConfig(
+                feedId: feed.id,
+                scrapeMode: scrapeMode,
+                scrapeProvider: scrapeProvider.isEmpty ? nil : scrapeProvider,
+                feedType: feedType
+            )
+        }
+
         onSave()
         dismiss()
     }

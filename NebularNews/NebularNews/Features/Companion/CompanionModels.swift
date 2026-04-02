@@ -207,6 +207,14 @@ struct CompanionFeed: Codable, Identifiable {
     var paused: Bool?
     var maxArticlesPerDay: Int?
     var minScore: Int?
+    // Feed scraping
+    var scrapeMode: String?
+    var scrapeProvider: String?
+    var feedType: String?
+    var avgExtractionQuality: Double?
+    var scrapeArticleCount: Int?
+    var scrapeErrorCount: Int?
+    var lastScrapeError: String?
 }
 
 struct CompanionReactionResponse: Codable {

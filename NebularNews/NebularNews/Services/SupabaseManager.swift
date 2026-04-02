@@ -443,7 +443,7 @@ final class SupabaseManager: Sendable {
         let rows: [SupabaseFeedRow] = try await client.from("user_feed_subscriptions")
             .select("""
                 feed_id, paused, max_articles_per_day, min_score,
-                feeds(id, url, title, site_url, last_polled_at, next_poll_at, error_count, disabled, article_sources(count))
+                feeds(id, url, title, site_url, last_polled_at, next_poll_at, error_count, disabled, scrape_mode, scrape_provider, feed_type, avg_extraction_quality, scrape_article_count, scrape_error_count, last_scrape_error, article_sources(count))
             """)
             .eq("user_id", value: userId.uuidString)
             .execute()
@@ -515,6 +515,23 @@ final class SupabaseManager: Sendable {
             .update(updates)
             .eq("user_id", value: userId.uuidString)
             .eq("feed_id", value: feedId)
+            .execute()
+    }
+
+    func updateFeedScrapeConfig(feedId: String, scrapeMode: String, scrapeProvider: String?, feedType: String) async throws {
+        var updates: [String: AnyJSON] = [
+            "scrape_mode": AnyJSON.string(scrapeMode),
+            "feed_type": AnyJSON.string(feedType),
+            "updated_at": AnyJSON.string(Date().ISO8601Format())
+        ]
+        if let provider = scrapeProvider, !provider.isEmpty {
+            updates["scrape_provider"] = AnyJSON.string(provider)
+        } else {
+            updates["scrape_provider"] = AnyJSON.null
+        }
+        try await client.from("feeds")
+            .update(updates)
+            .eq("id", value: feedId)
             .execute()
     }
 
@@ -1294,7 +1311,14 @@ private struct SupabaseFeedRow: Decodable {
             articleCount: feed.articleSources?.first?.count,
             paused: paused,
             maxArticlesPerDay: maxArticlesPerDay,
-            minScore: minScore
+            minScore: minScore,
+            scrapeMode: feed.scrapeMode,
+            scrapeProvider: feed.scrapeProvider,
+            feedType: feed.feedType,
+            avgExtractionQuality: feed.avgExtractionQuality,
+            scrapeArticleCount: feed.scrapeArticleCount,
+            scrapeErrorCount: feed.scrapeErrorCount,
+            lastScrapeError: feed.lastScrapeError
         )
     }
 }
@@ -1308,6 +1332,13 @@ private struct FeedDetailRow: Decodable {
     let nextPollAt: String?
     let errorCount: Int?
     let disabled: Bool?
+    let scrapeMode: String?
+    let scrapeProvider: String?
+    let feedType: String?
+    let avgExtractionQuality: Double?
+    let scrapeArticleCount: Int?
+    let scrapeErrorCount: Int?
+    let lastScrapeError: String?
     let articleSources: [CountRow]?
 
     enum CodingKeys: String, CodingKey {
@@ -1317,6 +1348,13 @@ private struct FeedDetailRow: Decodable {
         case nextPollAt = "next_poll_at"
         case errorCount = "error_count"
         case disabled
+        case scrapeMode = "scrape_mode"
+        case scrapeProvider = "scrape_provider"
+        case feedType = "feed_type"
+        case avgExtractionQuality = "avg_extraction_quality"
+        case scrapeArticleCount = "scrape_article_count"
+        case scrapeErrorCount = "scrape_error_count"
+        case lastScrapeError = "last_scrape_error"
         case articleSources = "article_sources"
     }
 }
