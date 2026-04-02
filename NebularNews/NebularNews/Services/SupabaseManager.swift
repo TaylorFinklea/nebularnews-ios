@@ -166,15 +166,28 @@ final class SupabaseManager: Sendable {
         }
 
         // Trim to requested page size after all client-side filtering
+        let postFilterCount = articles.count
         let trimmed = Array(articles.prefix(effectiveLimit))
         let items = trimmed.map { $0.toArticleListItem() }
 
-        // Total estimate: use the pre-filter count from the server
+        // Total: if client-side filters are active, use post-filter count
+        // (server count doesn't reflect read/saved/feed-limit filters)
+        let hasClientFilters = readFilterClientSide != .all || savedFilterClientSide || !feedLimits.isEmpty
         let total: Int
-        let countResponse = try await client.from("articles")
-            .select("id", head: true, count: .exact)
-            .execute()
-        total = countResponse.count ?? (offset + items.count)
+        if hasClientFilters {
+            // If we got fewer than we fetched, we've seen everything
+            if postFilterCount < fetchLimit {
+                total = offset + postFilterCount
+            } else {
+                // Estimate: there are likely more beyond what we fetched
+                total = offset + postFilterCount + effectiveLimit
+            }
+        } else {
+            let countResponse = try await client.from("articles")
+                .select("id", head: true, count: .exact)
+                .execute()
+            total = countResponse.count ?? (offset + items.count)
+        }
 
         return ArticlesPayload(
             articles: items,
