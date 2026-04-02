@@ -1,4 +1,5 @@
 import Auth
+import NebularNewsKit
 import SwiftUI
 
 /// User-facing profile and preferences screen.
@@ -14,6 +15,13 @@ struct ProfileView: View {
     @State private var errorMessage: String?
     @State private var isLoading = true
     @State private var userEmail: String?
+
+    // AI Keys
+    @State private var hasAnthropicKey = false
+    @State private var hasOpenAIKey = false
+    @State private var showAnthropicKeyEntry = false
+    @State private var showOpenAIKeyEntry = false
+    @State private var pendingKeyValue = ""
 
     private static let summaryStyles = ["concise", "detailed", "bullet"]
 
@@ -57,9 +65,48 @@ struct ProfileView: View {
                 } footer: {
                     Text("Controls the format of AI-generated article summaries.")
                 }
+            }
 
-                // MARK: - Notifications
+            // MARK: - AI Keys
 
+            Section {
+                HStack {
+                    Text("Anthropic")
+                    Spacer()
+                    if hasAnthropicKey {
+                        Text("Configured")
+                            .foregroundStyle(.green)
+                        Button("Remove") { removeKey(KeychainManager.Key.anthropicApiKey) }
+                            .foregroundStyle(.red)
+                            .buttonStyle(.borderless)
+                    } else {
+                        Button("Add Key") { showAnthropicKeyEntry = true }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                HStack {
+                    Text("OpenAI")
+                    Spacer()
+                    if hasOpenAIKey {
+                        Text("Configured")
+                            .foregroundStyle(.green)
+                        Button("Remove") { removeKey(KeychainManager.Key.openaiApiKey) }
+                            .foregroundStyle(.red)
+                            .buttonStyle(.borderless)
+                    } else {
+                        Button("Add Key") { showOpenAIKeyEntry = true }
+                            .buttonStyle(.borderless)
+                    }
+                }
+            } header: {
+                Label("AI Keys", systemImage: "key")
+            } footer: {
+                Text("Your keys are stored only on this device in the secure Keychain. They are never sent to our servers — only directly to the AI provider.")
+            }
+
+            // MARK: - Notifications
+
+            if let settings {
                 Section {
                     Toggle("News brief", isOn: newsBriefEnabledBinding(settings))
                     if settings.newsBriefConfig.enabled {
@@ -133,6 +180,26 @@ struct ProfileView: View {
         .task {
             await loadInitialData()
         }
+        .alert("Anthropic API Key", isPresented: $showAnthropicKeyEntry) {
+            SecureField("sk-ant-...", text: $pendingKeyValue)
+                .textContentType(.password)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            Button("Save") { saveKey(KeychainManager.Key.anthropicApiKey) }
+            Button("Cancel", role: .cancel) { pendingKeyValue = "" }
+        } message: {
+            Text("Enter your Anthropic API key. It will be stored securely in the device Keychain.")
+        }
+        .alert("OpenAI API Key", isPresented: $showOpenAIKeyEntry) {
+            SecureField("sk-...", text: $pendingKeyValue)
+                .textContentType(.password)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+            Button("Save") { saveKey(KeychainManager.Key.openaiApiKey) }
+            Button("Cancel", role: .cancel) { pendingKeyValue = "" }
+        } message: {
+            Text("Enter your OpenAI API key. It will be stored securely in the device Keychain.")
+        }
     }
 
     // MARK: - Data
@@ -140,6 +207,9 @@ struct ProfileView: View {
     private func loadInitialData() async {
         isLoading = true
         errorMessage = nil
+
+        // Load AI key status from Keychain
+        refreshKeyStatus()
 
         // Load user email from Supabase session
         if let session = try? await appState.supabase.session() {
@@ -166,6 +236,30 @@ struct ProfileView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    // MARK: - AI Keys
+
+    private func refreshKeyStatus() {
+        hasAnthropicKey = appState.keychain.has(key: KeychainManager.Key.anthropicApiKey)
+        hasOpenAIKey = appState.keychain.has(key: KeychainManager.Key.openaiApiKey)
+    }
+
+    private func saveKey(_ key: String) {
+        let value = pendingKeyValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        pendingKeyValue = ""
+        guard !value.isEmpty else { return }
+        do {
+            try appState.keychain.set(value, forKey: key)
+            refreshKeyStatus()
+        } catch {
+            errorMessage = "Failed to save key: \(error.localizedDescription)"
+        }
+    }
+
+    private func removeKey(_ key: String) {
+        appState.keychain.delete(forKey: key)
+        refreshKeyStatus()
     }
 
     // MARK: - Bindings

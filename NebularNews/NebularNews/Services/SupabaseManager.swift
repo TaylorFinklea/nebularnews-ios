@@ -1,4 +1,5 @@
 import Foundation
+import NebularNewsKit
 import Supabase
 
 // MARK: - Supabase Manager
@@ -758,8 +759,24 @@ final class SupabaseManager: Sendable {
 
     // MARK: - AI Operations
 
+    /// Build custom headers that forward the user's own AI API key (if stored in
+    /// the device Keychain) to Edge Functions. The key is sent directly to the AI
+    /// provider via the Edge Function — it is never persisted server-side.
+    private func userAIHeaders() -> [String: String] {
+        let keychain = KeychainManager()
+        if let key = keychain.get(forKey: KeychainManager.Key.anthropicApiKey) {
+            return ["x-user-api-key": key, "x-user-api-provider": "anthropic"]
+        }
+        if let key = keychain.get(forKey: KeychainManager.Key.openaiApiKey) {
+            return ["x-user-api-key": key, "x-user-api-provider": "openai"]
+        }
+        return [:]
+    }
+
     func rerunSummarize(articleId: String) async throws {
         guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        let headers = userAIHeaders()
 
         // The enrich-article edge function expects article_id, user_id, and job_type
         // Run summarize, key_points, and score in sequence
@@ -767,6 +784,7 @@ final class SupabaseManager: Sendable {
             _ = try await client.functions.invoke(
                 "enrich-article",
                 options: FunctionInvokeOptions(
+                    headers: headers,
                     body: [
                         "article_id": articleId,
                         "user_id": userId.uuidString,
