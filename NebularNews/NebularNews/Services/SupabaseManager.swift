@@ -721,40 +721,24 @@ final class SupabaseManager: Sendable {
     }
 
     func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
 
-        // Get or create thread
-        let threads: [SupabaseChatThreadRow] = try await client.from("chat_threads")
-            .select("id, article_id, created_at, updated_at")
-            .eq("article_id", value: articleId)
-            .eq("user_id", value: userId.uuidString)
-            .limit(1)
-            .execute()
-            .value
+        let headers = userAIHeaders()
 
-        let threadId: String
-        if let existing = threads.first {
-            threadId = existing.id
-        } else {
-            let newThread: SupabaseChatThreadRow = try await client.from("chat_threads")
-                .insert(ChatThreadInsert(articleId: articleId, userId: userId.uuidString))
-                .select("id, article_id, created_at, updated_at")
-                .single()
-                .execute()
-                .value
-            threadId = newThread.id
-        }
+        // Call the article-chat Edge Function which saves the user message,
+        // calls the AI, saves the AI response, and returns the full thread.
+        let payload: CompanionChatPayload = try await client.functions.invoke(
+            "article-chat",
+            options: FunctionInvokeOptions(
+                headers: headers,
+                body: [
+                    "article_id": articleId,
+                    "message": content
+                ]
+            )
+        )
 
-        // Insert user message
-        try await client.from("chat_messages")
-            .insert(ChatMessageInsert(threadId: threadId, role: "user", content: content))
-            .execute()
-
-        // Call AI enrichment edge function for chat response
-        // For now, we insert the user message and return the full thread.
-        // The edge function (if deployed) can generate the assistant response asynchronously.
-
-        return try await fetchChat(articleId: articleId)
+        return payload
     }
 
     // MARK: - AI Operations
