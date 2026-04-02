@@ -1,65 +1,30 @@
-# Current State
+# Current State (2026-04-01)
 
-*Last updated: 2026-03-29*
+## Architecture
+- **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj)
+- **iOS app**: SwiftUI + Supabase Swift SDK (direct PostgREST + Edge Functions)
+- **Repos**: `nebularnews-api` (backend), `nebularnews-ios` (iOS)
+- **Old infra**: CF Workers deleted, Vercel removed, old Supabase paused, web repo archived
 
-## Active Branch
+## What works
+- Apple Sign In via Supabase Auth
+- Feed polling (pg_cron every 5 min, 3 feeds, ~420+ articles)
+- Article list with search, read/unread filter, sort
+- Article detail view
+- Save/unsave articles (Lists page)
+- Per-feed controls: pause/resume, max articles/day, min score filter
+- AI summarization on-demand via Edge Functions (Anthropic Claude)
+- BYOK: users can store their own Anthropic/OpenAI keys in iOS Keychain, sent to Edge Function via headers
+- OPML import/export
+- SwiftData local cache (instant loads, offline reading)
+- BBC image quality upgraded to 1024px
 
-`main` (both repos)
-
-## Recent Progress
-
-### iOS (nebularnews-ios) — Supabase Migration
-
-Major architecture change: replaced `MobileAPIClient` (REST calls to SvelteKit backend) with `SupabaseManager` (direct Supabase Swift SDK calls).
-
-**New files:**
-- `Services/SupabaseManager.swift` — central service with PostgREST queries, Supabase Auth (Apple Sign In via ID token), and Edge Function calls
-
-**Updated files (all wired to Supabase):**
-- `App/AppState.swift` — added `supabase: SupabaseManager`, `hasSession`, `loadSession()`, `completeSignIn()`, `signOut()`; kept legacy `mobileAPI` for transition
-- `App/NebularNewsApp.swift` — loads Supabase session on launch, falls back to legacy companion session
-- `App/MainTabView.swift` — uses `appState.supabase.fetchArticles()`
-- `App/BackgroundTaskManager.swift` — uses `SupabaseManager.shared` for background refresh
-- `App/NotificationManager.swift` — added `uploadTokenIfNeeded(supabase:)` alongside legacy API method
-- `Features/Onboarding/OnboardingView.swift` — Apple Sign In via `SignInWithAppleButton` + `supabase.signInWithApple(idToken:nonce:)`
-- `Features/Onboarding/FeedSelectionView.swift` — uses `supabase.fetchOnboardingSuggestions()` and `supabase.bulkSubscribe()`
-- `Features/Companion/CompanionTodayView.swift` — all API calls now via `appState.supabase`
-- `Features/Companion/CompanionArticlesView.swift` — same
-- `Features/Companion/CompanionArticleDetailView.swift` — same
-- `Features/Companion/CompanionFeedsView.swift` — same
-- `Features/Companion/CompanionDiscoverView.swift` — same
-- `Features/Companion/CompanionReadingListView.swift` — same
-- `Features/Companion/CompanionFilteredArticleListView.swift` — same
-- `Features/Companion/CompanionSettingsView.swift` — replaced "Disconnect server" with "Sign Out", removed server URL field
-- `Features/Companion/CompanionTagListView.swift` — same
-- `Features/Companion/CompanionArticleChatView.swift` — same
-
-**Auth flow:**
-- Old: Custom OAuth PKCE flow via SvelteKit → keychain tokens → MobileAPIClient bearer auth
-- New: Apple Sign In → Supabase `signInWithIdToken` → SDK manages JWT refresh automatically
-
-**Data models unchanged:** `CompanionModels.swift` types are preserved. SupabaseManager maps Postgres rows to the same model types.
-
-**Not changed:**
-- `MobileAPIClient.swift` — kept for backward compatibility during transition
-- `MobileOAuthCoordinator.swift` — kept for backward compatibility
-- Xcode project file — user will add Supabase SPM package manually
-- SharedViews — no changes needed
-
-### Supabase Project
-
-- Project ID: `vdjrclxeyjsqyqsjzjfj` (us-east-1)
-- All tables have RLS enabled
-- Edge functions available: `enrich-article`, `export-opml`, `import-opml`, `poll-feeds`, `process-jobs`, `send-notification`
-
-## Blockers
-
-- User must add `supabase-swift` SPM package in Xcode before building
-- RLS policies need to be verified to allow the iOS app's queries
-- Edge functions need to be deployed to the Supabase project
-
-## Open Questions
-
-- Apple Sign In client secret expires ~September 2026
-- Need to configure Apple Sign In provider in Supabase Auth dashboard
-- Chat AI responses depend on an edge function that is not yet deployed
+## What's not done yet
+- Per-user AI rate limiting (BYOK is done, rate limiting is not)
+- User settings vs admin settings separation in UI
+- On-demand scoring and key points (only summarize works)
+- Push notifications (APNS function deployed but not triggered)
+- macOS app
+- Docker self-hosting docs
+- News brief generation
+- Chat with articles
