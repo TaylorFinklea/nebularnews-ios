@@ -561,69 +561,57 @@ final class SupabaseManager: Sendable {
             article_tags(tag_id, tags(id, name))
         """
 
-        // Total article count for "unread" stat
-        let totalCount = try await client.from("articles")
-            .select("id", head: true, count: .exact)
+        let feedLimits = try await getFeedLimits(userId: userId)
+
+        // Fetch a large batch of recent articles to compute accurate stats
+        let allRecent: [SupabaseArticleRow] = try await client.from("articles")
+            .select(articleSelect)
+            .order("fetched_at", ascending: false)
+            .limit(500)
             .execute()
-            .count ?? 0
+            .value
 
-        // Read article count
-        let readCount = try await client.from("article_read_state")
-            .select("id", head: true, count: .exact)
-            .eq("is_read", value: true)
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .count ?? 0
+        // Apply feed limits to get the user's actual visible articles
+        var feedCounts: [String: Int] = [:]
+        let visible = allRecent.filter { article in
+            guard !feedLimits.isEmpty else { return true }
+            guard let source = article.articleSources?.first,
+                  let feedId = source.feedId ?? source.feeds?.id else { return true }
+            guard let limit = feedLimits[feedId] else { return true }
+            let count = feedCounts[feedId, default: 0]
+            if count >= limit { return false }
+            feedCounts[feedId] = count + 1
+            return true
+        }
 
-        let unreadCount = max(totalCount - readCount, 0)
-
-        // New articles in the last 24 hours
+        // Compute stats from visible articles
+        let unreadVisible = visible.filter { $0.articleReadState?.first?.isRead != true }
         let oneDayAgo = Date().addingTimeInterval(-86400)
-        let newTodayCount = try await client.from("articles")
-            .select("id", head: true, count: .exact)
-            .gte("fetched_at", value: oneDayAgo.ISO8601Format())
-            .execute()
-            .count ?? 0
+        let oneDayAgoStr = oneDayAgo.ISO8601Format()
+        let newTodayVisible = visible.filter { row in
+            guard let fetchedAt = row.fetchedAt else { return false }
+            return fetchedAt >= oneDayAgoStr
+        }
+        let newTodayUnread = newTodayVisible.filter { $0.articleReadState?.first?.isRead != true }
+        let highFitUnread = unreadVisible.filter { row in
+            guard let score = row.articleScores?.first?.score else { return false }
+            return score >= 4
+        }
 
-        // High-fit articles (score >= 4) for hero
-        let sevenDaysAgo = Date().addingTimeInterval(-7 * 86400)
-        let highFitArticles: [SupabaseArticleRow] = try await client.from("articles")
-            .select(articleSelect)
-            .gte("article_scores.score", value: 4)
-            .gte("fetched_at", value: sevenDaysAgo.ISO8601Format())
-            .order("fetched_at", ascending: false)
-            .limit(1)
-            .execute()
-            .value
+        // Hero = highest scored unread article from last 7 days
+        let hero = highFitUnread.first?.toArticleListItem()
 
-        let hero = highFitArticles.first?.toArticleListItem()
-
-        // Up next = recent articles
-        let upNextArticles: [SupabaseArticleRow] = try await client.from("articles")
-            .select(articleSelect)
-            .order("fetched_at", ascending: false)
-            .limit(7)
-            .execute()
-            .value
-
-        let upNext = upNextArticles
+        // Up next = recent unread, excluding hero
+        let upNext = unreadVisible
             .map { $0.toArticleListItem() }
             .filter { $0.id != hero?.id }
             .prefix(6)
             .map { $0 }
 
-        // High-fit unread count
-        let highFitCount = try await client.from("article_scores")
-            .select("id", head: true, count: .exact)
-            .gte("score", value: 4)
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .count ?? 0
-
         let stats = CompanionTodayStats(
-            unreadTotal: unreadCount,
-            newToday: newTodayCount,
-            highFitUnread: highFitCount
+            unreadTotal: unreadVisible.count,
+            newToday: newTodayUnread.count,
+            highFitUnread: highFitUnread.count
         )
 
         return CompanionTodayPayload(
