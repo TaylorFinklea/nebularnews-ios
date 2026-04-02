@@ -279,9 +279,9 @@ struct CompanionArticleDetailView: View {
                 }
                 .listStyle(.insetGrouped)
                 .navigationTitle("Article")
-                .navigationBarTitleDisplayMode(.inline)
+                .inlineNavigationBarTitle()
                 .refreshable { await loadArticle() }
-                .toolbar(.hidden, for: .tabBar)
+                .hideTabBar()
                 .toolbar {
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button {
@@ -524,7 +524,7 @@ private struct CompanionHeroImage: View {
                     .aspectRatio(contentMode: .fill)
             case .failure:
                 Rectangle()
-                    .fill(Color(.tertiarySystemFill))
+                    .fill(Color.platformTertiaryFill)
                     .overlay {
                         Image(systemName: "photo")
                             .font(.title)
@@ -532,7 +532,7 @@ private struct CompanionHeroImage: View {
                     }
             case .empty:
                 Rectangle()
-                    .fill(Color(.tertiarySystemFill))
+                    .fill(Color.platformTertiaryFill)
                     .overlay { ProgressView() }
             @unknown default:
                 EmptyView()

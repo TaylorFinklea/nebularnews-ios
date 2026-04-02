@@ -354,7 +354,7 @@ struct RichArticleContentView: View {
                     .foregroundStyle(.primary)
                     .padding(12)
             }
-            .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 8))
+            .background(Color.platformSecondaryFill, in: RoundedRectangle(cornerRadius: 8))
 
         case .image(let url, let alt):
             AsyncImage(url: url) { phase in
@@ -368,7 +368,7 @@ struct RichArticleContentView: View {
                     EmptyView()
                 case .empty:
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(Color(.tertiarySystemFill))
+                        .fill(Color.platformTertiaryFill)
                         .frame(height: 160)
                 @unknown default:
                     EmptyView()

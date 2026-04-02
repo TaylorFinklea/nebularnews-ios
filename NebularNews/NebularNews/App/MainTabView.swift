@@ -6,7 +6,63 @@ struct MainTabView: View {
     @State private var companionSavedCount = 0
     @State private var showSettings = false
 
+    #if os(macOS)
+    enum Tab: String, CaseIterable {
+        case today, articles, discover, lists
+    }
+
+    @State private var selectedTab: Tab = .today
+    #endif
+
     var body: some View {
+        #if os(macOS)
+        NavigationSplitView {
+            List(selection: $selectedTab) {
+                Label("Today", systemImage: "sun.max")
+                    .tag(Tab.today)
+                Label("Articles", systemImage: "doc.text")
+                    .tag(Tab.articles)
+                Label("Discover", systemImage: "safari")
+                    .tag(Tab.discover)
+                Label("Lists", systemImage: "bookmark")
+                    .tag(Tab.lists)
+                    .badge(companionSavedCount)
+            }
+            .navigationTitle("Nebular News")
+            .toolbar {
+                ToolbarItem {
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
+        } detail: {
+            switch selectedTab {
+            case .today:
+                CompanionTodayView(showSettings: $showSettings)
+            case .articles:
+                CompanionArticlesView(showSettings: $showSettings)
+            case .discover:
+                CompanionDiscoverView(showSettings: $showSettings)
+            case .lists:
+                CompanionReadingListView(showSettings: $showSettings)
+            }
+        }
+        .task {
+            await loadCompanionSavedCount()
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                ProfileView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
+            }
+            .frame(minWidth: 500, minHeight: 500)
+        }
+        #else
         TabView {
             Tab("Today", systemImage: "sun.max") {
                 CompanionTodayView(showSettings: $showSettings)
@@ -39,6 +95,7 @@ struct MainTabView: View {
                     }
             }
         }
+        #endif
     }
 
     private func loadCompanionSavedCount() async {

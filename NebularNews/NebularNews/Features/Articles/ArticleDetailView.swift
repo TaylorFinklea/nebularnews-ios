@@ -36,7 +36,7 @@ struct ArticleDetailView: View {
             }
         }
         .navigationTitle(payload?.preferredSource?.feedTitle ?? "Article")
-        .navigationBarTitleDisplayMode(.inline)
+        .inlineNavigationBarTitle()
         .refreshable { await loadArticle() }
         .task {
             if payload == nil {
@@ -63,7 +63,7 @@ struct ArticleDetailView: View {
                 .padding(.horizontal)
             }
         }
-        .toolbar(.hidden, for: .tabBar)
+        .hideTabBar()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 topTrailingToolbar(payload)
@@ -255,7 +255,7 @@ struct ArticleDetailView: View {
                                 .font(.caption)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color(.tertiarySystemFill), in: Capsule())
+                                .background(Color.platformTertiaryFill, in: Capsule())
                         }
                         .buttonStyle(.plain)
                         .disabled(acceptingSuggestion == suggestion.id)
@@ -527,7 +527,7 @@ private struct ArticleHeroImage: View {
                     .aspectRatio(contentMode: .fill)
             case .failure:
                 Rectangle()
-                    .fill(Color(.tertiarySystemFill))
+                    .fill(Color.platformTertiaryFill)
                     .overlay {
                         Image(systemName: "photo")
                             .font(.title)
@@ -535,7 +535,7 @@ private struct ArticleHeroImage: View {
                     }
             case .empty:
                 Rectangle()
-                    .fill(Color(.tertiarySystemFill))
+                    .fill(Color.platformTertiaryFill)
                     .overlay { ProgressView() }
             @unknown default:
                 EmptyView()

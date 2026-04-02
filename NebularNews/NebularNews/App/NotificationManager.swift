@@ -1,13 +1,17 @@
 import Foundation
 import UserNotifications
-import UIKit
 import os
+
+#if os(iOS)
+import UIKit
+#endif
 
 private let logger = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "com.nebularnews.ios",
     category: "Notifications"
 )
 
+#if os(iOS)
 final class NotificationManager: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
@@ -121,6 +125,18 @@ final class NotificationManager: NSObject, UIApplicationDelegate, UNUserNotifica
         completionHandler()
     }
 }
+#else
+/// Stub for macOS where APNs push registration is not used.
+final class NotificationManager: NSObject {
+    static let shared = NotificationManager()
+
+    func requestPermissionAndRegister() {}
+    func uploadTokenIfNeeded(supabase: SupabaseManager) async {}
+    func removeToken(supabase: SupabaseManager) async {}
+    func uploadTokenIfNeeded(api: MobileAPIClient) async {}
+    func removeToken(api: MobileAPIClient) async {}
+}
+#endif
 
 extension Notification.Name {
     static let openArticleFromNotification = Notification.Name("openArticleFromNotification")

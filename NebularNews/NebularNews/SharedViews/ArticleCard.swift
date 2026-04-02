@@ -23,7 +23,7 @@ struct ArticleCard: View {
                             case .success(let image):
                                 image.resizable().aspectRatio(contentMode: .fill)
                             default:
-                                Rectangle().fill(Color(.tertiarySystemFill))
+                                Rectangle().fill(Color.platformTertiaryFill)
                             }
                         }
                     }
@@ -71,7 +71,7 @@ struct ArticleCard: View {
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color(.tertiarySystemFill), in: Capsule())
+                                .background(Color.platformTertiaryFill, in: Capsule())
                         }
                         if tags.count > 3 {
                             Text("+\(tags.count - 3)")
@@ -83,7 +83,7 @@ struct ArticleCard: View {
             }
             .padding(style == .compact ? 10 : 12)
         }
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color.platformSecondaryGroupedBackground)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
             // Score accent bar on left edge

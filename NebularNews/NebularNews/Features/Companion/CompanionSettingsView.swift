@@ -49,7 +49,9 @@ struct CompanionSettingsView: View {
                         Text("Up Next articles")
                         Spacer()
                         TextField("6", value: upNextLimitBinding(settings), format: .number)
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .multilineTextAlignment(.trailing)
                             .frame(width: 60)
                     }
@@ -66,7 +68,9 @@ struct CompanionSettingsView: View {
                         Text("Archive after")
                         Spacer()
                         TextField("30", value: retentionArchiveDaysBinding(settings), format: .number)
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .multilineTextAlignment(.trailing)
                             .frame(width: 60)
                         Text("days")
@@ -76,7 +80,9 @@ struct CompanionSettingsView: View {
                         Text("Delete after")
                         Spacer()
                         TextField("90", value: retentionDeleteDaysBinding(settings), format: .number)
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .multilineTextAlignment(.trailing)
                             .frame(width: 60)
                         Text("days")

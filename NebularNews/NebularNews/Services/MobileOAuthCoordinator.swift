@@ -1,7 +1,11 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 struct MobileOAuthSession {
     let serverURL: URL
@@ -99,10 +103,14 @@ final class MobileOAuthCoordinator: NSObject, ASWebAuthenticationPresentationCon
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        #if os(iOS)
         UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
             .first(where: \.isKeyWindow) ?? ASPresentationAnchor()
+        #else
+        NSApplication.shared.keyWindow ?? ASPresentationAnchor()
+        #endif
     }
 
     private func startAuthorizationSession(url: URL, callbackURLScheme: String) async throws -> URL {

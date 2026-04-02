@@ -184,7 +184,9 @@ struct ProfileView: View {
             SecureField("sk-ant-...", text: $pendingKeyValue)
                 .textContentType(.password)
                 .autocorrectionDisabled()
+                #if os(iOS)
                 .textInputAutocapitalization(.never)
+                #endif
             Button("Save") { saveKey(KeychainManager.Key.anthropicApiKey) }
             Button("Cancel", role: .cancel) { pendingKeyValue = "" }
         } message: {
@@ -194,7 +196,9 @@ struct ProfileView: View {
             SecureField("sk-...", text: $pendingKeyValue)
                 .textContentType(.password)
                 .autocorrectionDisabled()
+                #if os(iOS)
                 .textInputAutocapitalization(.never)
+                #endif
             Button("Save") { saveKey(KeychainManager.Key.openaiApiKey) }
             Button("Cancel", role: .cancel) { pendingKeyValue = "" }
         } message: {

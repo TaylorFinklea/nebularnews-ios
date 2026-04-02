@@ -1,3 +1,4 @@
+#if os(iOS)
 import BackgroundTasks
 import os
 import SwiftData
@@ -67,3 +68,12 @@ enum BackgroundTaskManager {
         }
     }
 }
+#else
+import SwiftData
+
+/// Stub for macOS where BGTaskScheduler is not available.
+enum BackgroundTaskManager {
+    static func register(modelContainer: ModelContainer) {}
+    static func scheduleNextRefresh(intervalMinutes: Int = 30) {}
+}
+#endif

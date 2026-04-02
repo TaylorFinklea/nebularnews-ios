@@ -87,7 +87,7 @@ struct CompanionArticleChatView: View {
                 .padding(.vertical, 8)
             }
             .navigationTitle("Chat")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
@@ -171,7 +171,7 @@ private struct ChatBubble: View {
                 .font(.body)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(isUser ? Color.accentColor : Color(.secondarySystemBackground))
+                .background(isUser ? Color.accentColor : Color.platformSecondaryBackground)
                 .foregroundStyle(isUser ? .white : .primary)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 

@@ -1,5 +1,9 @@
 import SwiftUI
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 import UniformTypeIdentifiers
 import NebularNewsKit
 
@@ -238,10 +242,17 @@ struct CompanionFeedsView: View {
             try xml.write(to: tempURL, atomically: true, encoding: .utf8)
 
             await MainActor.run {
+                #if os(iOS)
                 let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
                 guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                       let rootVC = windowScene.windows.first?.rootViewController else { return }
                 rootVC.present(activityVC, animated: true)
+                #elseif os(macOS)
+                let picker = NSSharingServicePicker(items: [tempURL])
+                guard let window = NSApplication.shared.keyWindow,
+                      let contentView = window.contentView else { return }
+                picker.show(relativeTo: .zero, of: contentView, preferredEdge: .minY)
+                #endif
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -262,14 +273,16 @@ private struct CompanionAddFeedSheet: View {
             Form {
                 Section {
                     TextField("Feed URL", text: $url)
+                        #if os(iOS)
                         .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        #endif
                         .textContentType(.URL)
                         .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
                 }
             }
             .navigationTitle("Add Feed")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -311,7 +324,7 @@ private struct CompanionOPMLImportSheet: View {
             }
             .padding()
             .navigationTitle("Import OPML")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -373,7 +386,9 @@ private struct FeedSettingsSheet: View {
                         Text("Max articles per day")
                         Spacer()
                         TextField("Unlimited", text: $maxArticlesPerDay)
+                            #if os(iOS)
                             .keyboardType(.numberPad)
+                            #endif
                             .multilineTextAlignment(.trailing)
                             .frame(width: 80)
                     }
@@ -395,7 +410,7 @@ private struct FeedSettingsSheet: View {
                 }
             }
             .navigationTitle(feed.title ?? "Feed Settings")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

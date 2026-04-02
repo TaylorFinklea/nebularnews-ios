@@ -86,7 +86,7 @@ struct TagPickerSheet: View {
                 }
             }
             .navigationTitle("Manage Tags")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .overlay {
                 if isLoading && allTags.isEmpty {
                     ProgressView()

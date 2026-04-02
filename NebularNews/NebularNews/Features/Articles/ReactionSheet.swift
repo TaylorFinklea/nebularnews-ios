@@ -85,7 +85,7 @@ struct ReactionSheet: View {
                 }
             }
             .navigationTitle("Reaction")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineNavigationBarTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }

@@ -83,8 +83,10 @@ struct FeedListView: View {
         }
         .alert("Add Feed", isPresented: $showAddSheet) {
             TextField("Feed URL", text: $newFeedURL)
+                #if os(iOS)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.URL)
+                #endif
             Button("Add") { Task { await addFeed() } }
             Button("Cancel", role: .cancel) {}
         } message: {

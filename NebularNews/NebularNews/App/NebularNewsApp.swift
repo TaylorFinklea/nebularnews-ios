@@ -10,7 +10,9 @@ private let appLogger = Logger(
 
 @main
 struct NebularNewsApp: App {
+    #if os(iOS)
     @UIApplicationDelegateAdaptor(NotificationManager.self) var notificationManager
+    #endif
 
     let modelContainer: ModelContainer
     let cacheContainer: ModelContainer
@@ -99,9 +101,11 @@ struct NebularNewsApp: App {
                     if !appState.hasCompletedOnboarding {
                         appState.completeSignIn()
                     }
+                    #if os(iOS)
                     NotificationManager.shared.requestPermissionAndRegister()
                     try? await Task.sleep(for: .seconds(2))
                     await NotificationManager.shared.uploadTokenIfNeeded(supabase: appState.supabase)
+                    #endif
                 } else {
                     // Fall back to legacy companion session check
                     appState.loadKeychainCache()
@@ -109,19 +113,23 @@ struct NebularNewsApp: App {
                         if let session = try? await appState.mobileAPI.fetchSession() {
                             appState.features = session.features
                         }
+                        #if os(iOS)
                         NotificationManager.shared.requestPermissionAndRegister()
                         try? await Task.sleep(for: .seconds(2))
                         await NotificationManager.shared.uploadTokenIfNeeded(api: appState.mobileAPI)
+                        #endif
                     }
                 }
             }
         }
         .modelContainer(modelContainer)
+        #if os(iOS)
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 BackgroundTaskManager.scheduleNextRefresh()
             }
         }
+        #endif
     }
 }
 
