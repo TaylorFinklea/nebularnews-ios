@@ -47,6 +47,13 @@ enum BackgroundTaskManager {
 
             if let today = try? await supabase.fetchToday() {
                 await CompanionCache.shared.store(today, category: .today)
+
+                // Update Home Screen widgets with fresh data
+                WidgetDataWriter.updateFromToday(
+                    stats: today.stats,
+                    hero: today.hero,
+                    upNext: today.upNext
+                )
             }
             if let articles = try? await supabase.fetchArticles() {
                 await CompanionCache.shared.store(articles.articles, category: .articleList)

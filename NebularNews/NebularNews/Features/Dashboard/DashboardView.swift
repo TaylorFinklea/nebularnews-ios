@@ -95,6 +95,13 @@ struct DashboardView: View {
             topUnread = topPayload.articles
             feedCount = feeds.count
             totalArticles = topPayload.total
+
+            // Update Home Screen widgets with fresh data
+            WidgetDataWriter.updateFromToday(
+                stats: today.stats,
+                hero: today.hero,
+                upNext: today.upNext
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

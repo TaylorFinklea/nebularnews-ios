@@ -48,3 +48,13 @@
 **Decision**: Server-side curated feed catalog (~30 feeds, 7 categories) served via API. Both web (`/onboarding`) and iOS (`FeedSelectionView`) present category-based selection. Bulk subscribe endpoint triggers auto-pull so articles appear immediately.
 
 **Consequences**: Catalog is code-based (not DB) — easy to version control, update requires deploy. iOS has three-phase onboarding: server connect -> feed selection -> main app.
+
+## ADR-006: Widget Data Sharing via App Groups (2026-04-02)
+
+**Status**: Implemented (widget extension target must be added in Xcode)
+
+**Context**: Widgets run in a separate process and cannot call Supabase directly (no auth context). Needed a way to share article data between the main app and widget extension.
+
+**Decision**: Use App Groups (`group.com.nebularnews.shared`) with shared UserDefaults. The main app writes stats and top articles as JSON after every Today fetch, dashboard load, and background refresh. Widget reads from the same suite. Deep links (`nebularnews://article/{id}`, `nebularnews://today`) route widget taps back to in-app views.
+
+**Consequences**: Data is eventually consistent (up to 15-minute lag). Widget content depends on the main app running at least once. No network calls in the widget process — keeps things simple and reliable.

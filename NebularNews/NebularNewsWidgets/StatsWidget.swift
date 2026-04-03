@@ -1,0 +1,134 @@
+import SwiftUI
+import WidgetKit
+
+// MARK: - Timeline Entry
+
+struct StatsEntry: TimelineEntry {
+    let date: Date
+    let stats: WidgetStats
+    let lastUpdated: Date?
+}
+
+// MARK: - Timeline Provider
+
+struct StatsProvider: TimelineProvider {
+    func placeholder(in context: Context) -> StatsEntry {
+        StatsEntry(
+            date: .now,
+            stats: WidgetStats(unreadTotal: 42, newToday: 12, highFitUnread: 3),
+            lastUpdated: .now
+        )
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (StatsEntry) -> Void) {
+        let entry = StatsEntry(
+            date: .now,
+            stats: WidgetDataProvider.loadStats(),
+            lastUpdated: WidgetDataProvider.lastUpdated()
+        )
+        completion(entry)
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<StatsEntry>) -> Void) {
+        let entry = StatsEntry(
+            date: .now,
+            stats: WidgetDataProvider.loadStats(),
+            lastUpdated: WidgetDataProvider.lastUpdated()
+        )
+        // Refresh every 15 minutes
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: .now) ?? .now
+        let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+        completion(timeline)
+    }
+}
+
+// MARK: - Widget View
+
+struct StatsWidgetView: View {
+    var entry: StatsEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Image(systemName: "sun.max.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                Text("Nebular News")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            statRow(
+                icon: "envelope.badge",
+                label: "Unread",
+                value: entry.stats.unreadTotal,
+                color: entry.stats.unreadTotal > 0 ? .blue : .secondary
+            )
+
+            statRow(
+                icon: "clock",
+                label: "New",
+                value: entry.stats.newToday,
+                color: entry.stats.newToday > 0 ? .orange : .secondary
+            )
+
+            statRow(
+                icon: "star.fill",
+                label: "Top",
+                value: entry.stats.highFitUnread,
+                color: entry.stats.highFitUnread > 0 ? .green : .secondary
+            )
+        }
+        .containerBackground(.fill.tertiary, for: .widget)
+        .widgetURL(URL(string: "nebularnews://today"))
+    }
+
+    private func statRow(icon: String, label: String, value: Int, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+                .foregroundStyle(color)
+                .frame(width: 14)
+            Text("\(value)")
+                .font(.subheadline.bold())
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Widget Configuration
+
+struct StatsWidget: Widget {
+    let kind = "StatsWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: StatsProvider()) { entry in
+            StatsWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Reading Stats")
+        .description("Your unread count, new articles, and top-fit stories at a glance.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+#Preview(as: .systemSmall) {
+    StatsWidget()
+} timeline: {
+    StatsEntry(
+        date: .now,
+        stats: WidgetStats(unreadTotal: 42, newToday: 12, highFitUnread: 3),
+        lastUpdated: .now
+    )
+    StatsEntry(
+        date: .now,
+        stats: WidgetStats(unreadTotal: 0, newToday: 0, highFitUnread: 0),
+        lastUpdated: nil
+    )
+}

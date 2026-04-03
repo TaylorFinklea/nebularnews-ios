@@ -18,6 +18,7 @@ struct NebularNewsApp: App {
     let cacheContainer: ModelContainer
 
     @State private var appState: AppState
+    @State private var deepLinkRouter = DeepLinkRouter()
     @State private var themeManager = ThemeManager()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -90,8 +91,12 @@ struct NebularNewsApp: App {
                 }
             }
             .environment(appState)
+            .environment(deepLinkRouter)
             .environment(themeManager)
             .preferredColorScheme(themeManager.resolvedColorScheme)
+            .onOpenURL { url in
+                deepLinkRouter.handle(url)
+            }
             .task {
                 // Try loading existing Supabase session first
                 await appState.loadSession()

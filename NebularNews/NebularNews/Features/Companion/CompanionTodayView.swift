@@ -3,6 +3,7 @@ import NebularNewsKit
 
 struct CompanionTodayView: View {
     @Environment(AppState.self) private var appState
+    @Environment(DeepLinkRouter.self) private var deepLinkRouter
 
     @Binding var showSettings: Bool
 
@@ -10,6 +11,7 @@ struct CompanionTodayView: View {
     @State private var errorMessage = ""
     @State private var isLoading = false
     @State private var isGeneratingBrief = false
+    @State private var deepLinkArticleId: String?
 
     var body: some View {
         NavigationStack {
@@ -174,6 +176,22 @@ struct CompanionTodayView: View {
                 }
                 await loadToday()
             }
+            .navigationDestination(item: $deepLinkArticleId) { articleId in
+                CompanionArticleDetailView(articleId: articleId)
+            }
+            .onChange(of: deepLinkRouter.pendingArticleId) { _, newValue in
+                if let articleId = newValue {
+                    deepLinkArticleId = articleId
+                    deepLinkRouter.clearPendingArticle()
+                }
+            }
+            .onAppear {
+                // Handle deep link that arrived before this view appeared
+                if let articleId = deepLinkRouter.pendingArticleId {
+                    deepLinkArticleId = articleId
+                    deepLinkRouter.clearPendingArticle()
+                }
+            }
         }
     }
 
@@ -213,6 +231,13 @@ struct CompanionTodayView: View {
                     cache.updateArticleFromListItem(item)
                 }
             }
+
+            // Update Home Screen widgets with fresh data
+            WidgetDataWriter.updateFromToday(
+                stats: result.stats,
+                hero: result.hero,
+                upNext: result.upNext
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

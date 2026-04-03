@@ -1,4 +1,4 @@
-# Current State (2026-04-02, session 2)
+# Current State (2026-04-02, session 3)
 
 ## Architecture
 - **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj)
@@ -26,6 +26,9 @@
 - News brief generation: generate-news-brief Edge Function + pg_cron (7 AM / 6 PM UTC) + on-demand "Generate Brief" button in Today view
 - Key points on-demand: dedicated button in article detail bottom toolbar
 - Onboarding feed catalog expanded: Tech, AI & ML, Science, World News, Software Dev categories
+- Home Screen / Lock Screen widgets: Stats (small), Top Article (medium), Reading Queue (large) — source files created, widget extension target must be added in Xcode
+- Widget data sharing via App Groups (`group.com.nebularnews.shared`) — main app writes stats + articles after Today fetch, background refresh, and dashboard load
+- Deep link routing (`nebularnews://today`, `nebularnews://article/{id}`) via `DeepLinkRouter` + `.onOpenURL`
 
 ## What's not done yet
 - Per-user AI rate limiting (BYOK is done, rate limiting is not)

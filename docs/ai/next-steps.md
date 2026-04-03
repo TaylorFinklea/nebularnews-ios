@@ -4,6 +4,7 @@
 
 ## Immediate
 
+- [ ] **Add Widget Extension target in Xcode** — see Xcode setup instructions below
 - [ ] Add `supabase-swift` SPM package in Xcode (URL: `https://github.com/supabase/supabase-swift`, version 2.x)
 - [ ] Configure Apple Sign In provider in Supabase Auth dashboard
 - [ ] Verify RLS policies allow iOS app queries (articles, feeds, tags, settings, etc.)
