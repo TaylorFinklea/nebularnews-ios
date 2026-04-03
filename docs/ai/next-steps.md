@@ -24,3 +24,5 @@
 - [ ] Test full end-to-end: new user Apple Sign In → onboarding → feed selection → articles populate
 - [ ] Add real-time subscriptions for article updates (Supabase Realtime)
 - [ ] Deploy chat AI edge function for article Q&A
+- [ ] Wire iOS article list sorting by algorithmic score (scores are now in `article_scores` with `scoring_method = 'algorithmic'`)
+- [ ] Re-score recent articles from a feed when user reacts (thumbs up/down changes feed reputation)
