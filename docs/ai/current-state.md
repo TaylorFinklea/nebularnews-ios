@@ -1,4 +1,4 @@
-# Current State (2026-04-02, updated)
+# Current State (2026-04-02, session 2)
 
 ## Architecture
 - **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj)
@@ -21,12 +21,16 @@
 - Push notifications end-to-end: iOS token registration, APNS Edge Function, pg_cron batch job every 15 min
 - pg_net extension enabled (also fixed poll-feeds cron which was failing)
 - Algorithmic article scoring: 4-signal engine (source reputation, content freshness, content depth, tag match ratio) runs on pg_cron every 5 min, scores 1-5 per user with confidence + evidence JSON
+- Score display on article cards (ScoreBadge pill + ScoreAccentBar, color-coded 1-5)
+- Re-score on reaction: thumbs up/down triggers background re-scoring via rescore flag
+- News brief generation: generate-news-brief Edge Function + pg_cron (7 AM / 6 PM UTC) + on-demand "Generate Brief" button in Today view
+- Key points on-demand: dedicated button in article detail bottom toolbar
+- Onboarding feed catalog expanded: Tech, AI & ML, Science, World News, Software Dev categories
 
 ## What's not done yet
 - Per-user AI rate limiting (BYOK is done, rate limiting is not)
 - User settings vs admin settings separation in UI
-- On-demand AI scoring and key points (only summarize works; algorithmic scoring is live)
+- On-demand AI scoring (key points and algorithmic scoring are live; AI scoring button not yet wired)
 - macOS app
 - Docker self-hosting docs
-- News brief generation
 - Chat with articles

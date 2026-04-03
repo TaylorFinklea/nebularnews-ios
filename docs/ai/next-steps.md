@@ -15,7 +15,7 @@
 - [ ] Remove legacy `MobileAPIClient.swift` and `MobileOAuthCoordinator.swift` once migration is verified
 - [ ] Remove legacy companion session code from `AppState` (keychain tokens, `companionServerURL`, etc.)
 - [ ] Add proper count queries for saved articles and filtered article lists
-- [ ] Wire up News Brief display (needs edge function or Postgres function)
+- [x] Wire up News Brief display (generate-news-brief Edge Function + cron + on-demand button)
 - [ ] Test background refresh with Supabase session
 
 ## Planned
@@ -25,4 +25,4 @@
 - [ ] Add real-time subscriptions for article updates (Supabase Realtime)
 - [ ] Deploy chat AI edge function for article Q&A
 - [ ] Wire iOS article list sorting by algorithmic score (scores are now in `article_scores` with `scoring_method = 'algorithmic'`)
-- [ ] Re-score recent articles from a feed when user reacts (thumbs up/down changes feed reputation)
+- [x] Re-score recent articles from a feed when user reacts (thumbs up/down changes feed reputation)
