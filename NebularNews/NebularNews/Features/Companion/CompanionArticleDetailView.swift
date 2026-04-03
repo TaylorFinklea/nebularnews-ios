@@ -45,6 +45,7 @@ struct CompanionArticleDetailView: View {
     @State private var savingBookmark = false
     @State private var showingChat = false
     @State private var isSummarizing = false
+    @State private var isGeneratingKeyPoints = false
 
     var body: some View {
         Group {
@@ -361,6 +362,20 @@ struct CompanionArticleDetailView: View {
         Spacer()
 
         Button {
+            Task { await generateKeyPoints() }
+        } label: {
+            if isGeneratingKeyPoints {
+                ProgressView().controlSize(.small)
+            } else {
+                let hasKeyPoints = payload.keyPoints?.keyPointsJson?.isEmpty == false
+                Label(hasKeyPoints ? "Re-extract" : "Key Points", systemImage: "list.bullet.rectangle")
+            }
+        }
+        .disabled(isGeneratingKeyPoints)
+
+        Spacer()
+
+        Button {
             showingChat = true
         } label: {
             Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
@@ -476,6 +491,17 @@ struct CompanionArticleDetailView: View {
         defer { isSummarizing = false }
         do {
             try await appState.supabase.rerunSummarize(articleId: articleId)
+            await loadArticle()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func generateKeyPoints() async {
+        isGeneratingKeyPoints = true
+        defer { isGeneratingKeyPoints = false }
+        do {
+            try await appState.supabase.generateKeyPoints(articleId: articleId)
             await loadArticle()
         } catch {
             errorMessage = error.localizedDescription

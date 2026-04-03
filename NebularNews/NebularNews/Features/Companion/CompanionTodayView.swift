@@ -9,6 +9,7 @@ struct CompanionTodayView: View {
     @State private var payload: CompanionTodayPayload?
     @State private var errorMessage = ""
     @State private var isLoading = false
+    @State private var isGeneratingBrief = false
 
     var body: some View {
         NavigationStack {
@@ -66,7 +67,7 @@ struct CompanionTodayView: View {
                         }
 
                         // News brief
-                        if let newsBrief = payload.newsBrief, appState.features?.newsBrief == true {
+                        if let newsBrief = payload.newsBrief {
                             GlassCard(style: .standard) {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text(newsBrief.title)
@@ -90,6 +91,33 @@ struct CompanionTodayView: View {
                                     }
                                 }
                             }
+                            .padding(.horizontal)
+                        } else {
+                            Button {
+                                Task { await generateBrief() }
+                            } label: {
+                                GlassCard(style: .standard) {
+                                    HStack {
+                                        Image(systemName: "newspaper.fill")
+                                            .foregroundStyle(.secondary)
+                                        if isGeneratingBrief {
+                                            ProgressView()
+                                                .controlSize(.small)
+                                            Text("Generating brief...")
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        } else {
+                                            Text("Generate News Brief")
+                                                .font(.subheadline.weight(.medium))
+                                        }
+                                        Spacer()
+                                        Image(systemName: "sparkles")
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isGeneratingBrief)
                             .padding(.horizontal)
                         }
 
@@ -146,6 +174,24 @@ struct CompanionTodayView: View {
                 }
                 await loadToday()
             }
+        }
+    }
+
+    private func generateBrief() async {
+        isGeneratingBrief = true
+        defer { isGeneratingBrief = false }
+        do {
+            let brief = try await appState.supabase.generateNewsBrief()
+            if let brief {
+                payload = CompanionTodayPayload(
+                    hero: payload?.hero,
+                    upNext: payload?.upNext ?? [],
+                    stats: payload?.stats ?? CompanionTodayStats(unreadTotal: 0, newToday: 0, highFitUnread: 0),
+                    newsBrief: brief
+                )
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

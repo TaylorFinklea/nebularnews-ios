@@ -290,6 +290,19 @@ final class SupabaseManager: Sendable {
                 .execute()
         }
 
+        // Trigger re-scoring in the background so updated reaction data
+        // feeds back into the algorithmic score engine.
+        let rescoreUserId = userId.uuidString
+        let rescoreClient = client
+        Task.detached {
+            try? await rescoreClient.functions.invoke(
+                "score-articles",
+                options: FunctionInvokeOptions(
+                    body: RescoreRequest(userId: rescoreUserId, rescore: true)
+                )
+            )
+        }
+
         return ReactionResponse(
             articleId: articleId,
             value: value,
@@ -631,11 +644,79 @@ final class SupabaseManager: Sendable {
             highFitUnread: highFitUnread.count
         )
 
+        // Fetch the most recent news brief for this user
+        let newsBrief = await fetchLatestNewsBrief(userId: userId)
+
         return CompanionTodayPayload(
             hero: hero,
             upNext: Array(upNext),
             stats: stats,
-            newsBrief: nil
+            newsBrief: newsBrief
+        )
+    }
+
+    private func fetchLatestNewsBrief(userId: UUID) async -> CompanionNewsBrief? {
+        struct BriefRow: Decodable {
+            let id: String
+            let editionType: String
+            let briefText: String
+            let articleIdsJson: String?
+            let createdAt: String?
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case editionType = "edition_type"
+                case briefText = "brief_text"
+                case articleIdsJson = "article_ids_json"
+                case createdAt = "created_at"
+            }
+        }
+
+        guard let row: BriefRow = try? await client.from("news_brief_editions")
+            .select("id, edition_type, brief_text, article_ids_json, created_at")
+            .eq("user_id", value: userId.uuidString)
+            .order("created_at", ascending: false)
+            .limit(1)
+            .single()
+            .execute()
+            .value
+        else { return nil }
+
+        // Check staleness (older than 12 hours)
+        let createdAtMillis = row.createdAt.flatMap { timestampMillis($0) }
+        let isStale: Bool
+        if let ms = createdAtMillis {
+            isStale = Date().timeIntervalSince1970 * 1000 - Double(ms) > 12 * 3_600_000
+        } else {
+            isStale = true
+        }
+
+        // Parse bullets from brief_text JSON
+        let bullets: [CompanionNewsBrief.Bullet]
+        if let data = row.briefText.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode([BriefBulletDTO].self, from: data) {
+            bullets = parsed.map { dto in
+                CompanionNewsBrief.Bullet(
+                    text: dto.text,
+                    sources: (dto.sourceArticleIds ?? []).map { id in
+                        CompanionNewsBrief.Bullet.Source(articleId: id, title: "", canonicalUrl: nil)
+                    }
+                )
+            }
+        } else {
+            bullets = [CompanionNewsBrief.Bullet(text: row.briefText, sources: [])]
+        }
+
+        return CompanionNewsBrief(
+            state: isStale ? "stale" : "ready",
+            title: "News Brief",
+            editionLabel: row.editionType.replacingOccurrences(of: "_", with: " ").capitalized,
+            generatedAt: createdAtMillis,
+            windowHours: 12,
+            scoreCutoff: 3,
+            bullets: bullets,
+            nextScheduledAt: nil,
+            stale: isStale
         )
     }
 
@@ -837,6 +918,85 @@ final class SupabaseManager: Sendable {
         }
     }
 
+    func generateKeyPoints(articleId: String) async throws {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        let headers = userAIHeaders()
+
+        _ = try await client.functions.invoke(
+            "enrich-article",
+            options: FunctionInvokeOptions(
+                headers: headers,
+                body: [
+                    "article_id": articleId,
+                    "user_id": userId.uuidString,
+                    "job_type": "key_points"
+                ]
+            )
+        )
+    }
+
+    // MARK: - News Brief
+
+    func generateNewsBrief() async throws -> CompanionNewsBrief? {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        let headers = userAIHeaders()
+
+        struct BriefResponse: Decodable {
+            let ok: Bool?
+            let brief: BriefData?
+
+            struct BriefData: Decodable {
+                let id: String
+                let editionType: String
+                let briefText: String
+                let articleIdsJson: String?
+                let provider: String?
+                let model: String?
+                let createdAt: String?
+            }
+        }
+
+        let response: BriefResponse = try await client.functions.invoke(
+            "generate-news-brief",
+            options: FunctionInvokeOptions(
+                headers: headers,
+                body: ["user_id": userId.uuidString]
+            )
+        )
+
+        guard let brief = response.brief else { return nil }
+
+        // Parse the brief_text as JSON bullets
+        let bullets: [CompanionNewsBrief.Bullet]
+        if let data = brief.briefText.data(using: .utf8),
+           let parsed = try? JSONDecoder().decode([BriefBulletDTO].self, from: data) {
+            bullets = parsed.map { dto in
+                CompanionNewsBrief.Bullet(
+                    text: dto.text,
+                    sources: (dto.sourceArticleIds ?? []).map { id in
+                        CompanionNewsBrief.Bullet.Source(articleId: id, title: "", canonicalUrl: nil)
+                    }
+                )
+            }
+        } else {
+            bullets = [CompanionNewsBrief.Bullet(text: brief.briefText, sources: [])]
+        }
+
+        return CompanionNewsBrief(
+            state: "ready",
+            title: "News Brief",
+            editionLabel: brief.editionType.replacingOccurrences(of: "_", with: " ").capitalized,
+            generatedAt: brief.createdAt.flatMap { timestampMillis($0) },
+            windowHours: 12,
+            scoreCutoff: 3,
+            bullets: bullets,
+            nextScheduledAt: nil,
+            stale: false
+        )
+    }
+
     // MARK: - Device Token
 
     func registerDeviceToken(token: String) async throws {
@@ -864,15 +1024,28 @@ final class SupabaseManager: Sendable {
             OnboardingCategory(id: "tech", name: "Technology", icon: "desktopcomputer", feeds: [
                 OnboardingFeed(url: "https://hnrss.org/frontpage", title: "Hacker News", description: "Tech news and discussion", siteUrl: "https://news.ycombinator.com"),
                 OnboardingFeed(url: "https://www.theverge.com/rss/index.xml", title: "The Verge", description: "Technology, science, art, and culture", siteUrl: "https://www.theverge.com"),
-                OnboardingFeed(url: "https://feeds.arstechnica.com/arstechnica/index", title: "Ars Technica", description: "Technology news and analysis", siteUrl: "https://arstechnica.com")
+                OnboardingFeed(url: "https://feeds.arstechnica.com/arstechnica/index", title: "Ars Technica", description: "Technology news and analysis", siteUrl: "https://arstechnica.com"),
+                OnboardingFeed(url: "https://www.techmeme.com/feed.xml", title: "Techmeme", description: "The essential tech news of the moment", siteUrl: "https://www.techmeme.com")
+            ]),
+            OnboardingCategory(id: "ai", name: "AI & Machine Learning", icon: "brain", feeds: [
+                OnboardingFeed(url: "https://openai.com/blog/rss.xml", title: "OpenAI Blog", description: "Research and announcements from OpenAI", siteUrl: "https://openai.com/blog"),
+                OnboardingFeed(url: "https://blog.google/technology/ai/rss/", title: "Google AI Blog", description: "AI research from Google", siteUrl: "https://blog.google/technology/ai/"),
+                OnboardingFeed(url: "https://machinelearningmastery.com/feed/", title: "Machine Learning Mastery", description: "Practical ML tutorials and guides", siteUrl: "https://machinelearningmastery.com")
             ]),
             OnboardingCategory(id: "science", name: "Science", icon: "atom", feeds: [
                 OnboardingFeed(url: "https://www.quantamagazine.org/feed/", title: "Quanta Magazine", description: "Mathematics, physics, and biology", siteUrl: "https://www.quantamagazine.org"),
-                OnboardingFeed(url: "https://www.nature.com/nature.rss", title: "Nature", description: "International scientific journal", siteUrl: "https://www.nature.com")
+                OnboardingFeed(url: "https://www.nature.com/nature.rss", title: "Nature", description: "International scientific journal", siteUrl: "https://www.nature.com"),
+                OnboardingFeed(url: "https://www.newscientist.com/feed/home/", title: "New Scientist", description: "Science and technology news", siteUrl: "https://www.newscientist.com")
             ]),
             OnboardingCategory(id: "news", name: "World News", icon: "globe", feeds: [
                 OnboardingFeed(url: "https://feeds.bbci.co.uk/news/rss.xml", title: "BBC News", description: "World news from the BBC", siteUrl: "https://www.bbc.com/news"),
-                OnboardingFeed(url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", title: "New York Times", description: "Top stories", siteUrl: "https://www.nytimes.com")
+                OnboardingFeed(url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", title: "New York Times", description: "Top stories", siteUrl: "https://www.nytimes.com"),
+                OnboardingFeed(url: "https://feeds.reuters.com/reuters/topNews", title: "Reuters", description: "International news wire", siteUrl: "https://www.reuters.com")
+            ]),
+            OnboardingCategory(id: "dev", name: "Software Development", icon: "chevron.left.forwardslash.chevron.right", feeds: [
+                OnboardingFeed(url: "https://blog.pragmaticengineer.com/rss/", title: "The Pragmatic Engineer", description: "Software engineering and tech industry", siteUrl: "https://blog.pragmaticengineer.com"),
+                OnboardingFeed(url: "https://css-tricks.com/feed/", title: "CSS-Tricks", description: "Web development tips and techniques", siteUrl: "https://css-tricks.com"),
+                OnboardingFeed(url: "https://martinfowler.com/feed.atom", title: "Martin Fowler", description: "Software design and architecture", siteUrl: "https://martinfowler.com")
             ])
         ])
     }
@@ -1588,6 +1761,28 @@ private func timestampMillis(_ isoString: String) -> Int? {
         return Int(date.timeIntervalSince1970 * 1000)
     }
     return nil
+}
+
+// MARK: - News Brief DTO
+
+private struct RescoreRequest: Encodable {
+    let userId: String
+    let rescore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case rescore
+    }
+}
+
+private struct BriefBulletDTO: Decodable {
+    let text: String
+    let sourceArticleIds: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case sourceArticleIds = "source_article_ids"
+    }
 }
 
 // MARK: - Read/Sort filter types (reuse existing companion names)
