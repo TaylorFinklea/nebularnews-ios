@@ -96,6 +96,22 @@ struct CompanionArticlesView: View {
     var body: some View {
         NavigationStack {
             List {
+                if appState.syncManager?.isOffline == true {
+                    Section {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wifi.slash")
+                            Text("Offline")
+                            if let count = appState.syncManager?.pendingActionCount, count > 0 {
+                                Text("• \(count) pending")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 if !errorMessage.isEmpty && articles.isEmpty {
                     Section {
                         ErrorBanner(message: errorMessage) {
@@ -298,30 +314,16 @@ struct CompanionArticlesView: View {
 
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newReadState = article.isRead != 1
-        // Optimistically update cache
-        appState.articleCache?.updateArticle(id: article.id, isRead: newReadState)
-        do {
-            try await appState.supabase.setRead(articleId: article.id, isRead: newReadState)
-            await loadArticles()
-        } catch {
-            // Revert on failure
-            appState.articleCache?.updateArticle(id: article.id, isRead: !newReadState)
-            errorMessage = error.localizedDescription
-        }
+        await appState.syncManager?.setRead(articleId: article.id, isRead: newReadState)
+        await loadArticles()
     }
 
     private func react(_ article: CompanionArticleListItem, value: Int) async {
-        // Optimistically update cache
-        appState.articleCache?.updateArticle(id: article.id, reactionValue: value)
-        do {
-            _ = try await appState.supabase.setReaction(
-                articleId: article.id,
-                value: value,
-                reasonCodes: []
-            )
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        _ = await appState.syncManager?.setReaction(
+            articleId: article.id,
+            value: value,
+            reasonCodes: []
+        )
     }
 
     private func saveRecentSearch(_ term: String) {

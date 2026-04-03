@@ -36,10 +36,26 @@ enum BackgroundTaskManager {
 
         let supabase = SupabaseManager.shared
 
-        let refreshTask = Task {
+        let refreshTask = Task { @MainActor in
             // Check if we have an active session
             guard let _ = try? await supabase.session() else {
                 return
+            }
+
+            // Sync any pending offline actions before fetching new data
+            // Create a temporary SyncManager with a fresh context for background work
+            let cacheSchema = Schema([CachedArticle.self, CachedFeed.self, PendingAction.self])
+            if let cacheConfig = try? ModelConfiguration(
+                "Cache",
+                schema: cacheSchema,
+                isStoredInMemoryOnly: false,
+                allowsSave: true,
+                groupContainer: .none,
+                cloudKitDatabase: .none
+            ),
+               let bgContainer = try? ModelContainer(for: cacheSchema, configurations: [cacheConfig]) {
+                let bgSyncManager = SyncManager(modelContext: bgContainer.mainContext, supabase: supabase)
+                await bgSyncManager.syncPendingActions()
             }
 
             try? await supabase.triggerPull()

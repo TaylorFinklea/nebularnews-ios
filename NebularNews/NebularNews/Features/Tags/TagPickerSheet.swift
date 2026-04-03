@@ -117,14 +117,26 @@ struct TagPickerSheet: View {
         errorMessage = nil
         do {
             if assignedTagIds.contains(tag.id) {
-                let newTags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
+                let newTags: [CompanionTag]
+                if let syncManager = appState.syncManager {
+                    newTags = try await syncManager.removeTag(articleId: articleId, tagId: tag.id)
+                } else {
+                    newTags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
+                }
                 assignedTagIds.remove(tag.id)
                 onTagsChanged(newTags)
             } else {
-                let newTags = try await appState.supabase.addTag(articleId: articleId, name: tag.name)
+                let newTags: [CompanionTag]
+                if let syncManager = appState.syncManager {
+                    newTags = try await syncManager.addTag(articleId: articleId, name: tag.name)
+                } else {
+                    newTags = try await appState.supabase.addTag(articleId: articleId, name: tag.name)
+                }
                 assignedTagIds.insert(tag.id)
                 onTagsChanged(newTags)
             }
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -136,7 +148,12 @@ struct TagPickerSheet: View {
         errorMessage = nil
 
         do {
-            let newTags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
+            let newTags: [CompanionTag]
+            if let syncManager = appState.syncManager {
+                newTags = try await syncManager.addTag(articleId: articleId, name: trimmed)
+            } else {
+                newTags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
+            }
             onTagsChanged(newTags)
             // Reload all tags to include the new one
             allTags = try await appState.supabase.fetchTags()
@@ -144,6 +161,10 @@ struct TagPickerSheet: View {
             assignedTagIds = Set(newTags.map(\.id))
             newTagName = ""
             showNewTagField = false
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            newTagName = ""
+            showNewTagField = false
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }

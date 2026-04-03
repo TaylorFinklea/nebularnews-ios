@@ -81,12 +81,8 @@ struct CompanionReadingListView: View {
     }
 
     private func unsaveArticle(_ article: CompanionArticleListItem) async {
-        do {
-            _ = try await appState.supabase.saveArticle(id: article.id, saved: false)
-            articles.removeAll { $0.id == article.id }
-            await CompanionCache.shared.store(articles, category: .savedArticles)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        _ = await appState.syncManager?.saveArticle(articleId: article.id, saved: false)
+        articles.removeAll { $0.id == article.id }
+        await CompanionCache.shared.store(articles, category: .savedArticles)
     }
 }

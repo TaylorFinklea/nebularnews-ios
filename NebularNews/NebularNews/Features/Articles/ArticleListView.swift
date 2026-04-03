@@ -255,20 +255,12 @@ struct ArticleListView: View {
 
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newIsRead = article.isRead != 1
-        do {
-            try await appState.supabase.setRead(articleId: article.id, isRead: newIsRead)
-            await load()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await appState.syncManager?.setRead(articleId: article.id, isRead: newIsRead)
+        await load()
     }
 
     private func toggleSaved(_ article: CompanionArticleListItem) async {
-        do {
-            _ = try await appState.supabase.saveArticle(id: article.id, saved: true)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        _ = await appState.syncManager?.saveArticle(articleId: article.id, saved: true)
     }
 }
 

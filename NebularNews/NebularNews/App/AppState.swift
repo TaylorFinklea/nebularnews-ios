@@ -31,6 +31,9 @@ final class AppState {
     /// SwiftData local cache for instant loads and offline reading.
     private(set) var articleCache: ArticleCache?
 
+    /// Offline action queue and network connectivity monitor.
+    private(set) var syncManager: SyncManager?
+
     var containerFallbackReason: ContainerFallbackReason?
 
     /// Whether the user has an active Supabase session.
@@ -84,6 +87,14 @@ final class AppState {
     func setupArticleCache(modelContext: ModelContext) {
         guard articleCache == nil else { return }
         articleCache = ArticleCache(modelContext: modelContext)
+    }
+
+    /// Initialize the offline sync manager. Call once after the model container is available.
+    func setupSyncManager(modelContext: ModelContext) {
+        guard syncManager == nil else { return }
+        let manager = SyncManager(modelContext: modelContext, supabase: supabase)
+        manager.appState = self
+        syncManager = manager
     }
 
     /// Check if the user already has an active Supabase auth session.

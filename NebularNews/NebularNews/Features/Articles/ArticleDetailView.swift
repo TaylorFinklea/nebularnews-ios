@@ -414,7 +414,7 @@ struct ArticleDetailView: View {
             isSaved = detail.article.isRead == 1 // Check saved_at in read state
             // Auto-mark as read
             if detail.article.isRead != 1 {
-                try? await appState.supabase.setRead(articleId: articleId, isRead: true)
+                await appState.syncManager?.setRead(articleId: articleId, isRead: true)
                 payload?.article.isRead = 1
             }
         } catch {
@@ -426,23 +426,16 @@ struct ArticleDetailView: View {
         guard let payload else { return }
         savingRead = true
         let newIsRead = payload.article.isRead != 1
-        do {
-            try await appState.supabase.setRead(articleId: articleId, isRead: newIsRead)
-            self.payload?.article.isRead = newIsRead ? 1 : 0
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await appState.syncManager?.setRead(articleId: articleId, isRead: newIsRead)
+        self.payload?.article.isRead = newIsRead ? 1 : 0
         savingRead = false
     }
 
     private func toggleSaved() async {
         savingBookmark = true
         defer { savingBookmark = false }
-        do {
-            let response = try await appState.supabase.saveArticle(id: articleId, saved: !isSaved)
+        if let response = await appState.syncManager?.saveArticle(articleId: articleId, saved: !isSaved) {
             isSaved = response.saved
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -452,9 +445,17 @@ struct ArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.addTag(articleId: articleId, name: trimmed)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
+                payload?.tags = tags
+            }
             pendingTagName = ""
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            pendingTagName = ""
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -464,8 +465,15 @@ struct ArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.removeTag(articleId: articleId, tagId: tag.id)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
+                payload?.tags = tags
+            }
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -475,20 +483,22 @@ struct ArticleDetailView: View {
         acceptingSuggestion = suggestion.id
         defer { acceptingSuggestion = nil }
         do {
-            let tags = try await appState.supabase.addTag(articleId: articleId, name: suggestion.name)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.addTag(articleId: articleId, name: suggestion.name)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.addTag(articleId: articleId, name: suggestion.name)
+                payload?.tags = tags
+            }
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     private func saveReaction(value: Int, reasonCodes: [String]) async {
-        do {
-            let response = try await appState.supabase.setReaction(
-                articleId: articleId,
-                value: value,
-                reasonCodes: reasonCodes
-            )
+        if let response = await appState.syncManager?.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes) {
             payload?.reaction = CompanionReaction(
                 articleId: response.articleId,
                 feedId: nil,
@@ -496,8 +506,6 @@ struct ArticleDetailView: View {
                 createdAt: nil,
                 reasonCodes: response.reasonCodes
             )
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

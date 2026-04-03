@@ -53,6 +53,19 @@ struct CompanionArticleDetailView: View {
                 ProgressView("Loading article…")
             } else if let payload {
                 List {
+                    if appState.syncManager?.isOffline == true {
+                        Section {
+                            HStack(spacing: 6) {
+                                Image(systemName: "wifi.slash")
+                                Text("Offline — changes will sync later")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+
                     // Hero image — full bleed
                     if let imageUrl = payload.article.imageUrl, let url = URL(string: imageUrl) {
                         Section {
@@ -405,7 +418,7 @@ struct CompanionArticleDetailView: View {
             payload = try await appState.supabase.fetchArticle(id: articleId)
             errorMessage = ""
             if payload?.article.isRead != 1 {
-                try? await appState.supabase.setRead(articleId: articleId, isRead: true)
+                await appState.syncManager?.setRead(articleId: articleId, isRead: true)
                 payload?.article.isRead = 1
             }
         } catch {
@@ -417,13 +430,7 @@ struct CompanionArticleDetailView: View {
         guard let payload else { return }
         savingRead = true
         let newIsRead = payload.article.isRead != 1
-        do {
-            try await appState.supabase.setRead(articleId: articleId, isRead: newIsRead)
-        } catch {
-            savingRead = false
-            errorMessage = error.localizedDescription
-            return
-        }
+        await appState.syncManager?.setRead(articleId: articleId, isRead: newIsRead)
         dismiss()
     }
 
@@ -433,9 +440,17 @@ struct CompanionArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.addTag(articleId: articleId, name: trimmed)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.addTag(articleId: articleId, name: trimmed)
+                payload?.tags = tags
+            }
             pendingTagName = ""
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            pendingTagName = ""
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -445,8 +460,15 @@ struct CompanionArticleDetailView: View {
         savingTag = true
         defer { savingTag = false }
         do {
-            let tags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.removeTag(articleId: articleId, tagId: tag.id)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.removeTag(articleId: articleId, tagId: tag.id)
+                payload?.tags = tags
+            }
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -456,8 +478,15 @@ struct CompanionArticleDetailView: View {
         acceptingSuggestion = suggestion.id
         defer { acceptingSuggestion = nil }
         do {
-            let tags = try await appState.supabase.addTag(articleId: articleId, name: suggestion.name)
-            payload?.tags = tags
+            if let syncManager = appState.syncManager {
+                let tags = try await syncManager.addTag(articleId: articleId, name: suggestion.name)
+                payload?.tags = tags
+            } else {
+                let tags = try await appState.supabase.addTag(articleId: articleId, name: suggestion.name)
+                payload?.tags = tags
+            }
+        } catch where (error as? SyncManagerError) == .queuedOffline {
+            errorMessage = error.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -471,8 +500,7 @@ struct CompanionArticleDetailView: View {
     private func saveReaction(value: Int, reasonCodes: [String]) async {
         savingReaction = true
         defer { savingReaction = false }
-        do {
-            let response = try await appState.supabase.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
+        if let response = await appState.syncManager?.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes) {
             payload?.reaction = CompanionReaction(
                 articleId: response.articleId,
                 feedId: nil,
@@ -481,8 +509,21 @@ struct CompanionArticleDetailView: View {
                 reasonCodes: response.reasonCodes
             )
             reactionDraft = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            // Fallback: direct Supabase call if syncManager not available
+            do {
+                let response = try await appState.supabase.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
+                payload?.reaction = CompanionReaction(
+                    articleId: response.articleId,
+                    feedId: nil,
+                    value: response.value,
+                    createdAt: response.createdAt.flatMap { timestampMillisFromISO($0) },
+                    reasonCodes: response.reasonCodes
+                )
+                reactionDraft = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -511,11 +552,16 @@ struct CompanionArticleDetailView: View {
     private func toggleSaved() async {
         savingBookmark = true
         defer { savingBookmark = false }
-        do {
-            let response = try await appState.supabase.saveArticle(id: articleId, saved: !isSaved)
+        if let response = await appState.syncManager?.saveArticle(articleId: articleId, saved: !isSaved) {
             isSaved = response.saved
-        } catch {
-            errorMessage = error.localizedDescription
+        } else {
+            // Fallback: direct Supabase call if syncManager not available
+            do {
+                let response = try await appState.supabase.saveArticle(id: articleId, saved: !isSaved)
+                isSaved = response.saved
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 }

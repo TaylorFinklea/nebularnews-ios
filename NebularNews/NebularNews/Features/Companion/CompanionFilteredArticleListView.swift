@@ -112,12 +112,8 @@ struct CompanionFilteredArticleListView: View {
 
     private func toggleRead(_ article: CompanionArticleListItem) async {
         let newReadState = article.isRead != 1
-        do {
-            try await appState.supabase.setRead(articleId: article.id, isRead: newReadState)
-            await load()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await appState.syncManager?.setRead(articleId: article.id, isRead: newReadState)
+        await load()
     }
 
     private func loadMore() async {
