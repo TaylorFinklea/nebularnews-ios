@@ -2,42 +2,23 @@
 
 ## ADR-001: Migrate D1 to Supabase Postgres (2026-03-27)
 
-**Status**: Approved, not started
+**Status**: Superseded by ADR-005
 
 **Context**: D1 (SQLite) caused repeated production bugs — V17 migration fragility, schema.sql/runtime mismatch, `runSafe()` workarounds, FTS5 rebuild fragility, single-writer limitation.
 
-**Decision**: Swap D1 for Supabase Postgres while keeping SvelteKit on Cloudflare Workers. The `db.ts` abstraction (`dbGet`/`dbRun`/`dbAll`) is the single point of change. Workers connects to Postgres via HTTP.
+**Decision**: Swap D1 for Supabase Postgres while keeping SvelteKit on Cloudflare Workers.
 
-**Consequences**: ~2-week focused sprint. Supabase Pro ($25/mo). ~200 SQL queries need syntax updates. FTS5 -> tsvector. Latency increases from ~1-5ms to ~20-50ms per query (acceptable for news reader).
-
-**Timing**: After current features stabilize (auth, onboarding, iOS).
+**Outcome**: Attempted but CF Workers couldn't connect to Postgres reliably (Hyperdrive CONNECT_TIMEOUT, 190ms/query, driver incompatibilities). Led to ADR-005.
 
 ## ADR-002: Apple Sign In via Supabase OAuth PKCE (2026-03-27)
 
-**Status**: Implemented
+**Status**: Superseded by ADR-004
 
 **Context**: Magic link auth hit email rate limits. Needed alternative login method.
 
-**Decision**: Use Supabase as OAuth identity broker for Apple Sign In. PKCE flow with GET endpoint at `/auth/apple` to avoid CSP `form-action 'self'` restriction. Ephemeral browser sessions on iOS to prevent stale cookie leakage.
+**Decision**: Use Supabase as OAuth identity broker for Apple Sign In. PKCE flow with GET endpoint at `/auth/apple`.
 
-**Consequences**: Apple client secret expires every 6 months (next: ~Sep 2026). Requires Apple Developer Service ID + Supabase provider config. Both `app.nebularnews.com` and `api.nebularnews.com` must be in Supabase redirect allowlist.
-
-## ADR-004: Replace MobileAPIClient with Direct Supabase SDK (2026-03-29)
-
-**Status**: Implemented (pending build verification)
-
-**Context**: The iOS app communicated with the backend through `MobileAPIClient`, which made REST calls to a SvelteKit web app at `api.nebularnews.com`. This added an unnecessary middleware layer — the SvelteKit API endpoints were thin wrappers around the same Postgres database. With the Supabase Postgres migration approved (ADR-001), the iOS app can talk directly to Supabase.
-
-**Decision**: Replace `MobileAPIClient` with `SupabaseManager` using the Supabase Swift SDK (`supabase-swift` v2.x). Auth switches from custom OAuth PKCE to Supabase Auth with Apple Sign In via ID token (`signInWithIdToken`). Data reads use PostgREST queries. Writes (reactions, read state, tags) use direct table upserts. AI operations (summarize, poll-feeds, OPML import/export) use Edge Function invocations.
-
-**Consequences**:
-- Removes dependency on SvelteKit mobile API endpoints
-- JWT session management handled automatically by Supabase SDK (no more manual token refresh)
-- Apple Sign In configured directly in Supabase Auth dashboard (not through SvelteKit broker)
-- `MobileAPIClient` and `MobileOAuthCoordinator` kept temporarily for backward compatibility
-- User must add `supabase-swift` SPM package in Xcode
-- RLS policies on all tables must be verified for iOS app access patterns
-- Edge functions must be deployed to the Supabase project
+**Outcome**: Worked but was overly complex (SvelteKit broker in the middle). Replaced by direct Supabase Auth in ADR-004.
 
 ## ADR-003: Guided Onboarding with Curated Feeds (2026-03-27)
 
@@ -45,16 +26,60 @@
 
 **Context**: New users saw empty app with no guidance.
 
-**Decision**: Server-side curated feed catalog (~30 feeds, 7 categories) served via API. Both web (`/onboarding`) and iOS (`FeedSelectionView`) present category-based selection. Bulk subscribe endpoint triggers auto-pull so articles appear immediately.
+**Decision**: Curated feed catalog (16 feeds, 5 categories) served via hardcoded catalog in iOS. Bulk subscribe endpoint triggers auto-pull so articles appear immediately.
 
-**Consequences**: Catalog is code-based (not DB) — easy to version control, update requires deploy. iOS has three-phase onboarding: server connect -> feed selection -> main app.
+## ADR-004: Replace MobileAPIClient with Direct Supabase SDK (2026-03-31)
+
+**Status**: Implemented
+
+**Context**: The iOS app communicated through `MobileAPIClient` to a SvelteKit web app. This added unnecessary middleware.
+
+**Decision**: Replace with `SupabaseManager` using Supabase Swift SDK v2.x. Auth uses `signInWithIdToken` for Apple Sign In. Data reads via PostgREST. AI operations via Edge Functions.
+
+## ADR-005: Full API-First Rewrite on Supabase (2026-03-31)
+
+**Status**: Implemented
+
+**Context**: CF Workers couldn't reliably connect to Postgres (Hyperdrive issues, 190ms/query after optimization). The web app was the wrong product — iOS should be primary. No RLS meant manual user isolation across 40+ endpoints.
+
+**Decision**: Decommission SvelteKit web app entirely. Move to pure Supabase backend (Edge Functions + PostgREST + RLS). Fresh Supabase project with clean schema. iOS talks directly to Supabase. Old infrastructure fully decommissioned.
+
+**Consequences**: $0/mo (Supabase free tier). 29 tables with RLS. 10 Edge Functions. iOS-first product. macOS code ready. Docker self-hosting possible via `supabase start`.
 
 ## ADR-006: Widget Data Sharing via App Groups (2026-04-02)
 
 **Status**: Implemented (widget extension target must be added in Xcode)
 
-**Context**: Widgets run in a separate process and cannot call Supabase directly (no auth context). Needed a way to share article data between the main app and widget extension.
+**Context**: Widgets run in a separate process and cannot call Supabase directly.
 
-**Decision**: Use App Groups (`group.com.nebularnews.shared`) with shared UserDefaults. The main app writes stats and top articles as JSON after every Today fetch, dashboard load, and background refresh. Widget reads from the same suite. Deep links (`nebularnews://article/{id}`, `nebularnews://today`) route widget taps back to in-app views.
+**Decision**: Use App Groups (`group.com.nebularnews.shared`) with shared UserDefaults. Main app writes stats and top articles as JSON after every fetch. Deep links route widget taps back to in-app views.
 
-**Consequences**: Data is eventually consistent (up to 15-minute lag). Widget content depends on the main app running at least once. No network calls in the widget process — keeps things simple and reliable.
+## ADR-007: Algorithmic Scoring Without AI (2026-04-02)
+
+**Status**: Implemented
+
+**Context**: AI scoring costs money per article and was disabled to prevent unbounded costs. Users had no scoring feedback.
+
+**Decision**: 4-signal algorithmic scoring (feed reputation, content freshness, content depth, tag match ratio) runs automatically via pg_cron every 5 minutes. Scores are per-user. Reactions trigger immediate re-scoring for feedback. No AI cost.
+
+**Consequences**: All users start at score 3 until they react. Hybrid AI scoring can be layered on top later.
+
+## ADR-008: Offline Queue with SyncManager (2026-04-03)
+
+**Status**: Implemented
+
+**Context**: App was unusable without network. Mutations (read, save, react, tag) failed silently offline.
+
+**Decision**: `SyncManager` with `NWPathMonitor` detects connectivity. All mutations update SwiftData cache immediately (optimistic UI), attempt network call, and queue as `PendingAction` on failure. Actions replay in FIFO order on reconnect. Max 5 retries before dropping.
+
+**Consequences**: App feels responsive regardless of connectivity. Background refresh also syncs pending actions.
+
+## ADR-009: Per-Feed Browser Scraping (2026-04-02)
+
+**Status**: Implemented
+
+**Context**: Aggregator feeds (Hacker News) provide only titles/links in RSS — no article body. AI summarization fails without content.
+
+**Decision**: Per-feed configurable scraping via `scrape_mode` column on feeds table. Steel (primary) + Browserless (fallback) providers. Readability extraction. Admin configures via iOS feed settings. `fetch_content` jobs processed by pg_cron every minute.
+
+**Consequences**: Requires Steel + Browserless API keys. Only scrape-flagged feeds incur provider costs. Quality tracking via `avg_extraction_quality` on feeds table.

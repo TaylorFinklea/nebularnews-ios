@@ -1,29 +1,31 @@
-# Next Steps
+# Next Steps (2026-04-03)
 
-*Last updated: 2026-04-02*
+## Xcode Setup Needed (no code changes)
+- Add macOS destination to NebularNews target (code is ready with #if os guards)
+- Add Widget Extension target, wire up existing files from NebularNewsWidgets/
+- Fix marketing version: set clean 2.0.0 in project settings
+- Set up App Groups for widget data sharing
 
-## Immediate
+## Product Improvements
+- **Hybrid scoring**: layer AI scoring on top of algorithmic (user triggers "AI Score" per article)
+- **Per-user AI rate limiting**: enforce quotas on global API keys, track via ai_usage table
+- **Search UI**: prominent search bar using the tsvector full-text search index
+- **Article reading experience**: richer typography, inline images, reading progress
+- **Admin user management**: view users, reset algorithms, set roles, manage global keys
+- **Feed discovery**: suggest feeds based on user interests, popular feeds among users
 
-- [ ] **Add Widget Extension target in Xcode** — see Xcode setup instructions below
-- [ ] Add `supabase-swift` SPM package in Xcode (URL: `https://github.com/supabase/supabase-swift`, version 2.x)
-- [ ] Configure Apple Sign In provider in Supabase Auth dashboard
-- [ ] Verify RLS policies allow iOS app queries (articles, feeds, tags, settings, etc.)
-- [ ] Build and test the full sign-in flow: Apple Sign In → feed selection → Today tab
-- [ ] Deploy edge functions to Supabase project (`poll-feeds`, `enrich-article`, `import-opml`, `export-opml`)
+## Infrastructure
+- **Docker self-hosting**: test end-to-end with `supabase start`
+- **CI/CD**: GitHub Actions for Edge Function deployment on push
+- **Monitoring**: track Edge Function errors, scoring quality, scraping success rates
+- **Backup**: automated Supabase DB backups
 
-## Short-term
+## Future Platforms
+- **macOS app**: code is platform-ready, add Xcode target + sidebar navigation
+- **Web client**: thin client on Supabase PostgREST (if needed)
+- **Android**: Kotlin/Compose client against same Supabase backend
 
-- [ ] Remove legacy `MobileAPIClient.swift` and `MobileOAuthCoordinator.swift` once migration is verified
-- [ ] Remove legacy companion session code from `AppState` (keychain tokens, `companionServerURL`, etc.)
-- [ ] Add proper count queries for saved articles and filtered article lists
-- [x] Wire up News Brief display (generate-news-brief Edge Function + cron + on-demand button)
-- [ ] Test background refresh with Supabase session
-
-## Planned
-
-- [ ] Build and release to TestFlight with Supabase backend
-- [ ] Test full end-to-end: new user Apple Sign In → onboarding → feed selection → articles populate
-- [ ] Add real-time subscriptions for article updates (Supabase Realtime)
-- [ ] Deploy chat AI edge function for article Q&A
-- [ ] Wire iOS article list sorting by algorithmic score (scores are now in `article_scores` with `scoring_method = 'algorithmic'`)
-- [x] Re-score recent articles from a feed when user reacts (thumbs up/down changes feed reputation)
+## Scaling
+- **Supabase Pro**: upgrade when exceeding free tier limits (500MB DB, 2M function invocations)
+- **Connection pooling**: Supabase handles this, but monitor as user count grows
+- **Feed polling optimization**: prioritize active feeds, reduce polling for stale feeds
