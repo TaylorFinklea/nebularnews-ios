@@ -8,7 +8,7 @@ Copy this template and fill it in at the end of each work session. Update `curre
 
 **Date**: YYYY-MM-DD
 **Branch**: main (or feature branch name)
-**Repos touched**: web / ios / both
+**Repos touched**: ios / api / both
 
 ## What was done
 
@@ -16,10 +16,10 @@ Copy this template and fill it in at the end of each work session. Update `curre
 
 ## What changed
 
-### Web (nebularnews)
+### iOS (nebularnews-ios)
 - `path/to/file` — description
 
-### iOS (nebularnews-ios)
+### Backend (nebularnews-api)
 - `path/to/file` — description
 
 ## What's next
@@ -33,9 +33,8 @@ Copy this template and fill it in at the end of each work session. Update `curre
 
 ## Validation Status
 
-- Web tests: passing / failing (count)
 - iOS build: success / failure
-- Production: deployed / pending CI
+- Edge Functions: deployed / pending
 - Manual testing: done / needed
 
 ## Decisions Made

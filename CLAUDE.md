@@ -1,10 +1,5 @@
 # NebularNews iOS Claude Instructions
 
-## Session Workflow
-- **Start of session**: Read `docs/ai/current-state.md`, `docs/ai/next-steps.md`, and `docs/ai/decisions.md` before doing any work. These are the source of truth for project state.
-- **End of session**: Update `docs/ai/current-state.md` and `docs/ai/next-steps.md` with what changed. Add to `docs/ai/decisions.md` if any architectural decisions were made.
-- **After each major feature**: Update handoff docs immediately, don't wait for session end.
-
 ## Architecture
 - **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj) — Edge Functions + PostgREST + RLS
 - **Backend repo**: `nebularnews-api` at `/Users/tfinklea/git/nebularnews-api`

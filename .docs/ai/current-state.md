@@ -49,6 +49,11 @@
 - Onboarding: 16 feed suggestions across 5 categories
 - TestFlight: Build 4 uploaded
 
+## Session Continuity
+- Handoff docs now at `.docs/ai/` (migrated from `docs/ai/`)
+- Global workflow defined in `~/CLAUDE.md`
+- Templates at `~/.claude/templates/handoff/`
+
 ## What works end-to-end
 - Sign in with Apple → see articles from subscribed feeds
 - Add/remove/pause feeds, import/export OPML

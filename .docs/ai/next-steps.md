@@ -20,6 +20,10 @@
 - **Monitoring**: track Edge Function errors, scoring quality, scraping success rates
 - **Backup**: automated Supabase DB backups
 
+## Developer Tooling
+- Complete `opencode auth login` for Google/Gemini if Gemini-backed agents should be available locally
+- Optionally install `@code-yeongyu/comment-checker` to clear the remaining `bunx oh-my-opencode doctor` warning for the comment-checker hook
+
 ## Future Platforms
 - **macOS app**: code is platform-ready, add Xcode target + sidebar navigation
 - **Web client**: thin client on Supabase PostgREST (if needed)

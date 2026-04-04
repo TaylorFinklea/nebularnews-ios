@@ -83,3 +83,13 @@
 **Decision**: Per-feed configurable scraping via `scrape_mode` column on feeds table. Steel (primary) + Browserless (fallback) providers. Readability extraction. Admin configures via iOS feed settings. `fetch_content` jobs processed by pg_cron every minute.
 
 **Consequences**: Requires Steel + Browserless API keys. Only scrape-flagged feeds incur provider costs. Quality tracking via `avg_extraction_quality` on feeds table.
+
+## ADR-010: Standardize Handoff Docs at .docs/ai/ (2026-04-03)
+
+**Status**: Implemented
+
+**Context**: Session handoff workflow was duplicated in each repo's CLAUDE.md/AGENTS.md. The iOS repo used `docs/ai/` while the API repo had no handoff docs. The roadmap was stale (referenced old SvelteKit/D1 architecture).
+
+**Decision**: Move reusable handoff workflow to global `~/CLAUDE.md`. Standardize on `.docs/ai/` as the default directory across all repos. Migrate iOS from `docs/ai/` → `.docs/ai/`. Create `.docs/ai/` in the API repo. Keep starter templates at `~/.claude/templates/handoff/`. Remove Session Workflow sections from repo-level instruction files.
+
+**Consequences**: Each repo has its own `.docs/ai/` tracked by git. Global instructions define the workflow once. Repo CLAUDE.md files only contain project-specific guidance.
