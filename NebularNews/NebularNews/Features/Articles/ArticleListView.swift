@@ -5,6 +5,9 @@ import NebularNewsKit
 ///
 /// Ported from the standalone-era `ArticleListView`, now backed by
 /// Supabase via `appState.supabase` instead of SwiftData `@Query`.
+
+private let searchDebounceInterval: Duration = .milliseconds(300)
+
 struct ArticleListView: View {
     @Environment(AppState.self) private var appState
 
@@ -176,7 +179,7 @@ struct ArticleListView: View {
             .onChange(of: searchText) { _, _ in
                 Task {
                     // Debounce slightly
-                    try? await Task.sleep(for: .milliseconds(300))
+                    try? await Task.sleep(for: searchDebounceInterval)
                     await load()
                 }
             }

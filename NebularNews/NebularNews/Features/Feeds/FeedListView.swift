@@ -5,6 +5,9 @@ import NebularNewsKit
 ///
 /// Ported from the standalone-era `FeedListView`, now backed by
 /// Supabase via `appState.supabase` instead of SwiftData.
+
+private let feedPullWaitDuration: Duration = .seconds(3)
+
 struct FeedListView: View {
     @Environment(AppState.self) private var appState
 
@@ -142,7 +145,7 @@ struct FeedListView: View {
         do {
             try await appState.supabase.triggerPull()
             // Wait briefly for the pull to process, then reload
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: feedPullWaitDuration)
             await loadFeeds()
         } catch {
             errorMessage = error.localizedDescription
