@@ -66,6 +66,8 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 
 ## Backlog
 
+<!-- tier3_owner: claude -->
+
 > Items that run **alongside phases**, not blocked by them.
 > Tagged by tier so the right model handles each item.
 >
