@@ -16,7 +16,7 @@ struct ArticleCard: View {
             // Hero image (if available, not compact)
             if style != .compact, let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
                 Color.clear
-                    .frame(height: style == .hero ? 200 : 140)
+                    .frame(height: style == .hero ? DesignTokens.heroImageHeight : DesignTokens.cardImageHeight)
                     .overlay {
                         AsyncImage(url: url) { phase in
                             switch phase {

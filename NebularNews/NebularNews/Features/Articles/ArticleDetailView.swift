@@ -549,7 +549,7 @@ private struct ArticleHeroImage: View {
                 EmptyView()
             }
         }
-        .frame(height: 240)
+        .frame(height: DesignTokens.detailImageHeight)
         .clipped()
     }
 }

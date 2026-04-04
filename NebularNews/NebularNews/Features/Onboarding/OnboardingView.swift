@@ -24,7 +24,7 @@ struct OnboardingView: View {
                         Image(systemName: "sparkles")
                             .font(.system(size: 60, weight: .semibold))
                             .foregroundStyle(palette.primary)
-                            .frame(width: 96, height: 96)
+                            .frame(width: DesignTokens.onboardingIconSize, height: DesignTokens.onboardingIconSize)
                             .background(palette.surfaceStrong, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                             .background(palette.primarySoft, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
                             .overlay(

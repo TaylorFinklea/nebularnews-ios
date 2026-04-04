@@ -585,7 +585,7 @@ private func timestampMillisFromISO(_ isoString: String) -> Int? {
 private struct CompanionHeroImage: View {
     let url: URL
 
-    private let baseHeight: CGFloat = 280
+    private let baseHeight = DesignTokens.companionDetailImageHeight
 
     var body: some View {
         AsyncImage(url: url) { phase in
