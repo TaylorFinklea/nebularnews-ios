@@ -18,4 +18,8 @@
 ## Backlog — pick up anytime
 
 > See `roadmap.md` "Backlog" section for full list with tier tags.
-> Start with high-value trivial items: fix marketing version, update README, remove stale doc references.
+> 10 of 24 items completed this session. Remaining highlights:
+> - [trivial] Fix marketing version, extract magic numbers
+> - [minor] Remove MobileAPIClient, numeric booleans → Bool, pagination constants, accessibility labels
+> - [minor/API] Centralize env vars, add fetch timeouts, centralize model names, CI/CD, monitoring
+> Use `/handoff-prompt` to generate prompts for cheaper models when rate-limited.
