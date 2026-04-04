@@ -37,5 +37,4 @@
 
 ## Project Notes
 - `OPENAI_API_KEY` is expected in the macOS Keychain, not in source control.
-- Standalone CloudKit sync is state-only. Heavy article cache/runtime data stays local unless the architecture is intentionally changed.
 - Prefer local-first and background-friendly designs; do not block core reading flows on optional enrichment.
