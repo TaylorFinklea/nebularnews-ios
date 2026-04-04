@@ -48,7 +48,7 @@ struct FeedListView: View {
                     NavigationLink {
                         ArticleListView(
                             feedId: feed.id,
-                            feedTitle: (feed.title?.isEmpty == false ? feed.title : feed.url)!
+                            feedTitle: feed.title.flatMap { $0.isEmpty ? nil : $0 } ?? feed.url
                         )
                     } label: {
                         FeedRow(feed: feed)
@@ -169,7 +169,7 @@ private struct FeedRow: View {
                 }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(feed.title?.isEmpty == false ? feed.title! : feed.url)
+                Text(feed.title.flatMap { $0.isEmpty ? nil : $0 } ?? feed.url)
                     .font(.body)
                     .lineLimit(1)
 
