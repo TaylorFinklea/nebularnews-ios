@@ -24,12 +24,6 @@
 - Build or test the smallest relevant target after changes.
 - Mention clearly if something could not be verified.
 
-## Mobile API Encoding
-- `MobileAPIClient` uses `JSONEncoder` with `.convertToSnakeCase`. This means all POST/PATCH/DELETE bodies send snake_case keys (`is_read`, `feed_id`, `add_tag_names`).
-- The NebularNews server endpoints parse raw JSON and expect camelCase keys (`isRead`, `feedId`, `addTagNames`).
-- **Every server endpoint under `/api/mobile/` MUST accept both camelCase and snake_case keys**: `body?.isRead ?? body?.is_read`.
-- The `updateSettings` method is a special case — it uses a plain `JSONEncoder()` (no snake_case) because the settings payload must match the server's camelCase field names exactly.
-
 ## Release / TestFlight
 - Run `./scripts/release.sh` to archive and upload to TestFlight.
 - The script auto-increments both `MARKETING_VERSION` (patch) and `CURRENT_PROJECT_VERSION` (build number) via `agvtool`, archives, exports with automatic signing, uploads to App Store Connect, and commits the version bump.
