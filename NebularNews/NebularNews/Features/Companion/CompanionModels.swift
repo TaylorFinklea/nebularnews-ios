@@ -122,6 +122,7 @@ struct CompanionArticle: Codable {
     let excerpt: String?
     let wordCount: Int?
     var isRead: Int?
+    var savedAt: String?
 }
 
 struct CompanionArticleSummary: Codable {

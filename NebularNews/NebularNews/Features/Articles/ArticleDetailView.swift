@@ -411,7 +411,7 @@ struct ArticleDetailView: View {
             let detail = try await appState.supabase.fetchArticle(id: articleId)
             payload = detail
             errorMessage = ""
-            isSaved = detail.article.isRead == 1 // Check saved_at in read state
+            isSaved = detail.article.savedAt != nil
             // Auto-mark as read
             if detail.article.isRead != 1 {
                 await appState.syncManager?.setRead(articleId: articleId, isRead: true)

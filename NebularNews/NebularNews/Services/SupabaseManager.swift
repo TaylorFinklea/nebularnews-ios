@@ -1229,7 +1229,8 @@ private struct SupabaseArticleDetailRow: Decodable {
                 contentText: contentText,
                 excerpt: excerpt,
                 wordCount: wordCount,
-                isRead: (readState?.isRead == true) ? 1 : 0
+                isRead: (readState?.isRead == true) ? 1 : 0,
+                savedAt: readState?.savedAt
             ),
             summary: summary.map { CompanionArticleSummary(
                 summaryText: $0.summaryText,
