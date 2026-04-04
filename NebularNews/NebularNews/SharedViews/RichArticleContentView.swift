@@ -193,14 +193,15 @@ private struct HTMLBlockParser {
         var attr = AttributedString(text)
         let range = attr.startIndex..<attr.endIndex
 
+        let serifBody: Font = .system(.body, design: .serif)
         if code {
             attr[range].font = .body.monospaced()
         } else {
             switch (bold, italic) {
-            case (true, true):  attr[range].font = .body.bold().italic()
-            case (true, false): attr[range].font = .body.bold()
-            case (false, true): attr[range].font = .body.italic()
-            default: break
+            case (true, true):  attr[range].font = serifBody.bold().italic()
+            case (true, false): attr[range].font = serifBody.bold()
+            case (false, true): attr[range].font = serifBody.italic()
+            default:            attr[range].font = serifBody
             }
         }
 
@@ -309,7 +310,7 @@ struct RichArticleContentView: View {
 
     @ViewBuilder
     private func renderedBlocks(_ blocks: [ContentBlock]) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 18) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
             }
@@ -321,9 +322,9 @@ struct RichArticleContentView: View {
         switch block {
         case .paragraph(let text):
             Text(text)
-                .font(.body)
+                .font(.system(.body, design: .serif))
                 .foregroundStyle(.primary)
-                .lineSpacing(4)
+                .lineSpacing(6)
                 .textSelection(.enabled)
 
         case .heading(let level, let text):
@@ -331,7 +332,7 @@ struct RichArticleContentView: View {
                 .font(headingFont(for: level))
                 .foregroundStyle(.primary)
                 .fontWeight(.semibold)
-                .padding(.top, level <= 2 ? 8 : 4)
+                .padding(.top, level <= 2 ? 12 : 6)
                 .textSelection(.enabled)
 
         case .blockquote(let text):
@@ -340,12 +341,12 @@ struct RichArticleContentView: View {
                     .fill(Color.accentColor)
                     .frame(width: 3)
                 Text(text)
-                    .font(.body.italic())
+                    .font(.system(.body, design: .serif).italic())
                     .foregroundStyle(.secondary)
-                    .lineSpacing(3)
+                    .lineSpacing(5)
                     .textSelection(.enabled)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 4)
 
         case .codeBlock(let code):
             ScrollView(.horizontal, showsIndicators: false) {
@@ -394,13 +395,13 @@ struct RichArticleContentView: View {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(ordered ? "\(index + 1)." : "•")
-                        .font(.body)
+                        .font(.system(.body, design: .serif))
                         .foregroundStyle(.secondary)
                         .frame(minWidth: 20, alignment: .trailing)
                     Text(item)
-                        .font(.body)
+                        .font(.system(.body, design: .serif))
                         .foregroundStyle(.primary)
-                        .lineSpacing(3)
+                        .lineSpacing(5)
                         .textSelection(.enabled)
                 }
             }

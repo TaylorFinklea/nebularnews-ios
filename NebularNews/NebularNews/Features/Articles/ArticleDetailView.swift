@@ -174,44 +174,44 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func articleHeader(_ payload: CompanionArticleDetailPayload) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Title + score badge
-            HStack(alignment: .top) {
+        VStack(alignment: .leading, spacing: 12) {
+            // Title
+            HStack(alignment: .top, spacing: 12) {
                 Text(payload.article.title ?? "Untitled")
-                    .font(.title2)
-                    .fontWeight(.bold)
-
-                Spacer()
+                    .font(.title.weight(.bold))
+                    .lineSpacing(2)
 
                 if let score = payload.score?.score {
                     ScoreBadge(score: score)
                 }
             }
 
-            // Author + date
-            HStack(spacing: 12) {
-                if let author = payload.article.author, !author.isEmpty {
-                    Label(author, systemImage: "person")
-                        .font(.subheadline)
+            // Byline: source · author · date
+            VStack(alignment: .leading, spacing: 4) {
+                if let feedTitle = payload.preferredSource?.feedTitle, !feedTitle.isEmpty {
+                    Text(feedTitle)
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
 
-                if let publishedAt = payload.article.publishedAt {
-                    Label(
-                        Date(timeIntervalSince1970: Double(publishedAt) / 1000)
-                            .formatted(date: .abbreviated, time: .shortened),
-                        systemImage: "calendar"
-                    )
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-            }
+                HStack(spacing: 4) {
+                    if let author = payload.article.author, !author.isEmpty {
+                        Text(author)
+                            .foregroundStyle(.secondary)
+                    }
 
-            // Feed name
-            if let feedTitle = payload.preferredSource?.feedTitle, !feedTitle.isEmpty {
-                Label(feedTitle, systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    if payload.article.author != nil && payload.article.publishedAt != nil {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    if let publishedAt = payload.article.publishedAt {
+                        Text(Date(timeIntervalSince1970: Double(publishedAt) / 1000)
+                            .formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.subheadline)
             }
         }
     }
@@ -379,13 +379,13 @@ struct ArticleDetailView: View {
             RichArticleContentView(html: html)
         } else if let text = payload.article.contentText, !text.isEmpty {
             Text(text)
-                .font(.body)
-                .lineSpacing(4)
+                .font(.system(.body, design: .serif))
+                .lineSpacing(6)
                 .textSelection(.enabled)
         } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
             Text(excerpt)
-                .font(.body)
-                .lineSpacing(4)
+                .font(.system(.body, design: .serif))
+                .lineSpacing(6)
                 .textSelection(.enabled)
         } else {
             VStack(spacing: 12) {
