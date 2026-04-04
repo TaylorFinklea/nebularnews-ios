@@ -93,3 +93,13 @@
 **Decision**: Move reusable handoff workflow to global `~/CLAUDE.md`. Standardize on `.docs/ai/` as the default directory across all repos. Migrate iOS from `docs/ai/` → `.docs/ai/`. Create `.docs/ai/` in the API repo. Keep starter templates at `~/.claude/templates/handoff/`. Remove Session Workflow sections from repo-level instruction files.
 
 **Consequences**: Each repo has its own `.docs/ai/` tracked by git. Global instructions define the workflow once. Repo CLAUDE.md files only contain project-specific guidance.
+
+## ADR-011: Unified Roadmap with Two-Tier Backlog (2026-04-04)
+
+**Status**: Implemented
+
+**Context**: The roadmap had flat milestones (M1-M4) with no distinction between work that needs an expensive model vs. mechanical cleanup. Infrastructure and tech debt items blocked product work in the priority order despite being independent. Two repos had separate roadmaps that duplicated information.
+
+**Decision**: Single unified roadmap in the iOS repo (primary product). Phases are sequenced product work for capable models (Opus/Sonnet-class): M2 Article Reading → M3 AI Improvements → M4 Search & Discovery → M5 macOS. Backlog runs alongside phases, tagged `[minor]` (Sonnet/GPT-5.4/Gemini 3.1 Pro) or `[trivial]` (Haiku/OSS/Mini/Flash). Infrastructure (CI/CD, monitoring, Docker) moved to backlog since it's well-scoped. Widget Extension moved to backlog (code is written, just needs Xcode wiring). macOS stayed as a phase (needs sidebar nav design). API repo roadmap references the unified one.
+
+**Rationale**: Expensive models focus on product differentiation (reading UX, AI features, discovery). Cheaper models handle mechanical cleanup in parallel. Each backlog item has enough context (file paths, what to change, why) that a model can pick it up cold without reading the whole codebase.
