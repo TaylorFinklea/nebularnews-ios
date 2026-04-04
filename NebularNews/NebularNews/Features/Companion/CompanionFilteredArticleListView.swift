@@ -96,7 +96,7 @@ struct CompanionFilteredArticleListView: View {
         do {
             let payload = try await appState.supabase.fetchArticles(
                 offset: 0,
-                limit: 100,
+                limit: PaginationConfig.companionPageSize,
                 read: read,
                 minScore: minScore,
                 sort: sort,
@@ -123,7 +123,7 @@ struct CompanionFilteredArticleListView: View {
         do {
             let payload = try await appState.supabase.fetchArticles(
                 offset: articles.count,
-                limit: 100,
+                limit: PaginationConfig.companionPageSize,
                 read: read,
                 minScore: minScore,
                 sort: sort,

@@ -210,7 +210,7 @@ struct ArticleListView: View {
             let payload = try await appState.supabase.fetchArticles(
                 query: searchText,
                 offset: 0,
-                limit: 30,
+                limit: PaginationConfig.defaultPageSize,
                 read: readFilter,
                 minScore: filter.minScore,
                 sort: sortOrder
@@ -244,7 +244,7 @@ struct ArticleListView: View {
             let payload = try await appState.supabase.fetchArticles(
                 query: searchText,
                 offset: articles.count,
-                limit: 30,
+                limit: PaginationConfig.defaultPageSize,
                 read: readFilter,
                 minScore: filter.minScore,
                 sort: sortOrder

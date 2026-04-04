@@ -79,7 +79,7 @@ struct DashboardView: View {
         do {
             async let todayTask = appState.supabase.fetchToday()
             async let topTask = appState.supabase.fetchArticles(
-                limit: 10,
+                limit: PaginationConfig.dashboardPageSize,
                 read: .unread,
                 minScore: 4,
                 sort: .score,

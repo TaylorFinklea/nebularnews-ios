@@ -33,6 +33,12 @@ struct AppConfiguration {
     }
 }
 
+enum PaginationConfig {
+    static let defaultPageSize = 30
+    static let dashboardPageSize = 10
+    static let companionPageSize = 100
+}
+
 private extension Bundle {
     func stringValue(forInfoDictionaryKey key: String) -> String? {
         object(forInfoDictionaryKey: key).flatMap { value in
