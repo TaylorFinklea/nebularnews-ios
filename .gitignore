@@ -26,8 +26,9 @@ Package.resolved
 *.swp
 *~.nib
 
-# Local agent worktrees
+# Claude Code local config
 .claude/worktrees/
+.claude/settings.local.json
 
 # CocoaPods (just in case)
 Pods/

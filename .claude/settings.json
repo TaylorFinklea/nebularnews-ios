@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file_path=\"$CLAUDE_TOOL_ARG_FILE_PATH\"; if [ -n \"$file_path\" ] && echo \"$file_path\" | grep -qE '\\.swift$'; then echo '[swift-build-check] Swift file changed — queue build verification'; fi",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file_path=\"$CLAUDE_TOOL_ARG_FILE_PATH\"; if [ -n \"$file_path\" ] && echo \"$file_path\" | grep -qE '\\.(p8|p12|key|pem|cer)$'; then echo 'BLOCK: Refusing to modify credential/signing file'; exit 2; fi",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
