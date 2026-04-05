@@ -80,7 +80,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[x]` **Numeric booleans → proper Bool**: Done — added `isReadBool` and `disabledBool` computed properties to `CompanionArticle`, `CompanionArticleListItem`, and `CompanionFeed`. Replaced 17 `isRead == 1` / `disabled == 1` checks across all views.
 - ~`[minor]` **Fix isSaved logic bug**: Fixed — now checks `savedAt != nil` instead of `isRead == 1`. Piped `savedAt` through `CompanionArticle` model.~
 - ~`[minor]` **Extract pagination constants**: Done — created `PaginationConfig` enum in `AppConfiguration.swift`, replaced all hardcoded limits in `ArticleListView`, `CompanionArticlesView`, `CompanionFilteredArticleListView`, `DashboardView`.~
-- `[minor]` **Add accessibility labels**: Icons in `FeedListView`, score badges, and action buttons lack VoiceOver labels. Audit all SF Symbol images for `.accessibilityLabel()`.
+- `[~]` **Add accessibility labels**: Icons in `FeedListView`, score badges, and action buttons lack VoiceOver labels. Audit all SF Symbol images for `.accessibilityLabel()`.
 - `[minor]` **Widget Extension wiring**: Add Widget Extension target in Xcode, wire up existing files from `NebularNewsWidgets/`, set up App Groups (`group.com.nebularnews.shared`). Code is already written — this is Xcode project configuration.
 - `[minor]` **Split SupabaseManager (1792 lines)**: Extract domain services — `ArticleService`, `FeedService`, `EnrichmentService`, `AuthService`. Currently a monolith with 50+ methods. File: `Services/SupabaseManager.swift`.
 - `[minor]` **Extract CompanionArticleDetailView sub-views (692 lines)**: Break into `ArticleBodyView`, `EnrichmentSection`, `TagsSection`, `ReactionsView`. File: `Features/Companion/CompanionArticleDetailView.swift`.
