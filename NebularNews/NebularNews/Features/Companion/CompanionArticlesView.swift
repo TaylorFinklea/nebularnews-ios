@@ -26,6 +26,7 @@ private struct CompanionFilterBar: View {
                                 Text(order.label)
                                 if filter.sortOrder == order {
                                     Image(systemName: "checkmark")
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
@@ -39,10 +40,10 @@ private struct CompanionFilterBar: View {
                     Button {
                         filter.minScore = nil
                     } label: {
-                        HStack {
-                            Text("Any score")
-                            if filter.minScore == nil { Image(systemName: "checkmark") }
-                        }
+                            HStack {
+                                Text("Any score")
+                                if filter.minScore == nil { Image(systemName: "checkmark").accessibilityHidden(true) }
+                            }
                     }
                     ForEach([3, 4, 5], id: \.self) { threshold in
                         Button {
@@ -50,7 +51,7 @@ private struct CompanionFilterBar: View {
                         } label: {
                             HStack {
                                 Text("\(threshold)+ score")
-                                if filter.minScore == threshold { Image(systemName: "checkmark") }
+                                if filter.minScore == threshold { Image(systemName: "checkmark").accessibilityHidden(true) }
                             }
                         }
                     }
@@ -100,6 +101,7 @@ struct CompanionArticlesView: View {
                     Section {
                         HStack(spacing: 6) {
                             Image(systemName: "wifi.slash")
+                                .accessibilityHidden(true)
                             Text("Offline")
                             if let count = appState.syncManager?.pendingActionCount, count > 0 {
                                 Text("• \(count) pending")
@@ -202,7 +204,7 @@ struct CompanionArticlesView: View {
             .navigationTitle("Articles")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                    Button { showSettings = true } label: { Image(systemName: "gear").accessibilityLabel("Settings") }
                 }
             }
             .searchable(text: $query, prompt: "Search articles")

@@ -156,6 +156,7 @@ struct CompanionFeedsView: View {
                     }
                 } label: {
                     Image(systemName: "plus")
+                        .accessibilityLabel("Add feed")
                 }
             }
         }
@@ -331,6 +332,7 @@ private struct CompanionOPMLImportSheet: View {
                 Image(systemName: "doc.text")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("OPML document")
                 Text("Select an OPML file to import feeds.")
                     .foregroundStyle(.secondary)
                 Button("Choose File") {

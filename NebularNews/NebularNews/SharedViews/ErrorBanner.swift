@@ -8,6 +8,7 @@ struct ErrorBanner: View {
         HStack(spacing: 12) {
             Image(systemName: "wifi.exclamationmark")
                 .foregroundStyle(.red)
+                .accessibilityLabel("Connection error")
             Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.primary)

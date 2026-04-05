@@ -73,6 +73,7 @@ struct FeedListView: View {
                     showAddSheet = true
                 } label: {
                     Image(systemName: "plus")
+                        .accessibilityLabel("Add feed")
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
@@ -169,6 +170,7 @@ private struct FeedRow: View {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .foregroundStyle(.secondary)
                         .font(.system(size: 16))
+                        .accessibilityLabel("Feed icon")
                 }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -197,6 +199,7 @@ private struct FeedRow: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.red)
+                            .accessibilityLabel("Has errors")
                     }
                 }
 

@@ -57,6 +57,7 @@ struct CompanionArticleDetailView: View {
                         Section {
                             HStack(spacing: 6) {
                                 Image(systemName: "wifi.slash")
+                                    .accessibilityHidden(true)
                                 Text("Offline — changes will sync later")
                             }
                             .font(.caption)
@@ -174,6 +175,7 @@ struct CompanionArticleDetailView: View {
                                         } icon: {
                                             Image(systemName: item.weight > 0 ? "plus.circle.fill" : "minus.circle.fill")
                                                 .foregroundStyle(item.weight > 0 ? .green : .red)
+                                                .accessibilityLabel(item.weight > 0 ? "Positive signal" : "Negative signal")
                                         }
                                         .font(.caption)
                                     }
@@ -215,6 +217,7 @@ struct CompanionArticleDetailView: View {
                                                 Image(systemName: "xmark.circle.fill")
                                                     .font(.caption2)
                                                     .foregroundStyle(.secondary)
+                                                    .accessibilityLabel("Remove tag \(tag.name)")
                                             }
                                             .buttonStyle(.plain)
                                         }
@@ -264,6 +267,7 @@ struct CompanionArticleDetailView: View {
                                         Image(systemName: rating > 0 ? "hand.thumbsup.fill" : "hand.thumbsdown.fill")
                                             .foregroundStyle(rating > 0 ? .green : .red)
                                             .font(.caption)
+                                            .accessibilityLabel(rating > 0 ? "Thumbs up" : "Thumbs down")
                                     }
                                     VStack(alignment: .leading, spacing: 2) {
                                         if let comment = item.comment, !comment.isEmpty {
@@ -302,6 +306,7 @@ struct CompanionArticleDetailView: View {
                             Task { await toggleReadAndGoBack() }
                         } label: {
                             Image(systemName: payload.article.isReadBool ? "eye.slash" : "eye")
+                                .accessibilityLabel(payload.article.isReadBool ? "Mark as unread" : "Mark as read")
                         }
                         .disabled(savingRead)
 
@@ -309,6 +314,7 @@ struct CompanionArticleDetailView: View {
                             Task { await toggleSaved() }
                         } label: {
                             Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                                .accessibilityLabel(isSaved ? "Remove from saved" : "Save article")
                         }
                         .disabled(savingBookmark)
                     }
@@ -401,12 +407,14 @@ struct CompanionArticleDetailView: View {
                 openReactionDraft(value: 1)
             } label: {
                 Image(systemName: payload.reaction?.value == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    .accessibilityLabel("Like article")
             }
 
             Button {
                 openReactionDraft(value: -1)
             } label: {
                 Image(systemName: payload.reaction?.value == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .accessibilityLabel("Dislike article")
             }
         }
     }
@@ -601,6 +609,7 @@ private struct CompanionHeroImage: View {
                         Image(systemName: "photo")
                             .font(.title)
                             .foregroundStyle(.secondary.opacity(0.5))
+                            .accessibilityLabel("Image not available")
                     }
             case .empty:
                 Rectangle()
@@ -664,6 +673,7 @@ private struct CompanionReactionReasonSheet: View {
                         Spacer()
                         if selectedCodes.contains(option.code) {
                             Image(systemName: "checkmark.circle.fill")
+                                .accessibilityHidden(true)
                         }
                     }
                 }

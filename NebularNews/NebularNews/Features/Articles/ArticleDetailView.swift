@@ -129,12 +129,14 @@ struct ArticleDetailView: View {
             }
         } label: {
             Image(systemName: readerMode ? "doc.richtext" : "doc.plaintext")
+                .accessibilityLabel(readerMode ? "Switch to plain text" : "Switch to rich text")
         }
 
         Button {
             Task { await toggleRead() }
         } label: {
             Image(systemName: payload.article.isReadBool ? "eye.slash" : "eye")
+                .accessibilityLabel(payload.article.isReadBool ? "Mark as unread" : "Mark as read")
         }
         .disabled(savingRead)
 
@@ -142,6 +144,7 @@ struct ArticleDetailView: View {
             Task { await toggleSaved() }
         } label: {
             Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                .accessibilityLabel(isSaved ? "Remove from saved" : "Save article")
         }
         .disabled(savingBookmark)
     }
@@ -291,6 +294,7 @@ struct ArticleDetailView: View {
                             } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.caption2)
+                                    .accessibilityLabel("Remove tag \(tag.name)")
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
@@ -335,6 +339,7 @@ struct ArticleDetailView: View {
                     showTagPicker = true
                 } label: {
                     Image(systemName: "tag")
+                        .accessibilityLabel("Browse tags")
                 }
                 .controlSize(.small)
             }
@@ -468,6 +473,7 @@ struct ArticleDetailView: View {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel("No content available")
                 Text("No content available. Open in browser to read the full article.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

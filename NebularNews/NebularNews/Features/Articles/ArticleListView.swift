@@ -118,6 +118,7 @@ struct ArticleListView: View {
                                         Text(order.label)
                                         if filter.sortOrder == order {
                                             Image(systemName: "checkmark")
+                                                .accessibilityHidden(true)
                                         }
                                     }
                                 }
@@ -131,7 +132,7 @@ struct ArticleListView: View {
                             } label: {
                                 HStack {
                                     Text("Any")
-                                    if filter.minScore == nil { Image(systemName: "checkmark") }
+                                    if filter.minScore == nil { Image(systemName: "checkmark").accessibilityHidden(true) }
                                 }
                             }
                             ForEach([3, 4, 5], id: \.self) { threshold in
@@ -141,7 +142,7 @@ struct ArticleListView: View {
                                 } label: {
                                     HStack {
                                         Text("\(threshold)+")
-                                        if filter.minScore == threshold { Image(systemName: "checkmark") }
+                                        if filter.minScore == threshold { Image(systemName: "checkmark").accessibilityHidden(true) }
                                     }
                                 }
                             }
