@@ -111,7 +111,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[minor]` **Extract enrich-article job handlers (430 lines)**: Summarize, key_points, score, auto_tag share a pattern. Extract each into a handler module and DRY the AI invocation. File: `enrich-article/index.ts`.
 - `[minor]` **Type feed-parser properly (355 lines)**: 6 `deno-lint-ignore no-explicit-any` suppressions. Create concrete `ParsedFeed`/`ParsedItem` interfaces instead of generic objects. File: `_shared/feed-parser.ts`.
 - `[x]` **Standardize logging**: Done — `_shared/logger.ts` adopted across all functions: `scraper.ts`, `process-jobs`, `send-notification`, `generate-news-brief`, `enrich-article`, `article-chat`, `poll-feeds`, `score-articles`, `scrape-article`, `export-opml`, `import-opml`.
-- `[trivial]` **Fix `any` casts in scrape-article**: `(source as any)?.feeds` at line 61. Create proper type for `article_sources` JOIN result. File: `scrape-article/index.ts:61`.
+- `[~]` **Fix `any` casts in scrape-article**: `(source as any)?.feeds` at line 61. Create proper type for `article_sources` JOIN result. File: `scrape-article/index.ts:61`.
 - `[trivial]` **Add error handling to poll-feeds upserts**: Lines 110, 159, 212 have upsert/insert without individual error checks. Wrap each with try/catch and per-operation logging. File: `poll-feeds/index.ts`.
 - ~`[trivial]` **Extract batch size constants**: Done — created `_shared/constants.ts`, imported in all three functions.~
 
