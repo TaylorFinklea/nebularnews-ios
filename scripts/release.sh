@@ -28,7 +28,8 @@ cd "$PROJECT_DIR"
 
 # Get current values
 OLD_BUILD=$(agvtool what-version -terse)
-OLD_VERSION=$(agvtool what-marketing-version -terse1 | head -1 | cut -d= -f2)
+# Read MARKETING_VERSION directly from project.pbxproj (agvtool can't resolve it without Info.plist)
+OLD_VERSION=$(grep -m1 'MARKETING_VERSION = ' NebularNews.xcodeproj/project.pbxproj | sed 's/.*= //;s/;.*//' | tr -d '[:space:]')
 
 # Bump build number
 NEW_BUILD=$((OLD_BUILD + 1))
