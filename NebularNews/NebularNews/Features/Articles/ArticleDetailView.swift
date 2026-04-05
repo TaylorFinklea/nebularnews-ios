@@ -25,6 +25,7 @@ struct ArticleDetailView: View {
     @State private var savingTag = false
     @State private var acceptingSuggestion: String?
     @State private var scrollProgress: CGFloat = 0
+    @State private var readerMode = false
 
     var body: some View {
         Group {
@@ -121,6 +122,14 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func topTrailingToolbar(_ payload: CompanionArticleDetailPayload) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                readerMode.toggle()
+            }
+        } label: {
+            Image(systemName: readerMode ? "doc.richtext" : "doc.plaintext")
+        }
+
         Button {
             Task { await toggleRead() }
         } label: {
@@ -406,7 +415,17 @@ struct ArticleDetailView: View {
 
     @ViewBuilder
     private func articleContent(_ payload: CompanionArticleDetailPayload) -> some View {
-        if let html = payload.article.contentHtml, !html.isEmpty {
+        let plainText = payload.article.contentText
+            ?? payload.article.contentHtml?.strippedHTML
+            ?? payload.article.excerpt
+
+        if readerMode, let text = plainText, !text.isEmpty {
+            // Reader mode: plain serif text, no formatting
+            Text(text)
+                .font(.system(.body, design: .serif))
+                .lineSpacing(6)
+                .textSelection(.enabled)
+        } else if let html = payload.article.contentHtml, !html.isEmpty {
             RichArticleContentView(html: html)
         } else if let text = payload.article.contentText, !text.isEmpty {
             Text(text)

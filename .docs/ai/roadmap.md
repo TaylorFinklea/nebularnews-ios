@@ -29,12 +29,12 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Push notifications
 - [x] TestFlight shipping (Build 4)
 
-### M2: Article Reading Experience (in progress)
+### M2: Article Reading Experience (complete)
 - [x] Richer typography (serif body text, dynamic type, 6pt line spacing)
 - [x] Inline images with lazy loading and caching (CachedAsyncImage + shared RemoteImageCache)
-- [x] Improved article layout (title upgraded to .title, byline: feed · author · date)
-- [ ] Reading progress indicator (scroll position, estimated time)
-- [ ] Reader mode toggle (stripped vs. original formatting)
+- [x] Improved article layout (title upgraded to .title, byline: feed · author · date + reading time)
+- [x] Reading progress indicator (scroll-tracking progress bar + "N min read" in byline)
+- [x] Reader mode toggle (toolbar button: doc.plaintext ↔ doc.richtext)
 
 ### M3: AI Improvements (not started)
 - [ ] Hybrid scoring: layer AI scoring on top of the 4-signal algorithm (user-triggered per article)
