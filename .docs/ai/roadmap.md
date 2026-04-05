@@ -86,7 +86,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[minor]` **Extract CompanionArticleDetailView sub-views (692 lines)**: Break into `ArticleBodyView`, `EnrichmentSection`, `TagsSection`, `ReactionsView`. File: `Features/Companion/CompanionArticleDetailView.swift`.
 - `[trivial]` **Fix marketing version**: Set clean `2.0.0` in Xcode project settings to replace `$(MARKETING_VERSION)` literal.
 - [x] `[trivial]` **Fix force unwrap in RichArticleContentView**: Done — replaced `tag.last!` with `tag.last.flatMap { Int(String($0)) } ?? 2` in `SharedViews/RichArticleContentView.swift`.
-- `[trivial]` **Fix force unwrap on Supabase URL**: `URL(string: "...")!` at line 19 — use `guard let` or precondition with message. File: `Services/SupabaseManager.swift:19`.
+- [~] `[trivial]` **Fix force unwrap on Supabase URL**: `URL(string: "...")!` at line 19 — use `guard let` or precondition with message. File: `Services/SupabaseManager.swift:19`.
 - `[trivial]` **Resolve TODO in ArticleFallbackImageService**: TODO at line 11 about replacing curated catalog with Unsplash search. Either implement or convert to backlog item with decision. File: `Services/ArticleFallbackImageService.swift:11`.
 - `[trivial]` **Add error logging for silent background operations**: `try?` on detached tasks at `SupabaseManager.swift:298` (rescore), `CompanionFeedsView.swift:97` (feed pause). Replace `try?` with `do/catch` that logs the error.
 - ~`[trivial]` **Remove CloudKit references from docs**: Done — removed from `.cursorrules`, `AGENTS.md`, `.github/copilot-instructions.md`.~
