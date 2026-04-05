@@ -85,7 +85,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[minor]` **Split SupabaseManager (1792 lines)**: Extract domain services — `ArticleService`, `FeedService`, `EnrichmentService`, `AuthService`. Currently a monolith with 50+ methods. File: `Services/SupabaseManager.swift`.
 - `[minor]` **Extract CompanionArticleDetailView sub-views (692 lines)**: Break into `ArticleBodyView`, `EnrichmentSection`, `TagsSection`, `ReactionsView`. File: `Features/Companion/CompanionArticleDetailView.swift`.
 - `[trivial]` **Fix marketing version**: Set clean `2.0.0` in Xcode project settings to replace `$(MARKETING_VERSION)` literal.
-- `[trivial]` **Fix force unwrap in RichArticleContentView**: `tag.last!` at line 66 — use `tag.last.flatMap { Int(String($0)) } ?? 2`. File: `SharedViews/RichArticleContentView.swift:66`.
+- [~] `[trivial]` **Fix force unwrap in RichArticleContentView**: `tag.last!` at line 66 — use `tag.last.flatMap { Int(String($0)) } ?? 2`. File: `SharedViews/RichArticleContentView.swift:66`.
 - `[trivial]` **Fix force unwrap on Supabase URL**: `URL(string: "...")!` at line 19 — use `guard let` or precondition with message. File: `Services/SupabaseManager.swift:19`.
 - `[trivial]` **Resolve TODO in ArticleFallbackImageService**: TODO at line 11 about replacing curated catalog with Unsplash search. Either implement or convert to backlog item with decision. File: `Services/ArticleFallbackImageService.swift:11`.
 - `[trivial]` **Add error logging for silent background operations**: `try?` on detached tasks at `SupabaseManager.swift:298` (rescore), `CompanionFeedsView.swift:97` (feed pause). Replace `try?` with `do/catch` that logs the error.
