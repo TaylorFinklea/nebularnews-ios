@@ -213,7 +213,7 @@ final class SupabaseManager: Sendable {
                 article_key_points(key_points_json, provider, model, created_at),
                 article_read_state!left(is_read, saved_at),
                 article_reactions!left(id, article_id, value, created_at),
-                article_scores!left(score, label, reason_text, evidence_json, created_at, score_status, confidence, preference_confidence, weighted_average),
+                article_scores!left(score, label, reason_text, evidence_json, created_at, score_status, scoring_method, confidence, preference_confidence, weighted_average),
                 article_sources(feed_id, feeds(id, title, site_url, url)),
                 article_tags(tag_id, tags(id, name)),
                 article_tag_suggestions(id, tag_name, confidence)
@@ -912,8 +912,8 @@ final class SupabaseManager: Sendable {
         let headers = userAIHeaders()
 
         // The enrich-article edge function expects article_id, user_id, and job_type
-        // Run summarize, key_points, and score in sequence
-        for jobType in ["summarize", "key_points", "score"] {
+        // Run summarize and key_points (AI scoring is triggered separately via requestAIScore)
+        for jobType in ["summarize", "key_points"] {
             _ = try await client.functions.invoke(
                 "enrich-article",
                 options: FunctionInvokeOptions(
@@ -926,6 +926,24 @@ final class SupabaseManager: Sendable {
                 )
             )
         }
+    }
+
+    func requestAIScore(articleId: String) async throws {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        let headers = userAIHeaders()
+
+        _ = try await client.functions.invoke(
+            "enrich-article",
+            options: FunctionInvokeOptions(
+                headers: headers,
+                body: [
+                    "article_id": articleId,
+                    "user_id": userId.uuidString,
+                    "job_type": "score"
+                ]
+            )
+        )
     }
 
     func generateKeyPoints(articleId: String) async throws {
@@ -1260,7 +1278,7 @@ private struct SupabaseArticleDetailRow: Decodable {
                 reasonText: $0.reasonText,
                 evidenceJson: $0.evidenceJson,
                 createdAt: $0.createdAt.flatMap { timestampMillis($0) },
-                source: nil,
+                source: $0.scoringMethod,
                 status: $0.scoreStatus,
                 confidence: $0.confidence.map { Double($0) },
                 preferenceConfidence: $0.preferenceConfidence.map { Double($0) },
@@ -1341,6 +1359,7 @@ private struct ScoreRow: Decodable {
     let evidenceJson: String?
     let createdAt: String?
     let scoreStatus: String?
+    let scoringMethod: String?
     let confidence: Float?
     let preferenceConfidence: Float?
     let weightedAverage: Float?
@@ -1351,6 +1370,7 @@ private struct ScoreRow: Decodable {
         case evidenceJson = "evidence_json"
         case createdAt = "created_at"
         case scoreStatus = "score_status"
+        case scoringMethod = "scoring_method"
         case confidence
         case preferenceConfidence = "preference_confidence"
         case weightedAverage = "weighted_average"

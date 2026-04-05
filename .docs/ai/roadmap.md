@@ -36,8 +36,8 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Reading progress indicator (scroll-tracking progress bar + "N min read" in byline)
 - [x] Reader mode toggle (toolbar button: doc.plaintext ↔ doc.richtext)
 
-### M3: AI Improvements (not started)
-- [ ] Hybrid scoring: layer AI scoring on top of the 4-signal algorithm (user-triggered per article)
+### M3: AI Improvements (in progress)
+- [x] Hybrid scoring: AI Score button in toolbar, shows "AI" vs "Auto" badge, separate from summarize
 - [ ] Chat UI/UX overhaul: streaming responses, better message rendering, conversation history
 - [ ] Chat quality: better prompts, more article context in the window, source citations
 - [ ] Suggested questions: auto-generate 2-3 starter questions per article
@@ -76,7 +76,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 
 ### iOS — Code Quality
 
-- `[minor]` **Remove MobileAPIClient**: Delete `Services/MobileAPIClient.swift`, migrate push token upload in `NotificationManager` to SupabaseManager, remove `mobileAPI` from `AppState.swift:26-29`. The client is a leftover from the SvelteKit transition.
+- [~] `[minor]` **Remove MobileAPIClient**: Delete `Services/MobileAPIClient.swift`, migrate push token upload in `NotificationManager` to SupabaseManager, remove `mobileAPI` from `AppState.swift:26-29`. The client is a leftover from the SvelteKit transition.
 - `[minor]` **Numeric booleans → proper Bool**: `isRead == 1`, `disabled == 1` appear in 20+ view files. Add computed Bool properties on the model or normalize at decode time. Files: `ArticleListView`, `ArticleDetailView`, `FeedListView`, all Companion views.
 - ~`[minor]` **Fix isSaved logic bug**: Fixed — now checks `savedAt != nil` instead of `isRead == 1`. Piped `savedAt` through `CompanionArticle` model.~
 - ~`[minor]` **Extract pagination constants**: Done — created `PaginationConfig` enum in `AppConfiguration.swift`, replaced all hardcoded limits in `ArticleListView`, `CompanionArticlesView`, `CompanionFilteredArticleListView`, `DashboardView`.~

@@ -26,6 +26,7 @@ struct ArticleDetailView: View {
     @State private var acceptingSuggestion: String?
     @State private var scrollProgress: CGFloat = 0
     @State private var readerMode = false
+    @State private var isRequestingAIScore = false
 
     var body: some View {
         Group {
@@ -169,6 +170,23 @@ struct ArticleDetailView: View {
             }
         }
         .disabled(isSummarizing)
+
+        Spacer()
+
+        Button {
+            Task { await requestAIScore() }
+        } label: {
+            if isRequestingAIScore {
+                ProgressView().controlSize(.small)
+            } else {
+                let hasAIScore = payload.score?.source == "ai"
+                Label(
+                    hasAIScore ? "Re-score" : "AI Score",
+                    systemImage: "brain"
+                )
+            }
+        }
+        .disabled(isRequestingAIScore)
 
         Spacer()
 
@@ -357,6 +375,14 @@ struct ArticleDetailView: View {
                             Text(label)
                                 .font(.subheadline.bold())
                                 .foregroundStyle(Color.forScore(scoreValue))
+                        }
+                        if let source = score.source {
+                            Text(source == "ai" ? "AI" : "Auto")
+                                .font(.caption2.weight(.medium))
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(source == "ai" ? Color.purple.opacity(0.15) : Color.secondary.opacity(0.1), in: Capsule())
+                                .foregroundStyle(source == "ai" ? .purple : .secondary)
                         }
                     }
 
@@ -564,6 +590,17 @@ struct ArticleDetailView: View {
         defer { isSummarizing = false }
         do {
             try await appState.supabase.rerunSummarize(articleId: articleId)
+            await loadArticle()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func requestAIScore() async {
+        isRequestingAIScore = true
+        defer { isRequestingAIScore = false }
+        do {
+            try await appState.supabase.requestAIScore(articleId: articleId)
             await loadArticle()
         } catch {
             errorMessage = error.localizedDescription
