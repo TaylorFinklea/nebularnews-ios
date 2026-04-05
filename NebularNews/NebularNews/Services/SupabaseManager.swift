@@ -15,8 +15,11 @@ final class SupabaseManager: Sendable {
     let client: SupabaseClient
 
     private init() {
+        guard let supabaseURL = URL(string: "https://vdjrclxeyjsqyqsjzjfj.supabase.co") else {
+            preconditionFailure("Invalid Supabase URL")
+        }
         client = SupabaseClient(
-            supabaseURL: URL(string: "https://vdjrclxeyjsqyqsjzjfj.supabase.co")!,
+            supabaseURL: supabaseURL,
             supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanJjbHhleWpzcXlxc2p6amZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTk0OTIsImV4cCI6MjA5MDUzNTQ5Mn0.9j644tw6xud8GNW-J0X_sgtR_oyXGEoi59cN-O7wTHY",
             options: SupabaseClientOptions(
                 auth: .init(
