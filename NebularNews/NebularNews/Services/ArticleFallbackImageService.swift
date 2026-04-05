@@ -8,8 +8,8 @@ import FoundationModels
 
 actor ArticleFallbackImageService {
     private let articleRepo: LocalArticleRepository
-    // TODO: Replace the curated preset catalog with live Unsplash search once we add
-    // a production-safe integration, caching, attribution, and request budgeting.
+    // The curated Unsplash preset catalog remains the fallback image source until
+    // a separate live search integration is designed with caching and attribution.
 
     init(modelContainer: ModelContainer) {
         self.articleRepo = LocalArticleRepository(modelContainer: modelContainer)
