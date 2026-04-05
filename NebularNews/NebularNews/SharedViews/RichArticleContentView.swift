@@ -358,24 +358,9 @@ struct RichArticleContentView: View {
             .background(Color.platformSecondaryFill, in: RoundedRectangle(cornerRadius: 8))
 
         case .image(let url, let alt):
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                case .failure:
-                    EmptyView()
-                case .empty:
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.platformTertiaryFill)
-                        .frame(height: 160)
-                @unknown default:
-                    EmptyView()
-                }
-            }
-            .accessibilityLabel(alt ?? "Image")
+            CachedAsyncImage(url: url, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityLabel(alt ?? "Image")
 
         case .unorderedList(let items):
             listView(items: items, ordered: false)

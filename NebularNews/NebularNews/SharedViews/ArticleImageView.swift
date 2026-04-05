@@ -97,7 +97,7 @@ struct ArticleImageView: View {
             return
         }
 
-        if let cachedImage = await ArticleRemoteImageCache.shared.image(for: urlString) {
+        if let cachedImage = await RemoteImageCache.shared.image(for: urlString) {
             remoteImage = cachedImage
             loadedURLString = urlString
             failedURLString = nil
@@ -123,7 +123,7 @@ struct ArticleImageView: View {
             let image = raw
             #endif
 
-            await ArticleRemoteImageCache.shared.insert(image, for: urlString)
+            await RemoteImageCache.shared.insert(image, for: urlString)
             remoteImage = image
             loadedURLString = urlString
             failedURLString = nil
@@ -132,30 +132,5 @@ struct ArticleImageView: View {
             isLoadingRemoteImage = false
             failedURLString = urlString
         }
-    }
-}
-
-private actor ArticleRemoteImageCache {
-    static let shared = ArticleRemoteImageCache()
-
-    private let cache: NSCache<NSString, PlatformImage> = {
-        let c = NSCache<NSString, PlatformImage>()
-        c.countLimit = 100          // max 100 images in memory
-        c.totalCostLimit = 50 * 1024 * 1024  // 50 MB
-        return c
-    }()
-
-    func image(for urlString: String) -> PlatformImage? {
-        cache.object(forKey: urlString as NSString)
-    }
-
-    func insert(_ image: PlatformImage, for urlString: String) {
-        // Approximate byte cost: width * height * 4 bytes per pixel
-        #if os(iOS)
-        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-        #else
-        let cost = Int(image.size.width * image.size.height * 4)
-        #endif
-        cache.setObject(image, forKey: urlString as NSString, cost: cost)
     }
 }

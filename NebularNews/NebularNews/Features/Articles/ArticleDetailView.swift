@@ -527,29 +527,8 @@ private struct ArticleHeroImage: View {
     let url: URL
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            case .failure:
-                Rectangle()
-                    .fill(Color.platformTertiaryFill)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(.title)
-                            .foregroundStyle(.secondary.opacity(0.5))
-                    }
-            case .empty:
-                Rectangle()
-                    .fill(Color.platformTertiaryFill)
-                    .overlay { ProgressView() }
-            @unknown default:
-                EmptyView()
-            }
-        }
-        .frame(height: DesignTokens.detailImageHeight)
-        .clipped()
+        CachedAsyncImage(url: url, contentMode: .fill)
+            .frame(height: DesignTokens.detailImageHeight)
+            .clipped()
     }
 }
