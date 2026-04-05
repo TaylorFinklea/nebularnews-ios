@@ -24,6 +24,7 @@ struct ArticleDetailView: View {
     @State private var pendingTagName = ""
     @State private var savingTag = false
     @State private var acceptingSuggestion: String?
+    @State private var scrollProgress: CGFloat = 0
 
     var body: some View {
         Group {
@@ -62,6 +63,29 @@ struct ArticleDetailView: View {
                 }
                 .padding(.horizontal)
             }
+            .background(
+                GeometryReader { contentGeometry in
+                    Color.clear.preference(
+                        key: ScrollContentHeightKey.self,
+                        value: contentGeometry.frame(in: .named("articleScroll")).origin.y
+                    )
+                }
+            )
+        }
+        .coordinateSpace(name: "articleScroll")
+        .onPreferenceChange(ScrollContentHeightKey.self) { offset in
+            // offset is negative as user scrolls down
+            // Approximate: content extends below the visible area
+            let clamped = min(max(-offset / max(1, UIScreen.main.bounds.height * 2), 0), 1)
+            scrollProgress = clamped
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ProgressView(value: scrollProgress)
+                .progressViewStyle(.linear)
+                .tint(.accentColor)
+                .scaleEffect(x: 1, y: 0.5, anchor: .top)
+                .opacity(scrollProgress > 0.01 ? 1 : 0)
+                .animation(.easeOut(duration: 0.15), value: scrollProgress)
         }
         .hideTabBar()
         .toolbar {
@@ -208,6 +232,13 @@ struct ArticleDetailView: View {
                     if let publishedAt = payload.article.publishedAt {
                         Text(Date(timeIntervalSince1970: Double(publishedAt) / 1000)
                             .formatted(date: .abbreviated, time: .shortened))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    if let minutes = estimatedReadingTime(for: payload.article) {
+                        Text("·")
+                            .foregroundStyle(.tertiary)
+                        Text("\(minutes) min read")
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -519,6 +550,27 @@ struct ArticleDetailView: View {
             errorMessage = error.localizedDescription
         }
     }
+}
+
+// MARK: - Hero Image
+
+// MARK: - Scroll Progress Tracking
+
+private struct ScrollContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - Estimated Reading Time
+
+private func estimatedReadingTime(for article: CompanionArticle) -> Int? {
+    let text = article.contentText ?? article.contentHtml?.strippedHTML ?? article.excerpt
+    guard let text, !text.isEmpty else { return nil }
+    let wordCount = text.split(separator: " ").count
+    let minutes = max(1, wordCount / 200) // ~200 WPM average
+    return minutes
 }
 
 // MARK: - Hero Image
