@@ -88,7 +88,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - [x] `[trivial]` **Fix force unwrap in RichArticleContentView**: Done — replaced `tag.last!` with `tag.last.flatMap { Int(String($0)) } ?? 2` in `SharedViews/RichArticleContentView.swift`.
 - [x] `[trivial]` **Fix force unwrap on Supabase URL**: Done — replaced `URL(string: "...")!` with a guarded local `URL` plus `preconditionFailure("Invalid Supabase URL")` in `Services/SupabaseManager.swift`.
 - [x] `[trivial]` **Resolve TODO in ArticleFallbackImageService**: Done — replaced the open TODO with a settled note that the curated Unsplash preset catalog remains intentional until a separate live-search integration is designed. File: `Services/ArticleFallbackImageService.swift`.
-- `[trivial]` **Add error logging for silent background operations**: `try?` on detached tasks at `SupabaseManager.swift:298` (rescore), `CompanionFeedsView.swift:97` (feed pause). Replace `try?` with `do/catch` that logs the error.
+- [~] `[trivial]` **Add error logging for silent background operations**: `try?` on detached tasks at `SupabaseManager.swift:298` (rescore), `CompanionFeedsView.swift:97` (feed pause). Replace `try?` with `do/catch` that logs the error.
 - ~`[trivial]` **Remove CloudKit references from docs**: Done — removed from `.cursorrules`, `AGENTS.md`, `.github/copilot-instructions.md`.~
 - ~`[trivial]` **Fix force unwraps in FeedListView**: Done — replaced with `flatMap`/nil-coalescing.~
 - ~`[trivial]` **Extract magic numbers**: Done — created `DesignTokens` enum in `App/DesignTokens.swift`, replaced hardcoded dimensions in `ArticleCard`, `ArticleDetailView`, `CompanionArticleDetailView`, `OnboardingView`.~
