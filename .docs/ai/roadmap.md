@@ -77,7 +77,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 ### iOS — Code Quality
 
 - [x] `[minor]` **Remove MobileAPIClient**: Done — deleted `Services/MobileAPIClient.swift`, removed legacy companion startup fallback, removed `mobileAPI` and companion session state from `AppState`, and kept APNs upload on the existing Supabase path in `NotificationManager`.
-- `[~]` **Numeric booleans → proper Bool**: `isRead == 1`, `disabled == 1` appear in 20+ view files. Add computed Bool properties on the model or normalize at decode time. Files: `ArticleListView`, `ArticleDetailView`, `FeedListView`, all Companion views.
+- `[x]` **Numeric booleans → proper Bool**: Done — added `isReadBool` and `disabledBool` computed properties to `CompanionArticle`, `CompanionArticleListItem`, and `CompanionFeed`. Replaced 17 `isRead == 1` / `disabled == 1` checks across all views.
 - ~`[minor]` **Fix isSaved logic bug**: Fixed — now checks `savedAt != nil` instead of `isRead == 1`. Piped `savedAt` through `CompanionArticle` model.~
 - ~`[minor]` **Extract pagination constants**: Done — created `PaginationConfig` enum in `AppConfiguration.swift`, replaced all hardcoded limits in `ArticleListView`, `CompanionArticlesView`, `CompanionFilteredArticleListView`, `DashboardView`.~
 - `[minor]` **Add accessibility labels**: Icons in `FeedListView`, score badges, and action buttons lack VoiceOver labels. Audit all SF Symbol images for `.accessibilityLabel()`.
