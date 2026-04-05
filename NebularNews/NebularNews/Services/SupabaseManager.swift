@@ -1,5 +1,6 @@
 import Foundation
 import NebularNewsKit
+import os
 import Supabase
 
 // MARK: - Supabase Manager
@@ -13,6 +14,7 @@ final class SupabaseManager: Sendable {
     static let shared = SupabaseManager()
 
     let client: SupabaseClient
+    private let logger = Logger(subsystem: "com.nebularnews", category: "SupabaseManager")
 
     private init() {
         guard let supabaseURL = URL(string: "https://vdjrclxeyjsqyqsjzjfj.supabase.co") else {
@@ -297,13 +299,18 @@ final class SupabaseManager: Sendable {
         // feeds back into the algorithmic score engine.
         let rescoreUserId = userId.uuidString
         let rescoreClient = client
+        let rescoreLogger = logger
         Task.detached {
-            try? await rescoreClient.functions.invoke(
-                "score-articles",
-                options: FunctionInvokeOptions(
-                    body: RescoreRequest(userId: rescoreUserId, rescore: true)
+            do {
+                try await rescoreClient.functions.invoke(
+                    "score-articles",
+                    options: FunctionInvokeOptions(
+                        body: RescoreRequest(userId: rescoreUserId, rescore: true)
+                    )
                 )
-            )
+            } catch {
+                rescoreLogger.error("Failed to trigger background article rescore for user \(rescoreUserId): \(error.localizedDescription)")
+            }
         }
 
         return ReactionResponse(

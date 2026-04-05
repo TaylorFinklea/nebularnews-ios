@@ -6,11 +6,13 @@ import AppKit
 #endif
 import UniformTypeIdentifiers
 import NebularNewsKit
+import os
 
 // MARK: - Feeds
 
 struct CompanionFeedsView: View {
     @Environment(AppState.self) private var appState
+    private let logger = Logger(subsystem: "com.nebularnews", category: "CompanionFeedsView")
 
     @State private var feeds: [CompanionFeed] = []
     @State private var errorMessage = ""
@@ -94,7 +96,11 @@ struct CompanionFeedsView: View {
                     Button {
                         Task {
                             let newPaused = !(feed.paused ?? false)
-                            try? await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            do {
+                                try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            } catch {
+                                logger.error("Failed to update paused state for feed \(feed.id): \(error.localizedDescription)")
+                            }
                             await loadFeeds()
                         }
                     } label: {
@@ -111,7 +117,11 @@ struct CompanionFeedsView: View {
                     Button {
                         Task {
                             let newPaused = !(feed.paused ?? false)
-                            try? await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            do {
+                                try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                            } catch {
+                                logger.error("Failed to update paused state for feed \(feed.id): \(error.localizedDescription)")
+                            }
                             await loadFeeds()
                         }
                     } label: {
