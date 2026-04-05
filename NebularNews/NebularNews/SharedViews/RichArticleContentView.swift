@@ -63,7 +63,7 @@ private struct HTMLBlockParser {
             return attr.characters.isEmpty ? nil : .paragraph(attr)
 
         case "h1", "h2", "h3", "h4", "h5", "h6":
-            let level = Int(String(tag.last!)) ?? 2
+            let level = tag.last.flatMap { Int(String($0)) } ?? 2
             let inner = extractInnerHTML(blockHTML, tag: tag)
             return .heading(level: level, text: parseInlineHTML(inner))
 
