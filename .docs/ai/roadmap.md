@@ -112,7 +112,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[minor]` **Type feed-parser properly (355 lines)**: 6 `deno-lint-ignore no-explicit-any` suppressions. Create concrete `ParsedFeed`/`ParsedItem` interfaces instead of generic objects. File: `_shared/feed-parser.ts`.
 - `[x]` **Standardize logging**: Done — `_shared/logger.ts` adopted across all functions: `scraper.ts`, `process-jobs`, `send-notification`, `generate-news-brief`, `enrich-article`, `article-chat`, `poll-feeds`, `score-articles`, `scrape-article`, `export-opml`, `import-opml`.
 - `[x]` **Fix `any` casts in scrape-article**: Done — created `ArticleSourceWithFeed` interface, replaced `(source as any)?.feeds` cast with properly typed JOIN result.
-- `[~]` **Add error handling to poll-feeds upserts**: Lines 110, 159, 212 have upsert/insert without individual error checks. Wrap each with try/catch and per-operation logging. File: `poll-feeds/index.ts`.
+- `[x]` **Add error handling to poll-feeds upserts**: Done — added error handling for `article_sources` upsert, `article_sources` insert, and `jobs` insert. All failures are logged and processing continues.
 - ~`[trivial]` **Extract batch size constants**: Done — created `_shared/constants.ts`, imported in all three functions.~
 
 ---
