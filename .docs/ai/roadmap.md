@@ -84,7 +84,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - `[minor]` **Widget Extension wiring**: Add Widget Extension target in Xcode, wire up existing files from `NebularNewsWidgets/`, set up App Groups (`group.com.nebularnews.shared`). Code is already written — this is Xcode project configuration.
 - `[minor]` **Split SupabaseManager (1792 lines)**: Extract domain services — `ArticleService`, `FeedService`, `EnrichmentService`, `AuthService`. Currently a monolith with 50+ methods. File: `Services/SupabaseManager.swift`.
 - `[minor]` **Extract CompanionArticleDetailView sub-views (692 lines)**: Break into `ArticleBodyView`, `EnrichmentSection`, `TagsSection`, `ReactionsView`. File: `Features/Companion/CompanionArticleDetailView.swift`.
-- `[trivial]` **Fix marketing version**: Set clean `2.0.0` in Xcode project settings to replace `$(MARKETING_VERSION)` literal.
+- [~] `[trivial]` **Fix marketing version**: Set clean `2.0.0` in Xcode project settings to replace `$(MARKETING_VERSION)` literal.
 - [x] `[trivial]` **Fix force unwrap in RichArticleContentView**: Done — replaced `tag.last!` with `tag.last.flatMap { Int(String($0)) } ?? 2` in `SharedViews/RichArticleContentView.swift`.
 - [x] `[trivial]` **Fix force unwrap on Supabase URL**: Done — replaced `URL(string: "...")!` with a guarded local `URL` plus `preconditionFailure("Invalid Supabase URL")` in `Services/SupabaseManager.swift`.
 - `[trivial]` **Resolve TODO in ArticleFallbackImageService**: TODO at line 11 about replacing curated catalog with Unsplash search. Either implement or convert to backlog item with decision. File: `Services/ArticleFallbackImageService.swift:11`.
