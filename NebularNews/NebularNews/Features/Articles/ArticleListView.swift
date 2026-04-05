@@ -58,11 +58,11 @@ struct ArticleListView: View {
                                     Task { await toggleRead(article) }
                                 } label: {
                                     Label(
-                                        article.isRead == 1 ? "Unread" : "Read",
-                                        systemImage: article.isRead == 1 ? "envelope.badge" : "envelope.open"
+                                        article.isReadBool ? "Unread" : "Read",
+                                        systemImage: article.isReadBool ? "envelope.badge" : "envelope.open"
                                     )
                                 }
-                                .tint(article.isRead == 1 ? .blue : .green)
+                                .tint(article.isReadBool ? .blue : .green)
                             }
                             .swipeActions(edge: .trailing) {
                                 Button {
@@ -272,8 +272,6 @@ struct ArticleListView: View {
 private struct ArticleRow: View {
     let article: CompanionArticleListItem
 
-    private var isRead: Bool { article.isRead == 1 }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Feed name + date + score
@@ -300,8 +298,8 @@ private struct ArticleRow: View {
             // Title
             Text(article.title ?? "Untitled")
                 .font(.headline)
-                .fontWeight(isRead ? .regular : .semibold)
-                .foregroundStyle(isRead ? .secondary : .primary)
+                .fontWeight(article.isReadBool ? .regular : .semibold)
+                .foregroundStyle(article.isReadBool ? .secondary : .primary)
                 .lineLimit(2)
 
             // Summary or excerpt preview
@@ -325,6 +323,6 @@ private struct ArticleRow: View {
             }
         }
         .padding(.vertical, 4)
-        .opacity(isRead ? 0.7 : 1)
+        .opacity(article.isReadBool ? 0.7 : 1)
     }
 }

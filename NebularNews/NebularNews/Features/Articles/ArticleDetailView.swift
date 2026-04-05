@@ -134,7 +134,7 @@ struct ArticleDetailView: View {
         Button {
             Task { await toggleRead() }
         } label: {
-            Image(systemName: payload.article.isRead == 1 ? "eye.slash" : "eye")
+            Image(systemName: payload.article.isReadBool ? "eye.slash" : "eye")
         }
         .disabled(savingRead)
 

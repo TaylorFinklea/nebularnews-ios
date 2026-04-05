@@ -66,7 +66,7 @@ struct CompanionFeedsView: View {
                             Label("Paused", systemImage: "pause.circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
-                        } else if feed.disabled == 1 {
+                        } else if feed.disabledBool {
                             Label("Disabled", systemImage: "xmark.circle.fill")
                                 .font(.caption)
                                 .foregroundStyle(.red)
@@ -218,7 +218,7 @@ struct CompanionFeedsView: View {
 
     private func feedStatusColor(_ feed: CompanionFeed) -> Color {
         if feed.paused == true { return .orange }
-        if feed.disabled == 1 { return .gray }
+        if feed.disabledBool { return .gray }
         if let errorCount = feed.errorCount, errorCount >= 3 { return .red }
         if let errorCount = feed.errorCount, errorCount > 0 { return .yellow }
         return .green

@@ -177,7 +177,7 @@ private struct FeedRow: View {
                     .lineLimit(1)
 
                 HStack(spacing: 8) {
-                    if feed.disabled == 1 {
+                    if feed.disabledBool {
                         Text("Paused")
                             .font(.caption)
                             .foregroundStyle(.orange)
@@ -216,7 +216,7 @@ private struct FeedRow: View {
             }
         }
         .padding(.vertical, 2)
-        .opacity(feed.disabled == 1 ? 0.6 : 1)
+        .opacity(feed.disabledBool ? 0.6 : 1)
     }
 
     private func relativeTime(_ timestamp: Int) -> String {

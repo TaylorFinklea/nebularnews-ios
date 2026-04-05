@@ -88,11 +88,11 @@ struct ArticleCard: View {
         .overlay(
             // Score accent bar on left edge
             HStack {
-                ScoreAccentBar(score: article.score, isRead: article.isRead == 1, width: 4)
+                ScoreAccentBar(score: article.score, isRead: article.isReadBool, width: 4)
                 Spacer()
             }
         )
-        .opacity(article.isRead == 1 ? 0.6 : 1.0)
+        .opacity(article.isReadBool ? 0.6 : 1.0)
     }
 
     private func relativeTime(_ timestamp: Int?) -> String {

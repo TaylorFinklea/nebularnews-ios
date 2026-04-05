@@ -147,9 +147,9 @@ struct CompanionArticlesView: View {
                             Button {
                                 Task { await toggleRead(article) }
                             } label: {
-                                Label(article.isRead == 1 ? "Unread" : "Read", systemImage: article.isRead == 1 ? "eye" : "eye.slash")
+                                Label(article.isReadBool ? "Unread" : "Read", systemImage: article.isReadBool ? "eye" : "eye.slash")
                             }
-                            .tint(article.isRead == 1 ? .blue : .gray)
+                            .tint(article.isReadBool ? .blue : .gray)
                         }
                         .swipeActions(edge: .leading) {
                             Button {

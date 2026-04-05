@@ -78,7 +78,7 @@ struct CompanionArticleDetailView: View {
                     Section {
                         HStack(alignment: .top, spacing: 12) {
                             if let score = payload.score?.score {
-                                ScoreAccentBar(score: score, isRead: payload.article.isRead == 1)
+                                ScoreAccentBar(score: score, isRead: payload.article.isReadBool)
                             }
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(payload.article.title ?? "Untitled article")
@@ -301,7 +301,7 @@ struct CompanionArticleDetailView: View {
                         Button {
                             Task { await toggleReadAndGoBack() }
                         } label: {
-                            Image(systemName: payload.article.isRead == 1 ? "eye.slash" : "eye")
+                            Image(systemName: payload.article.isReadBool ? "eye.slash" : "eye")
                         }
                         .disabled(savingRead)
 

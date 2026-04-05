@@ -94,6 +94,8 @@ struct CompanionArticleListItem: Codable, Identifiable {
     let sourceName: String?
     let sourceFeedId: String?
     let tags: [CompanionTag]?
+
+    var isReadBool: Bool { isRead == 1 }
 }
 
 struct CompanionArticleDetailPayload: Codable {
@@ -123,6 +125,8 @@ struct CompanionArticle: Codable {
     let wordCount: Int?
     var isRead: Int?
     var savedAt: String?
+
+    var isReadBool: Bool { isRead == 1 }
 }
 
 struct CompanionArticleSummary: Codable {
@@ -216,6 +220,8 @@ struct CompanionFeed: Codable, Identifiable {
     var scrapeArticleCount: Int?
     var scrapeErrorCount: Int?
     var lastScrapeError: String?
+
+    var disabledBool: Bool { disabled == 1 }
 }
 
 struct CompanionReactionResponse: Codable {
