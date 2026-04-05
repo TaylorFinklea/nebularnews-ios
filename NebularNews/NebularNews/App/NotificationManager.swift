@@ -75,28 +75,6 @@ final class NotificationManager: NSObject, UIApplicationDelegate, UNUserNotifica
         }
     }
 
-    // MARK: - Token Upload (Legacy MobileAPI)
-
-    func uploadTokenIfNeeded(api: MobileAPIClient) async {
-        guard let token = deviceToken else { return }
-        do {
-            try await api.registerDeviceToken(token: token)
-            logger.info("Device token uploaded to server")
-        } catch {
-            logger.error("Failed to upload device token: \(error.localizedDescription)")
-        }
-    }
-
-    func removeToken(api: MobileAPIClient) async {
-        guard let token = deviceToken else { return }
-        do {
-            try await api.removeDeviceToken(token: token)
-            logger.info("Device token removed from server")
-        } catch {
-            logger.error("Failed to remove device token: \(error.localizedDescription)")
-        }
-    }
-
     // MARK: - Foreground Notification Display
 
     func userNotificationCenter(
@@ -133,8 +111,6 @@ final class NotificationManager: NSObject {
     func requestPermissionAndRegister() {}
     func uploadTokenIfNeeded(supabase: SupabaseManager) async {}
     func removeToken(supabase: SupabaseManager) async {}
-    func uploadTokenIfNeeded(api: MobileAPIClient) async {}
-    func removeToken(api: MobileAPIClient) async {}
 }
 #endif
 

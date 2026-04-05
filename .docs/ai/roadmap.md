@@ -76,7 +76,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 
 ### iOS — Code Quality
 
-- [~] `[minor]` **Remove MobileAPIClient**: Delete `Services/MobileAPIClient.swift`, migrate push token upload in `NotificationManager` to SupabaseManager, remove `mobileAPI` from `AppState.swift:26-29`. The client is a leftover from the SvelteKit transition.
+- [x] `[minor]` **Remove MobileAPIClient**: Done — deleted `Services/MobileAPIClient.swift`, removed legacy companion startup fallback, removed `mobileAPI` and companion session state from `AppState`, and kept APNs upload on the existing Supabase path in `NotificationManager`.
 - `[minor]` **Numeric booleans → proper Bool**: `isRead == 1`, `disabled == 1` appear in 20+ view files. Add computed Bool properties on the model or normalize at decode time. Files: `ArticleListView`, `ArticleDetailView`, `FeedListView`, all Companion views.
 - ~`[minor]` **Fix isSaved logic bug**: Fixed — now checks `savedAt != nil` instead of `isRead == 1`. Piped `savedAt` through `CompanionArticle` model.~
 - ~`[minor]` **Extract pagination constants**: Done — created `PaginationConfig` enum in `AppConfiguration.swift`, replaced all hardcoded limits in `ArticleListView`, `CompanionArticlesView`, `CompanionFilteredArticleListView`, `DashboardView`.~

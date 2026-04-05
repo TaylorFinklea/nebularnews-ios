@@ -99,11 +99,8 @@ struct NebularNewsApp: App {
                 deepLinkRouter.handle(url)
             }
             .task {
-                // Try loading existing Supabase session first
                 await appState.loadSession()
-
                 if appState.hasSession {
-                    // Session exists — mark onboarding complete
                     if !appState.hasCompletedOnboarding {
                         appState.completeSignIn()
                     }
@@ -112,19 +109,6 @@ struct NebularNewsApp: App {
                     try? await Task.sleep(for: .seconds(2))
                     await NotificationManager.shared.uploadTokenIfNeeded(supabase: appState.supabase)
                     #endif
-                } else {
-                    // Fall back to legacy companion session check
-                    appState.loadKeychainCache()
-                    if appState.hasCompanionSession {
-                        if let session = try? await appState.mobileAPI.fetchSession() {
-                            appState.features = session.features
-                        }
-                        #if os(iOS)
-                        NotificationManager.shared.requestPermissionAndRegister()
-                        try? await Task.sleep(for: .seconds(2))
-                        await NotificationManager.shared.uploadTokenIfNeeded(api: appState.mobileAPI)
-                        #endif
-                    }
                 }
             }
         }
