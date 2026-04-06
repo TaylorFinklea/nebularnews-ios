@@ -40,8 +40,11 @@
 
 ## Release / TestFlight
 - Run `./scripts/release.sh` to archive and upload to TestFlight.
-- The script auto-increments build number via `agvtool`, archives, exports with automatic signing, uploads to App Store Connect, and commits the version bump.
-- **Known issue**: Marketing version shows `$(MARKETING_VERSION)` — needs manual fix in Xcode project settings.
+- Flags: `--patch` (default, 2.0.1 → 2.0.2) or `--minor` (2.0.1 → 2.1.0).
+- The script bumps version via `agvtool`, archives, exports, uploads, and commits.
+- **Non-interactive auth**: Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` env vars for automated upload. Without them, falls back to Xcode GUI session auth.
+- **Auto-release**: A PostToolUse hook detects `feat(m\d)` commit messages and emits `AUTO_RELEASE`. When you see this, dispatch the release agent in the background.
+- **Manual release**: Dispatch the release agent directly, or run `bash scripts/release.sh`.
 
 ## Edge Function Deployment
 - All functions deployed with `--no-verify-jwt` (auth handled in function code)

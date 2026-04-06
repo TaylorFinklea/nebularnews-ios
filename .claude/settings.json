@@ -10,6 +10,16 @@
             "timeout": 5000
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=\"$CLAUDE_TOOL_ARG_COMMAND\"; if echo \"$cmd\" | grep -qE 'git commit.*feat\\(m[0-9]'; then echo 'AUTO_RELEASE: Milestone feature committed — dispatch release agent'; fi",
+            "timeout": 5000
+          }
+        ]
       }
     ],
     "PreToolUse": [

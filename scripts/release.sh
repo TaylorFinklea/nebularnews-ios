@@ -3,7 +3,14 @@ set -euo pipefail
 
 # ============================================================
 # NebularNews — Automated Archive + TestFlight Upload
-# Usage: ./scripts/release.sh
+# Usage: ./scripts/release.sh [--minor | --patch]
+#   --patch  bump patch version (2.0.1 → 2.0.2)  [default]
+#   --minor  bump minor version (2.0.1 → 2.1.0)
+#
+# Non-interactive auth (for CI/agents):
+#   ASC_API_KEY_PATH   — path to .p8 key file
+#   ASC_API_KEY_ID     — key ID from App Store Connect
+#   ASC_API_ISSUER_ID  — issuer ID from App Store Connect
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,34 +28,39 @@ step() { echo -e "\n${GREEN}▸ $1${NC}"; }
 fail() { echo -e "${RED}✘ $1${NC}"; exit 1; }
 
 # ============================================================
-# 1. Bump version numbers using agvtool
+# Parse flags
 # ============================================================
-step "Bumping version..."
+BUMP_TYPE="patch"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --minor) BUMP_TYPE="minor"; shift ;;
+    --patch) BUMP_TYPE="patch"; shift ;;
+    *) fail "Unknown flag: $1. Use --patch or --minor." ;;
+  esac
+done
+
+# ============================================================
+# 1. Bump version numbers
+# ============================================================
+step "Bumping version ($BUMP_TYPE)..."
 cd "$PROJECT_DIR"
 
-# Get current values
 OLD_BUILD=$(agvtool what-version -terse)
 # Read MARKETING_VERSION directly from project.pbxproj (agvtool can't resolve it without Info.plist)
 OLD_VERSION=$(grep -m1 'MARKETING_VERSION = ' NebularNews.xcodeproj/project.pbxproj | sed 's/.*= //;s/;.*//' | tr -d '[:space:]')
 
-# Bump build number
 NEW_BUILD=$((OLD_BUILD + 1))
 agvtool new-version -all "$NEW_BUILD" > /dev/null
 
-# Bump marketing version (patch: 1.0 → 1.1, or 1.0.3 → 1.0.4)
 IFS='.' read -ra PARTS <<< "$OLD_VERSION"
-MAJOR="${PARTS[0]:-1}"
+MAJOR="${PARTS[0]:-2}"
 MINOR="${PARTS[1]:-0}"
-PATCH="${PARTS[2]:-}"
+PATCH="${PARTS[2]:-0}"
 
-if [ -z "$PATCH" ]; then
-  # Two-part version (1.0 → 1.1)
-  NEW_MINOR=$((MINOR + 1))
-  NEW_VERSION="$MAJOR.$NEW_MINOR"
+if [ "$BUMP_TYPE" = "minor" ]; then
+  NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
 else
-  # Three-part version (1.0.3 → 1.0.4)
-  NEW_PATCH=$((PATCH + 1))
-  NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+  NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
 fi
 
 agvtool new-marketing-version "$NEW_VERSION" > /dev/null
@@ -93,12 +105,26 @@ echo "  Archive: $ARCHIVE_PATH"
 step "Exporting and uploading to TestFlight..."
 rm -rf "$EXPORT_PATH"
 
-EXPORT_OUTPUT=$(xcodebuild -exportArchive \
-  -archivePath "$ARCHIVE_PATH" \
-  -exportOptionsPlist "$EXPORT_OPTIONS" \
-  -exportPath "$EXPORT_PATH" \
-  -allowProvisioningUpdates \
-  2>&1)
+EXPORT_CMD=(
+  xcodebuild -exportArchive
+  -archivePath "$ARCHIVE_PATH"
+  -exportOptionsPlist "$EXPORT_OPTIONS"
+  -exportPath "$EXPORT_PATH"
+  -allowProvisioningUpdates
+)
+
+if [ -n "${ASC_API_KEY_PATH:-}" ] && [ -n "${ASC_API_KEY_ID:-}" ] && [ -n "${ASC_API_ISSUER_ID:-}" ]; then
+  echo "  Using App Store Connect API Key for auth"
+  EXPORT_CMD+=(
+    -authenticationKeyPath "$ASC_API_KEY_PATH"
+    -authenticationKeyID "$ASC_API_KEY_ID"
+    -authenticationKeyIssuerID "$ASC_API_ISSUER_ID"
+  )
+else
+  echo "  Using Xcode session auth (set ASC_API_KEY_* for non-interactive)"
+fi
+
+EXPORT_OUTPUT=$("${EXPORT_CMD[@]}" 2>&1)
 
 echo "$EXPORT_OUTPUT" | grep -E "(Export Succeeded|error:|\*\*)" | head -5
 
@@ -111,7 +137,7 @@ fi
 # ============================================================
 step "Committing version bump..."
 cd "$SCRIPT_DIR/.."
-git add -A NebularNews/NebularNews.xcodeproj
+git add -A NebularNews/NebularNews.xcodeproj NebularNews/Config/NebularNewsApp-Info.plist
 git commit -m "Release $NEW_VERSION (build $NEW_BUILD) to TestFlight"
 
 # ============================================================
