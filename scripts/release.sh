@@ -113,15 +113,19 @@ EXPORT_CMD=(
   -allowProvisioningUpdates
 )
 
-if [ -n "${ASC_API_KEY_PATH:-}" ] && [ -n "${ASC_API_KEY_ID:-}" ] && [ -n "${ASC_API_ISSUER_ID:-}" ]; then
+ASC_KEY_PATH="${ASC_API_KEY_PATH:-$HOME/.appstoreconnect/AuthKey_7L49JA73Z7.p8}"
+ASC_KEY_ID="${ASC_API_KEY_ID:-7L49JA73Z7}"
+ASC_ISSUER="${ASC_API_ISSUER_ID:-fe27785a-1413-46ff-bd82-111de0da024f}"
+
+if [ -f "$ASC_KEY_PATH" ]; then
   echo "  Using App Store Connect API Key for auth"
   EXPORT_CMD+=(
-    -authenticationKeyPath "$ASC_API_KEY_PATH"
-    -authenticationKeyID "$ASC_API_KEY_ID"
-    -authenticationKeyIssuerID "$ASC_API_ISSUER_ID"
+    -authenticationKeyPath "$ASC_KEY_PATH"
+    -authenticationKeyID "$ASC_KEY_ID"
+    -authenticationKeyIssuerID "$ASC_ISSUER"
   )
 else
-  echo "  Using Xcode session auth (set ASC_API_KEY_* for non-interactive)"
+  echo "  Warning: API key not found at $ASC_KEY_PATH — falling back to Xcode session auth"
 fi
 
 EXPORT_OUTPUT=$("${EXPORT_CMD[@]}" 2>&1)
