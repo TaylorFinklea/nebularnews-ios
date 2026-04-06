@@ -98,48 +98,9 @@ struct CompanionArticleDetailView: View {
                         }
                     }
 
-                    // Summary
-                    if let summary = payload.summary?.summaryText, !summary.isEmpty {
-                        Section("Summary") {
-                            Text(summary)
-                                .font(.body)
-                                .lineSpacing(3)
-                        }
-                    }
+                    EnrichmentSection(payload: payload)
 
-                    // Key points
-                    if let keyPoints = payload.keyPoints,
-                       let jsonString = keyPoints.keyPointsJson,
-                       !jsonString.isEmpty,
-                       let data = jsonString.data(using: .utf8),
-                       let points = try? JSONDecoder().decode([String].self, from: data),
-                       !points.isEmpty {
-                        Section("Key Points") {
-                            ForEach(points, id: \.self) { point in
-                                Label(point, systemImage: "circle.fill")
-                                    .labelStyle(.titleAndIcon)
-                                    .font(.subheadline)
-                                    .imageScale(.small)
-                            }
-                        }
-                    }
-
-                    // Article body
-                    if let contentHtml = payload.article.contentHtml, !contentHtml.isEmpty {
-                        Section {
-                            RichArticleContentView(html: contentHtml)
-                        }
-                    } else if let contentText = payload.article.contentText, !contentText.isEmpty {
-                        Section {
-                            Text(contentText)
-                                .font(.body)
-                                .lineSpacing(4)
-                        }
-                    } else if let excerpt = payload.article.excerpt, !excerpt.isEmpty {
-                        Section("Excerpt") {
-                            Text(excerpt)
-                        }
-                    }
+                    ArticleBodyView(article: payload.article)
 
                     // Sources
                     if !payload.sources.isEmpty {
@@ -154,109 +115,23 @@ struct CompanionArticleDetailView: View {
                         }
                     }
 
-                    // Fit score with DisclosureGroup for evidence
-                    if let score = payload.score, let scoreValue = score.score {
-                        Section("Fit Score") {
-                            DisclosureGroup {
-                                if let reasonText = score.reasonText, !reasonText.isEmpty {
-                                    Text(reasonText)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-                                if let evidenceJson = score.evidenceJson,
-                                   !evidenceJson.isEmpty,
-                                   let data = evidenceJson.data(using: .utf8),
-                                   let items = try? JSONDecoder().decode([ScoreEvidenceItem].self, from: data) {
-                                    ForEach(items) { item in
-                                        Label {
-                                            Text(item.reason)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        } icon: {
-                                            Image(systemName: item.weight > 0 ? "plus.circle.fill" : "minus.circle.fill")
-                                                .foregroundStyle(item.weight > 0 ? .green : .red)
-                                                .accessibilityLabel(item.weight > 0 ? "Positive signal" : "Negative signal")
-                                        }
-                                        .font(.caption)
-                                    }
-                                }
-                            } label: {
-                                HStack {
-                                    Text("Score: \(scoreValue)/5")
-                                        .font(.headline)
-                                    if let label = score.label, !label.isEmpty {
-                                        Text(label)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if let confidence = score.confidence {
-                                        Text("\(Int(confidence * 100))%")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
+                    TagsSection(
+                        isEnabled: appState.features?.tags == true,
+                        tags: payload.tags,
+                        tagSuggestions: payload.tagSuggestions,
+                        pendingTagName: $pendingTagName,
+                        isSavingTag: savingTag,
+                        acceptingSuggestion: acceptingSuggestion,
+                        onAddTag: {
+                            Task { await addTag() }
+                        },
+                        onRemoveTag: { tag in
+                            Task { await removeTag(tag) }
+                        },
+                        onAcceptSuggestion: { suggestion in
+                            Task { await acceptTagSuggestion(suggestion) }
                         }
-                    }
-
-                    // Tags
-                    if appState.features?.tags == true {
-                        Section("Tags") {
-                            if payload.tags.isEmpty {
-                                Text("No tags yet.")
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                FlowLayout(spacing: 6) {
-                                    ForEach(payload.tags) { tag in
-                                        HStack(spacing: 4) {
-                                            TagPill(name: tag.name)
-                                            Button {
-                                                Task { await removeTag(tag) }
-                                            } label: {
-                                                Image(systemName: "xmark.circle.fill")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                                    .accessibilityLabel("Remove tag \(tag.name)")
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                            }
-                            HStack {
-                                TextField("Add tag", text: $pendingTagName)
-                                    .textFieldStyle(.roundedBorder)
-                                Button("Add") {
-                                    Task { await addTag() }
-                                }
-                                .disabled(pendingTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || savingTag)
-                            }
-                        }
-                    }
-
-                    // Tag suggestions
-                    if !payload.tagSuggestions.isEmpty {
-                        Section("Suggested Tags") {
-                            ForEach(payload.tagSuggestions) { suggestion in
-                                HStack {
-                                    TagPill(name: suggestion.name)
-                                    if let confidence = suggestion.confidence {
-                                        Text("\(Int(confidence * 100))%")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Button("Accept") {
-                                        Task { await acceptTagSuggestion(suggestion) }
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                    .disabled(acceptingSuggestion == suggestion.id)
-                                }
-                            }
-                        }
-                    }
+                    )
 
                     // Feedback history
                     if !payload.feedback.isEmpty {
@@ -400,23 +275,11 @@ struct CompanionArticleDetailView: View {
             Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
         }
 
-        if appState.features?.reactions == true {
-            Spacer()
-
-            Button {
-                openReactionDraft(value: 1)
-            } label: {
-                Image(systemName: payload.reaction?.value == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                    .accessibilityLabel("Like article")
-            }
-
-            Button {
-                openReactionDraft(value: -1)
-            } label: {
-                Image(systemName: payload.reaction?.value == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                    .accessibilityLabel("Dislike article")
-            }
-        }
+        ReactionsView(
+            isEnabled: appState.features?.reactions == true,
+            currentValue: payload.reaction?.value,
+            onReact: openReactionDraft
+        )
     }
 
     private func loadArticle() async {
@@ -586,6 +449,213 @@ private func timestampMillisFromISO(_ isoString: String) -> Int? {
         return Int(date.timeIntervalSince1970 * 1000)
     }
     return nil
+}
+
+private struct EnrichmentSection: View {
+    let payload: CompanionArticleDetailPayload
+
+    private var keyPoints: [String] {
+        guard let jsonString = payload.keyPoints?.keyPointsJson,
+              !jsonString.isEmpty,
+              let data = jsonString.data(using: .utf8),
+              let points = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return points
+    }
+
+    private var evidenceItems: [ScoreEvidenceItem] {
+        guard let evidenceJson = payload.score?.evidenceJson,
+              !evidenceJson.isEmpty,
+              let data = evidenceJson.data(using: .utf8),
+              let items = try? JSONDecoder().decode([ScoreEvidenceItem].self, from: data) else {
+            return []
+        }
+        return items
+    }
+
+    @ViewBuilder
+    var body: some View {
+        if let summary = payload.summary?.summaryText, !summary.isEmpty {
+            Section("Summary") {
+                Text(summary)
+                    .font(.body)
+                    .lineSpacing(3)
+            }
+        }
+
+        if !keyPoints.isEmpty {
+            Section("Key Points") {
+                ForEach(keyPoints, id: \.self) { point in
+                    Label(point, systemImage: "circle.fill")
+                        .labelStyle(.titleAndIcon)
+                        .font(.subheadline)
+                        .imageScale(.small)
+                }
+            }
+        }
+
+        if let score = payload.score, let scoreValue = score.score {
+            Section("Fit Score") {
+                DisclosureGroup {
+                    if let reasonText = score.reasonText, !reasonText.isEmpty {
+                        Text(reasonText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(evidenceItems) { item in
+                        Label {
+                            Text(item.reason)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } icon: {
+                            Image(systemName: item.weight > 0 ? "plus.circle.fill" : "minus.circle.fill")
+                                .foregroundStyle(item.weight > 0 ? .green : .red)
+                                .accessibilityLabel(item.weight > 0 ? "Positive signal" : "Negative signal")
+                        }
+                        .font(.caption)
+                    }
+                } label: {
+                    HStack {
+                        Text("Score: \(scoreValue)/5")
+                            .font(.headline)
+                        if let label = score.label, !label.isEmpty {
+                            Text(label)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let confidence = score.confidence {
+                            Text("\(Int(confidence * 100))%")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ArticleBodyView: View {
+    let article: CompanionArticle
+
+    @ViewBuilder
+    var body: some View {
+        if let contentHtml = article.contentHtml, !contentHtml.isEmpty {
+            Section {
+                RichArticleContentView(html: contentHtml)
+            }
+        } else if let contentText = article.contentText, !contentText.isEmpty {
+            Section {
+                Text(contentText)
+                    .font(.body)
+                    .lineSpacing(4)
+            }
+        } else if let excerpt = article.excerpt, !excerpt.isEmpty {
+            Section("Excerpt") {
+                Text(excerpt)
+            }
+        }
+    }
+}
+
+private struct TagsSection: View {
+    let isEnabled: Bool
+    let tags: [CompanionTag]
+    let tagSuggestions: [CompanionTagSuggestion]
+    @Binding var pendingTagName: String
+    let isSavingTag: Bool
+    let acceptingSuggestion: String?
+    let onAddTag: () -> Void
+    let onRemoveTag: (CompanionTag) -> Void
+    let onAcceptSuggestion: (CompanionTagSuggestion) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if isEnabled {
+            Section("Tags") {
+                if tags.isEmpty {
+                    Text("No tags yet.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    FlowLayout(spacing: 6) {
+                        ForEach(tags) { tag in
+                            HStack(spacing: 4) {
+                                TagPill(name: tag.name)
+                                Button {
+                                    onRemoveTag(tag)
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .accessibilityLabel("Remove tag \(tag.name)")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    TextField("Add tag", text: $pendingTagName)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Add") {
+                        onAddTag()
+                    }
+                    .disabled(pendingTagName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSavingTag)
+                }
+            }
+        }
+
+        if !tagSuggestions.isEmpty {
+            Section("Suggested Tags") {
+                ForEach(tagSuggestions) { suggestion in
+                    HStack {
+                        TagPill(name: suggestion.name)
+                        if let confidence = suggestion.confidence {
+                            Text("\(Int(confidence * 100))%")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button("Accept") {
+                            onAcceptSuggestion(suggestion)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(acceptingSuggestion == suggestion.id)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ReactionsView: View {
+    let isEnabled: Bool
+    let currentValue: Int?
+    let onReact: (Int) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if isEnabled {
+            Spacer()
+
+            Button {
+                onReact(1)
+            } label: {
+                Image(systemName: currentValue == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
+                    .accessibilityLabel("Like article")
+            }
+
+            Button {
+                onReact(-1)
+            } label: {
+                Image(systemName: currentValue == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                    .accessibilityLabel("Dislike article")
+            }
+        }
+    }
 }
 
 // MARK: - Companion Hero Image
