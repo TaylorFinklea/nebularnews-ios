@@ -45,7 +45,7 @@ done
 step "Bumping version ($BUMP_TYPE)..."
 cd "$PROJECT_DIR"
 
-OLD_BUILD=$(agvtool what-version -terse)
+OLD_BUILD=$(agvtool what-version -terse | tail -1)
 # Read MARKETING_VERSION directly from project.pbxproj (agvtool can't resolve it without Info.plist)
 OLD_VERSION=$(grep -m1 'MARKETING_VERSION = ' NebularNews.xcodeproj/project.pbxproj | sed 's/.*= //;s/;.*//' | tr -d '[:space:]')
 
