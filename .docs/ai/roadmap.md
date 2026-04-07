@@ -102,8 +102,8 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - ~`[minor]` **Add fetch timeouts**: Done — created `_shared/fetch-with-timeout.ts` with `AbortController` + env-configurable timeouts, applied to `ai.ts`, `scraper.ts`, `process-jobs`.~
 - ~`[minor]` **Centralize AI model names**: Done — created `_shared/model-config.ts` with `DEFAULT_MODELS` map, migrated `ai.ts` and `ai-key-resolver.ts`. Models updated to `claude-sonnet-4-6` and `gpt-5.4-mini`.~
 - `[x]` **CI/CD pipeline**: Done — added `.github/workflows/deploy-edge-functions.yml` in `nebularnews-api` to deploy Edge Functions on pushes to `main` with `npx supabase@latest functions deploy --project-ref ... --use-api --no-verify-jwt` using `SUPABASE_ACCESS_TOKEN`.
-- `[~]` **Monitoring**: Track Edge Function errors, scoring quality, scraping success rates. Could be a Supabase dashboard + pg_cron health checks.
-- `[minor]` **Docker self-hosting**: Test end-to-end with `supabase start`, document any gaps.
+- `[x]` **Monitoring**: Done — added `00009_monitoring_views.sql` in `nebularnews-api` with dashboard views for edge-function failures, scoring quality, scraping success, and aggregate health checks for stale polling, backlog growth, score freshness, and scrape success rate.
+- `[x]` `[minor]` **Docker self-hosting**: Done — `supabase start` works. Fixed two migration gaps: (1) `00005_per_feed_controls.sql` used `CREATE POLICY IF NOT EXISTS` which requires PostgreSQL 15+; changed to `DROP POLICY IF EXISTS` before `CREATE POLICY`. (2) `00006_push_notification_support.sql` needed `pg_cron` extension enabled; added `CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA cron`.
 - ~`[trivial]` **Extract recordUsage to shared**: Done — created `_shared/usage.ts`, imported in both functions.~
 - ~`[trivial]` **Update README**: Done — added all 3 missing functions, fixed process-jobs trigger.~
 - ~`[trivial]` **Update .env.example**: Done — added both scraper keys with comments.~
