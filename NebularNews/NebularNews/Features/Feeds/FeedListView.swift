@@ -15,6 +15,7 @@ struct FeedListView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var showAddSheet = false
+    @State private var showDiscovery = false
     @State private var newFeedURL = ""
     @State private var isPulling = false
 
@@ -78,12 +79,22 @@ struct FeedListView: View {
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button {
+                    showDiscovery = true
+                } label: {
+                    Label("Discover Feeds", systemImage: "sparkle.magnifyingglass")
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Button {
                     Task { await refreshAll() }
                 } label: {
                     Label("Refresh All", systemImage: "arrow.clockwise")
                 }
                 .disabled(isPulling)
             }
+        }
+        .sheet(isPresented: $showDiscovery) {
+            FeedDiscoveryView()
         }
         .alert("Add Feed", isPresented: $showAddSheet) {
             TextField("Feed URL", text: $newFeedURL)
