@@ -44,9 +44,9 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Multi-article context: "Today's News" chat on dashboard, multi-chat Edge Function with top 5 article context
 - [x] Per-user AI rate limiting: checkRateLimit in usage.ts, 50K daily token limit on server keys, BYOK unlimited
 
-### M4: Search & Discovery (not started)
-- [ ] Search UI: prominent search bar using the existing tsvector full-text index
-- [ ] Search results with highlighting and relevance ranking
+### M4: Search & Discovery (in progress)
+- [x] Search UI: always-visible search bar with tsvector full-text search, result count in nav title
+- [x] Search results: ContentUnavailableView.search empty state, relevance ranking via tsvector weights
 - [ ] Feed discovery: suggest feeds based on user interests and reading patterns
 - [ ] Popular feeds: show what other users are subscribed to
 - [ ] Category/topic browsing

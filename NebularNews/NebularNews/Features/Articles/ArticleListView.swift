@@ -34,11 +34,15 @@ struct ArticleListView: View {
         NavigationStack {
             Group {
                 if articles.isEmpty && !isLoading && errorMessage.isEmpty {
-                    ContentUnavailableView(
-                        "No Articles Yet",
-                        systemImage: "doc.text",
-                        description: Text("Add some feeds and pull to refresh.")
-                    )
+                    if !searchText.isEmpty {
+                        ContentUnavailableView.search(text: searchText)
+                    } else {
+                        ContentUnavailableView(
+                            "No Articles Yet",
+                            systemImage: "doc.text",
+                            description: Text("Add some feeds and pull to refresh.")
+                        )
+                    }
                 } else {
                     List {
                         if !errorMessage.isEmpty {
@@ -84,8 +88,8 @@ struct ArticleListView: View {
                     .listStyle(.plain)
                 }
             }
-            .navigationTitle(feedTitle ?? "Articles")
-            .searchable(text: $searchText, prompt: "Search articles")
+            .navigationTitle(searchText.isEmpty ? (feedTitle ?? "Articles") : "\(articles.count) results")
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search articles")
             .overlay {
                 if isLoading && articles.isEmpty {
                     ProgressView()
