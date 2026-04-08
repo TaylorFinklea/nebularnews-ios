@@ -113,6 +113,9 @@ struct NebularNewsApp: App {
             }
         }
         .modelContainer(modelContainer)
+        #if os(macOS)
+        .defaultSize(width: 1100, height: 700)
+        #endif
         #if os(iOS)
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {

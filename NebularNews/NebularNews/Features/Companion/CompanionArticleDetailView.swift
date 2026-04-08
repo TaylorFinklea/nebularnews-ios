@@ -764,7 +764,7 @@ private struct CompanionReactionReasonSheet: View {
                         dismiss()
                     }
                 }
-                ToolbarItem(placement: .bottomBar) {
+                ToolbarItem(placement: .platformBottom) {
                     Button("Skip") {
                         onSave([])
                         dismiss()

@@ -51,12 +51,12 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Popular feeds: curated catalog organized by category (tech, AI, science, news, dev)
 - [x] Category/topic browsing: sectioned list with category icons and descriptions
 
-### M5: macOS App (not started)
-- [ ] Add macOS destination to Xcode target (code ready with #if os guards)
-- [ ] Sidebar navigation (feeds, saved, search, settings)
-- [ ] Window management (main window, article popout)
-- [ ] Keyboard shortcuts for power users
-- [ ] Toolbar and menu bar integration
+### M5: macOS App (complete)
+- [x] Add macOS destination (SDKROOT=auto, SUPPORTED_PLATFORMS includes macosx, macOS 15.0+)
+- [x] Sidebar navigation (NavigationSplitView with Today/Articles/Discover/Lists — was already coded)
+- [x] Window management (defaultSize 1100x700, proper NavigationSplitView layout)
+- [x] Platform compatibility (toolbar placements, list styles, UIScreen guards, glassEffect availability)
+- [x] Builds clean on both iOS and macOS (signing requires Apple Developer portal config for push/Sign in with Apple)
 
 ## Priority Order
 

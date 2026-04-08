@@ -17,18 +17,7 @@ struct MainTabView: View {
     var body: some View {
         #if os(macOS)
         NavigationSplitView {
-            List(selection: $selectedTab) {
-                Label("Today", systemImage: "sun.max")
-                    .tag(Tab.today)
-                Label("Articles", systemImage: "doc.text")
-                    .tag(Tab.articles)
-                Label("Discover", systemImage: "safari")
-                    .tag(Tab.discover)
-                Label("Lists", systemImage: "bookmark")
-                    .tag(Tab.lists)
-                    .badge(companionSavedCount)
-            }
-            .navigationTitle("Nebular News")
+            sidebarContent
             .toolbar {
                 ToolbarItem {
                     Button { showSettings = true } label: {
@@ -97,6 +86,23 @@ struct MainTabView: View {
         }
         #endif
     }
+
+    #if os(macOS)
+    private var sidebarContent: some View {
+        List(selection: $selectedTab) {
+            Label("Today", systemImage: "sun.max")
+                .tag(Tab.today)
+            Label("Articles", systemImage: "doc.text")
+                .tag(Tab.articles)
+            Label("Discover", systemImage: "safari")
+                .tag(Tab.discover)
+            Label("Lists", systemImage: "bookmark")
+                .tag(Tab.lists)
+                .badge(companionSavedCount)
+        }
+        .navigationTitle("Nebular News")
+    }
+    #endif
 
     private func loadCompanionSavedCount() async {
         if let payload = try? await appState.supabase.fetchArticles(limit: 1, saved: true) {
