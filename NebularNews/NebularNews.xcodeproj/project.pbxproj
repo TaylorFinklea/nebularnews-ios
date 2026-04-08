@@ -12,17 +12,16 @@
 		A2C57C4E2F7C4F7B0058043E /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C4D2F7C4F7B0058043E /* PostgREST */; };
 		A2C57C512F7C5D7C0058043E /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C502F7C5D7C0058043E /* Supabase */; };
 		A2D0B91B2F5A062A001EB670 /* NebularNewsKit in Frameworks */ = {isa = PBXBuildFile; productRef = A2D0B91A2F5A062A001EB670 /* NebularNewsKit */; };
-
-		DD5594800BEB4FE2B96B105B1ECACBB2 /* NebularNewsWidgets.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = 4A1F7C11CF144203816BD14029507500 /* NebularNewsWidgets.entitlements */; };
-		E9F43269259443548E3399269F6F452B /* WidgetDataProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5B52C147F1E00F4C285 /* WidgetDataProvider.swift */; };
-		5DEF1E240FE3400C90B70A42F21017C6 /* WidgetData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5B62C147F1E00F4C285 /* WidgetData.swift */; };
-		FCE3EF7F8A3F4626B2605F0C522FD299 /* TopArticleWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5B72C147F1E00F4C285 /* TopArticleWidget.swift */; };
-		873E5A4CFA3E4279B00E1564137D0F3B /* ReadingQueueWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5B82C147F1E00F4C285 /* ReadingQueueWidget.swift */; };
-		1047DFE521694A1597A6804D28655A88 /* StatsWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5B92C147F1E00F4C285 /* StatsWidget.swift */; };
-		2D2AEB2574B0492399017E8FD4974A0C /* NebularNewsWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDA0E5BA2C147F1E00F4C285 /* NebularNewsWidgets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		5C2FDB12F190473F8F623D8B24608D03 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A2D0B8E72F5A05FB001EB670 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 21EF68A28F634A0CBC0E2AACAF2D5350;
+			remoteInfo = NebularNewsWidgets;
+		};
 		A2D0B8FD2F5A05FB001EB670 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A2D0B8E72F5A05FB001EB670 /* Project object */;
@@ -37,31 +36,12 @@
 			remoteGlobalIDString = A2D0B8EE2F5A05FB001EB670;
 			remoteInfo = NebularNews;
 		};
-
-		5C2FDB12F190473F8F623D8B24608D03 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = A2D0B8E72F5A05FB001EB670 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 21EF68A28F634A0CBC0E2AACAF2D5350;
-			remoteInfo = NebularNewsWidgets;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A2D0B8EF2F5A05FB001EB670 /* NebularNews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NebularNews.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2D0B8FC2F5A05FB001EB670 /* NebularNewsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NebularNewsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2D0B9062F5A05FB001EB670 /* NebularNewsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NebularNewsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-
-		6565031600AA475EA4914592AEDA09BF /* NebularNewsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = NebularNewsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-
-		BDA0E5B52C147F1E00F4C285 /* WidgetDataProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataProvider.swift; sourceTree = "<group>"; };
-		BDA0E5B62C147F1E00F4C285 /* WidgetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetData.swift; sourceTree = "<group>"; };
-		BDA0E5B72C147F1E00F4C285 /* TopArticleWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopArticleWidget.swift; sourceTree = "<group>"; };
-		BDA0E5B82C147F1E00F4C285 /* ReadingQueueWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingQueueWidget.swift; sourceTree = "<group>"; };
-		BDA0E5B92C147F1E00F4C285 /* StatsWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatsWidget.swift; sourceTree = "<group>"; };
-		BDA0E5BA2C147F1E00F4C285 /* NebularNewsWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NebularNewsWidgets.swift; sourceTree = "<group>"; };
-		BDA0E5BB2C147F1E00F4C285 /* NebularNewsWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NebularNewsWidgets.entitlements; sourceTree = "<group>"; };
-		BDA0E5BC2C147F1E00F4C285 /* WidgetDataWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetDataWriter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -109,13 +89,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		E0E87E753605489AAAEB73C086E4B263 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -145,21 +118,6 @@
 				A2D0B9062F5A05FB001EB670 /* NebularNewsUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		4A1F7C11CF144203816BD14029507500 /* NebularNewsWidgets */ = {
-			isa = PBXGroup;
-			children = (
-				BDA0E5BB2C147F1E00F4C285 /* NebularNewsWidgets.entitlements */,
-				BDA0E5BA2C147F1E00F4C285 /* NebularNewsWidgets.swift */,
-				BDA0E5B52C147F1E00F4C285 /* WidgetDataProvider.swift */,
-				BDA0E5B62C147F1E00F4C285 /* WidgetData.swift */,
-				BDA0E5BC2C147F1E00F4C285 /* WidgetDataWriter.swift */,
-				BDA0E5B72C147F1E00F4C285 /* TopArticleWidget.swift */,
-				BDA0E5B82C147F1E00F4C285 /* ReadingQueueWidget.swift */,
-				BDA0E5B92C147F1E00F4C285 /* StatsWidget.swift */,
-			);
-			path = NebularNewsWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -309,14 +267,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D780E67AE69C4349A465A465A78D68B8 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				DD5594800BEB4FE2B96B105B1ECACBB2 /* NebularNewsWidgets.entitlements in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -341,22 +291,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		0E7537034B35430BA0D4A99380D8355D /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E9F43269259443548E3399269F6F452B /* WidgetDataProvider.swift in Sources */,
-				5DEF1E240FE3400C90B70A42F21017C6 /* WidgetData.swift in Sources */,
-				FCE3EF7F8A3F4626B2605F0C522FD299 /* TopArticleWidget.swift in Sources */,
-				873E5A4CFA3E4279B00E1564137D0F3B /* ReadingQueueWidget.swift in Sources */,
-				1047DFE521694A1597A6804D28655A88 /* StatsWidget.swift in Sources */,
-				2D2AEB2574B0492399017E8FD4974A0C /* NebularNewsWidgets.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		2064B138884E4CDCBD053B0E874E1137 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			targetProxy = 5C2FDB12F190473F8F623D8B24608D03 /* PBXContainerItemProxy */;
+		};
 		A2D0B8FE2F5A05FB001EB670 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A2D0B8EE2F5A05FB001EB670 /* NebularNews */;
@@ -366,12 +307,6 @@
 			isa = PBXTargetDependency;
 			target = A2D0B8EE2F5A05FB001EB670 /* NebularNews */;
 			targetProxy = A2D0B9072F5A05FB001EB670 /* PBXContainerItemProxy */;
-		};
-
-		2064B138884E4CDCBD053B0E874E1137 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 21EF68A28F634A0CBC0E2AACAF2D5350 /* NebularNewsWidgets */;
-			targetProxy = 5C2FDB12F190473F8F623D8B24608D03 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -503,7 +438,7 @@
 				BACKGROUND_REFRESH_TASK_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).feedRefresh";
 				CODE_SIGN_ENTITLEMENTS = NebularNews/NebularNews.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = K7CBQW6MPG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -543,7 +478,7 @@
 				BACKGROUND_REFRESH_TASK_IDENTIFIER = "$(PRODUCT_BUNDLE_IDENTIFIER).feedRefresh";
 				CODE_SIGN_ENTITLEMENTS = NebularNews/NebularNews.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = K7CBQW6MPG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -580,7 +515,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 2.0.0;
@@ -601,7 +536,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MARKETING_VERSION = 2.0.0;
@@ -621,7 +556,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.NebularNewsUITests;
@@ -640,7 +575,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.NebularNewsUITests;
@@ -652,47 +587,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_TARGET_NAME = NebularNews;
-			};
-			name = Release;
-		};
-
-		B9C10A86B1E2417DB91D88DBE9D79DCD /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NebularNewsWidgets/NebularNewsWidgets.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = NebularNewsWidgets;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.NebularNewsWidgets;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		5646D568F876450DB297556CBA3427E5 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = NebularNewsWidgets/NebularNewsWidgets.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = NebularNewsWidgets;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 2.0.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.NebularNewsWidgets;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -731,16 +625,6 @@
 			buildConfigurations = (
 				A2D0B9172F5A05FB001EB670 /* Debug */,
 				A2D0B9182F5A05FB001EB670 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-
-		D1DE60904A7B458E8B72FC9085E1D34B /* Build configuration list for PBXNativeTarget "NebularNewsWidgets" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B9C10A86B1E2417DB91D88DBE9D79DCD /* Debug */,
-				5646D568F876450DB297556CBA3427E5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
