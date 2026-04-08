@@ -38,7 +38,7 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 
 ### M3: AI Improvements (in progress)
 - [x] Hybrid scoring: AI Score button in toolbar, shows "AI" vs "Auto" badge, separate from summarize
-- [ ] Chat UI/UX overhaul: streaming responses, better message rendering, conversation history
+- [x] Chat UI/UX overhaul: animated typing indicator, AI avatar, markdown rendering, model attribution, polished input bar
 - [ ] Chat quality: better prompts, more article context in the window, source citations
 - [ ] Suggested questions: auto-generate 2-3 starter questions per article
 - [ ] Multi-article context: "ask about today's news" across multiple articles
