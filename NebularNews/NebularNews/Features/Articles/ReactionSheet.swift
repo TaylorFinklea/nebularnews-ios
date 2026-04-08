@@ -95,7 +95,7 @@ struct ReactionSheet: View {
                         .disabled(selectedValue == nil)
                 }
                 if currentValue != nil {
-                    ToolbarItem(placement: .bottomBar) {
+                    ToolbarItem(placement: .platformBottom) {
                         Button("Clear Reaction", role: .destructive) {
                             onClear()
                             dismiss()

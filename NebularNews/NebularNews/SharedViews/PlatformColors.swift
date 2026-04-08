@@ -26,6 +26,37 @@ extension View {
     }
 }
 
+// MARK: - Cross-platform toolbar placements
+
+extension ToolbarItemPlacement {
+    /// `.topBarTrailing` on iOS, `.primaryAction` on macOS.
+    static var platformTrailing: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .primaryAction
+        #endif
+    }
+
+    /// `.topBarLeading` on iOS, `.navigation` on macOS.
+    static var platformLeading: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .navigation
+        #endif
+    }
+
+    /// `.bottomBar` on iOS, `.secondaryAction` on macOS.
+    static var platformBottom: ToolbarItemPlacement {
+        #if os(iOS)
+        .bottomBar
+        #else
+        .secondaryAction
+        #endif
+    }
+}
+
 // MARK: - Cross-platform system color shims
 //
 // UIColor names like `.tertiarySystemFill` and `.secondarySystemGroupedBackground`

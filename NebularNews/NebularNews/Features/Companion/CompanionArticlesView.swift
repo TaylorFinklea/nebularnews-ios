@@ -203,7 +203,7 @@ struct CompanionArticlesView: View {
             }
             .navigationTitle("Articles")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear").accessibilityLabel("Settings") }
                 }
             }

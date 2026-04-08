@@ -170,13 +170,17 @@ struct CompanionArticleDetailView: View {
                         }
                     }
                 }
+                #if os(iOS)
                 .listStyle(.insetGrouped)
+                #else
+                .listStyle(.sidebar)
+                #endif
                 .navigationTitle("Article")
                 .inlineNavigationBarTitle()
                 .refreshable { await loadArticle() }
                 .hideTabBar()
                 .toolbar {
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    ToolbarItemGroup(placement: .platformTrailing) {
                         Button {
                             Task { await toggleReadAndGoBack() }
                         } label: {
@@ -193,7 +197,7 @@ struct CompanionArticleDetailView: View {
                         }
                         .disabled(savingBookmark)
                     }
-                    ToolbarItemGroup(placement: .bottomBar) {
+                    ToolbarItemGroup(placement: .platformBottom) {
                         bottomActionTray(payload)
                     }
                 }

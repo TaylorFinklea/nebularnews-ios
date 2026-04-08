@@ -160,9 +160,15 @@ struct CompanionTodayView: View {
             }
             .navigationTitle("Today")
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
                 }
+                #else
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+                #endif
             }
             .refreshable {
                 try? await appState.supabase.triggerPull()

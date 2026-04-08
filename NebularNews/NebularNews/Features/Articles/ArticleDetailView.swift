@@ -78,7 +78,12 @@ struct ArticleDetailView: View {
         .onPreferenceChange(ScrollContentHeightKey.self) { offset in
             // offset is negative as user scrolls down
             // Approximate: content extends below the visible area
-            let clamped = min(max(-offset / max(1, UIScreen.main.bounds.height * 2), 0), 1)
+            #if os(iOS)
+            let screenHeight = UIScreen.main.bounds.height
+            #else
+            let screenHeight: CGFloat = 800
+            #endif
+            let clamped = min(max(-offset / max(1, screenHeight * 2), 0), 1)
             scrollProgress = clamped
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -91,10 +96,10 @@ struct ArticleDetailView: View {
         }
         .hideTabBar()
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .platformTrailing) {
                 topTrailingToolbar(payload)
             }
-            ToolbarItemGroup(placement: .bottomBar) {
+            ToolbarItemGroup(placement: .platformBottom) {
                 bottomToolbar(payload)
             }
         }

@@ -76,7 +76,7 @@ struct CompanionDiscoverView: View {
             }
             .navigationTitle("Discover")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
                 }
             }

@@ -89,7 +89,7 @@ struct MainTabView: View {
             NavigationStack {
                 ProfileView()
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .platformTrailing) {
                             Button("Done") { showSettings = false }
                         }
                     }

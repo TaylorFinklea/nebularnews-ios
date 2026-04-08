@@ -81,7 +81,7 @@ struct GlassRoundedBackground: ViewModifier {
     @ViewBuilder
     private func glassContent(_ content: Content, shape: RoundedRectangle) -> some View {
 #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, macOS 26.0, *) {
             content.glassEffect(.regular, in: shape)
         } else {
             fallbackContent(content, shape: shape)
@@ -175,7 +175,7 @@ private struct GlassCardBackground<ShapeType: InsettableShape>: ViewModifier {
     @ViewBuilder
     private func glassContent(_ content: Content) -> some View {
 #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, macOS 26.0, *) {
             content
                 .glassEffect(.regular, in: shape)
                 .tint(effectiveTintColor)
@@ -267,7 +267,7 @@ private struct GlassCapsuleBackground: ViewModifier {
     @ViewBuilder
     private func glassContent(_ content: Content) -> some View {
 #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, macOS 26.0, *) {
             content
                 .glassEffect(.regular, in: Capsule())
                 .tint(effectiveTintColor)

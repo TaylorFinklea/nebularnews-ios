@@ -50,9 +50,15 @@ struct CompanionReadingListView: View {
             }
             .navigationTitle("Reading List")
             .toolbar {
+                #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
                 }
+                #else
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showSettings = true } label: { Image(systemName: "gear") }
+                }
+                #endif
             }
             .refreshable { await loadSaved() }
             .task {

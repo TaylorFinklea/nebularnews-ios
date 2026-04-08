@@ -49,7 +49,11 @@ struct FeedDiscoveryView: View {
                 }
             }
         }
+        #if os(iOS)
         .listStyle(.insetGrouped)
+        #else
+        .listStyle(.sidebar)
+        #endif
     }
 
     @ViewBuilder

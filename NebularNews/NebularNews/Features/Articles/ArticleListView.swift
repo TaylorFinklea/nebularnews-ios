@@ -89,14 +89,18 @@ struct ArticleListView: View {
                 }
             }
             .navigationTitle(searchText.isEmpty ? (feedTitle ?? "Articles") : "\(articles.count) results")
+            #if os(iOS)
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search articles")
+            #else
+            .searchable(text: $searchText, prompt: "Search articles")
+            #endif
             .overlay {
                 if isLoading && articles.isEmpty {
                     ProgressView()
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .platformLeading) {
                     Menu {
                         Picker("Status", selection: Binding(
                             get: { filter.readFilter },
@@ -166,7 +170,7 @@ struct ArticleListView: View {
                     }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .platformTrailing) {
                     Text("\(articles.count)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
