@@ -97,6 +97,66 @@ struct EnrichmentService: Sendable {
         )
     }
 
+    func sendMultiChatMessage(content: String) async throws -> CompanionChatPayload {
+        guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
+
+        let payload: CompanionChatPayload = try await client.functions.invoke(
+            "multi-chat",
+            options: FunctionInvokeOptions(
+                headers: userAIHeaders(),
+                body: ["message": content]
+            )
+        )
+
+        return payload
+    }
+
+    func fetchMultiChat() async throws -> CompanionChatPayload {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        let threads: [SupabaseChatThreadRow] = try await client.from("chat_threads")
+            .select("id, article_id, created_at, updated_at")
+            .eq("article_id", value: "__multi_chat__")
+            .eq("user_id", value: userId.uuidString)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let thread = threads.first else {
+            return CompanionChatPayload(thread: nil, messages: [])
+        }
+
+        let messages: [SupabaseChatMessageRow] = try await client.from("chat_messages")
+            .select("id, thread_id, role, content, created_at")
+            .eq("thread_id", value: thread.id)
+            .order("created_at")
+            .execute()
+            .value
+
+        let companionThread = CompanionChatThread(
+            id: thread.id,
+            articleId: thread.articleId,
+            title: nil,
+            createdAt: Int(thread.createdAt?.timeIntervalSince1970 ?? 0),
+            updatedAt: Int(thread.updatedAt?.timeIntervalSince1970 ?? 0)
+        )
+
+        let companionMessages = messages.map { msg in
+            CompanionChatMessage(
+                id: msg.id,
+                threadId: msg.threadId,
+                role: msg.role,
+                content: msg.content,
+                tokenCount: nil,
+                provider: nil,
+                model: nil,
+                createdAt: Int(msg.createdAt?.timeIntervalSince1970 ?? 0)
+            )
+        }
+
+        return CompanionChatPayload(thread: companionThread, messages: companionMessages)
+    }
+
     func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
         guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
 

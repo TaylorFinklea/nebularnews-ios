@@ -269,6 +269,14 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.sendChatMessage(articleId: articleId, content: content)
     }
 
+    func fetchMultiChat() async throws -> CompanionChatPayload {
+        try await enrichmentService.fetchMultiChat()
+    }
+
+    func sendMultiChatMessage(content: String) async throws -> CompanionChatPayload {
+        try await enrichmentService.sendMultiChatMessage(content: content)
+    }
+
     func fetchSuggestedQuestions(articleId: String) async throws -> [String] {
         try await enrichmentService.fetchSuggestedQuestions(articleId: articleId)
     }

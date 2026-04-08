@@ -14,6 +14,7 @@ struct DashboardView: View {
     @State private var totalArticles = 0
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var showMultiChat = false
 
     // MARK: - Computed Stats
 
@@ -42,6 +43,31 @@ struct DashboardView: View {
                     // Momentum section
                     momentumSection
 
+                    // Ask about today's news
+                    Button {
+                        showMultiChat = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "newspaper")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ask about today's news")
+                                    .font(.subheadline.weight(.medium))
+                                Text("Get insights across your recent articles")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding()
+                        .background(Color.platformSecondaryBackground, in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+
                     // Top scored articles
                     if !topUnread.isEmpty {
                         topArticlesSection
@@ -57,6 +83,9 @@ struct DashboardView: View {
                 if isLoading && todayPayload == nil {
                     ProgressView()
                 }
+            }
+            .sheet(isPresented: $showMultiChat) {
+                MultiArticleChatView()
             }
             .refreshable {
                 await loadDashboard()
