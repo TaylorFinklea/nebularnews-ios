@@ -8,6 +8,7 @@ struct CompanionArticleChatView: View {
     let articleTitle: String?
 
     @State private var messages: [CompanionChatMessage] = []
+    @State private var suggestedQuestions: [String] = []
     @State private var inputText = ""
     @State private var isLoading = false
     @State private var isSending = false
@@ -103,7 +104,7 @@ struct CompanionArticleChatView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
             Image(systemName: "bubble.left.and.text.bubble.right")
                 .font(.system(size: 40))
                 .foregroundStyle(.tertiary)
@@ -115,6 +116,28 @@ struct CompanionArticleChatView: View {
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
+
+            if !suggestedQuestions.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(suggestedQuestions, id: \.self) { question in
+                        Button {
+                            inputText = question
+                            Task { await sendMessage() }
+                        } label: {
+                            Text(question)
+                                .font(.subheadline)
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(Color.platformSecondaryBackground, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+            }
         }
     }
 
@@ -122,8 +145,12 @@ struct CompanionArticleChatView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let payload = try await appState.supabase.fetchChat(articleId: articleId)
+            async let chatPayload = appState.supabase.fetchChat(articleId: articleId)
+            async let questions = appState.supabase.fetchSuggestedQuestions(articleId: articleId)
+
+            let (payload, fetchedQuestions) = try await (chatPayload, questions)
             messages = payload.messages
+            suggestedQuestions = fetchedQuestions
         } catch {
             errorMessage = error.localizedDescription
         }

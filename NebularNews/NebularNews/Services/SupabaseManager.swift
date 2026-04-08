@@ -269,6 +269,14 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.sendChatMessage(articleId: articleId, content: content)
     }
 
+    func fetchSuggestedQuestions(articleId: String) async throws -> [String] {
+        try await enrichmentService.fetchSuggestedQuestions(articleId: articleId)
+    }
+
+    func requestSuggestedQuestions(articleId: String) async throws {
+        try await enrichmentService.requestSuggestedQuestions(articleId: articleId)
+    }
+
     // MARK: - AI Operations
 
     func rerunSummarize(articleId: String) async throws {

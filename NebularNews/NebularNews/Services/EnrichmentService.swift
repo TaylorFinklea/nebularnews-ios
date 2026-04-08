@@ -57,6 +57,46 @@ struct EnrichmentService: Sendable {
         return CompanionChatPayload(thread: companionThread, messages: companionMessages)
     }
 
+    func fetchSuggestedQuestions(articleId: String) async throws -> [String] {
+        struct QuestionsRow: Decodable {
+            let questionsJson: String
+
+            enum CodingKeys: String, CodingKey {
+                case questionsJson = "questions_json"
+            }
+        }
+
+        let rows: [QuestionsRow] = try await client.from("article_suggested_questions")
+            .select("questions_json")
+            .eq("article_id", value: articleId)
+            .limit(1)
+            .execute()
+            .value
+
+        guard let row = rows.first,
+              let data = row.questionsJson.data(using: .utf8),
+              let questions = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+
+        return questions
+    }
+
+    func requestSuggestedQuestions(articleId: String) async throws {
+        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+
+        _ = try await client.functions.invoke(
+            "enrich-article",
+            options: FunctionInvokeOptions(
+                headers: userAIHeaders(),
+                body: [
+                    "article_id": articleId,
+                    "user_id": userId.uuidString,
+                    "job_type": "suggest_questions"
+                ]
+            )
+        )
+    }
+
     func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
         guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
 
