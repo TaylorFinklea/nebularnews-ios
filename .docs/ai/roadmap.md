@@ -107,7 +107,7 @@ M2 → M3 → M4 → M5. Reading experience first (core loop), then AI different
 - ~`[trivial]` **Extract recordUsage to shared**: Done — created `_shared/usage.ts`, imported in both functions.~
 - ~`[trivial]` **Update README**: Done — added all 3 missing functions, fixed process-jobs trigger.~
 - ~`[trivial]` **Update .env.example**: Done — added both scraper keys with comments.~
-- `[minor]` **Extract score-articles logic (455 lines)**: Main handler is a single 400+ line function. Extract `computeSignalWeights`, `scoreArticleForUser`, and per-user scoring loop into `_shared/scoring.ts`. File: `score-articles/index.ts`.
+- [~] `[minor]` **Extract score-articles logic (455 lines)**: Main handler is a single 400+ line function. Extract `computeSignalWeights`, `scoreArticleForUser`, and per-user scoring loop into `_shared/scoring.ts`. File: `score-articles/index.ts`.
 - `[minor]` **Extract enrich-article job handlers (430 lines)**: Summarize, key_points, score, auto_tag share a pattern. Extract each into a handler module and DRY the AI invocation. File: `enrich-article/index.ts`.
 - `[x]` **Type feed-parser properly (355 lines)**: Done — created `RssItem`, `AtomEntry`, `RssChannel`, `AtomFeed`, `ParsedXml` interfaces, removed all 4 `deno-lint-ignore no-explicit-any` suppressions.
 - `[x]` **Standardize logging**: Done — `_shared/logger.ts` adopted across all functions: `scraper.ts`, `process-jobs`, `send-notification`, `generate-news-brief`, `enrich-article`, `article-chat`, `poll-feeds`, `score-articles`, `scrape-article`, `export-opml`, `import-opml`.
