@@ -1,46 +1,32 @@
 import Foundation
 import NebularNewsKit
 import os
-import Supabase
 
 // MARK: - Supabase Manager
 
-/// Central service that replaces MobileAPIClient with direct Supabase SDK calls.
+/// Central service facade that delegates to domain-specific service structs.
 ///
-/// Uses PostgREST for reads, direct table operations for writes, and
-/// Supabase Edge Functions for AI-powered operations (enrichment, chat).
-/// Auth is handled by the Supabase Auth module (Apple Sign In via ID token).
+/// Previously used the Supabase SDK directly; now delegates to APIClient
+/// which calls the Cloudflare Workers REST API. The class name is preserved
+/// to avoid cascading renames across all SwiftUI views.
 final class SupabaseManager: Sendable {
     static let shared = SupabaseManager()
 
-    let client: SupabaseClient
     private let logger = Logger(subsystem: "com.nebularnews", category: "SupabaseManager")
-    private var authService: AuthService { AuthService(client: client) }
-    private var articleService: ArticleService { ArticleService(client: client, logger: logger) }
-    private var feedService: FeedService { FeedService(client: client) }
-    private var enrichmentService: EnrichmentService { EnrichmentService(client: client) }
+    private let api = APIClient.shared
+    private var authService: AuthService { AuthService() }
+    private var articleService: ArticleService { ArticleService(logger: logger) }
+    private var feedService: FeedService { FeedService() }
+    private var enrichmentService: EnrichmentService { EnrichmentService() }
 
-    private init() {
-        guard let supabaseURL = URL(string: "https://vdjrclxeyjsqyqsjzjfj.supabase.co") else {
-            preconditionFailure("Invalid Supabase URL")
-        }
-        client = SupabaseClient(
-            supabaseURL: supabaseURL,
-            supabaseKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanJjbHhleWpzcXlxc2p6amZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTk0OTIsImV4cCI6MjA5MDUzNTQ5Mn0.9j644tw6xud8GNW-J0X_sgtR_oyXGEoi59cN-O7wTHY",
-            options: SupabaseClientOptions(
-                auth: .init(
-                    redirectToURL: URL(string: "nebularnews://auth-callback"),
-                    flowType: .pkce,
-                    emitLocalSessionAsInitialSession: true
-                )
-            )
-        )
-    }
+    private init() {}
 
     /// Current authenticated user ID, or nil if not signed in.
     var currentUserId: UUID? {
         get async {
-            try? await client.auth.session.user.id
+            // Validate session with server; return nil if expired
+            guard let session = try? await authService.session() else { return nil }
+            return UUID(uuidString: session.user.id)
         }
     }
 
@@ -171,92 +157,21 @@ final class SupabaseManager: Sendable {
     // MARK: - Settings
 
     func fetchSettings() async throws -> CompanionSettingsPayload {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        let rows: [SupabaseUserSettingRow] = try await client.from("user_settings")
-            .select("key, value")
-            .eq("user_id", value: userId.uuidString)
-            .execute()
-            .value
-
-        var settings = CompanionSettingsPayload(
-            pollIntervalMinutes: 15,
-            summaryStyle: "concise",
-            scoringMethod: "ai",
-            newsBriefConfig: CompanionNewsBriefConfig(
-                enabled: true,
-                timezone: TimeZone.current.identifier,
-                morningTime: "08:00",
-                eveningTime: "17:00",
-                lookbackHours: 12,
-                scoreCutoff: 3
-            ),
-            upNextLimit: 6,
-            retentionArchiveDays: 30,
-            retentionDeleteDays: 90
-        )
-
-        for row in rows {
-            switch row.key {
-            case "pollIntervalMinutes":
-                settings.pollIntervalMinutes = Int(row.value) ?? settings.pollIntervalMinutes
-            case "summaryStyle":
-                settings.summaryStyle = row.value
-            case "scoringMethod":
-                settings.scoringMethod = row.value
-            case "upNextLimit":
-                settings.upNextLimit = Int(row.value) ?? settings.upNextLimit
-            case "retentionArchiveDays":
-                settings.retentionArchiveDays = Int(row.value)
-            case "retentionDeleteDays":
-                settings.retentionDeleteDays = Int(row.value)
-            case "newsBriefEnabled":
-                settings.newsBriefConfig.enabled = row.value == "true"
-            case "newsBriefTimezone":
-                settings.newsBriefConfig.timezone = row.value
-            case "newsBriefMorningTime":
-                settings.newsBriefConfig.morningTime = row.value
-            case "newsBriefEveningTime":
-                settings.newsBriefConfig.eveningTime = row.value
-            case "newsBriefLookbackHours":
-                settings.newsBriefConfig.lookbackHours = Int(row.value) ?? settings.newsBriefConfig.lookbackHours
-            case "newsBriefScoreCutoff":
-                settings.newsBriefConfig.scoreCutoff = Int(row.value) ?? settings.newsBriefConfig.scoreCutoff
-            default:
-                break
-            }
-        }
-
+        let settings: CompanionSettingsPayload = try await api.request(path: "api/settings")
         return settings
     }
 
     func updateSettings(_ settings: CompanionSettingsPayload) async throws -> CompanionSettingsPayload {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        let pairs: [(String, String)] = [
-            ("pollIntervalMinutes", String(settings.pollIntervalMinutes)),
-            ("summaryStyle", settings.summaryStyle),
-            ("scoringMethod", settings.scoringMethod),
-            ("upNextLimit", String(settings.upNextLimit)),
-            ("retentionArchiveDays", String(settings.retentionArchiveDays ?? 30)),
-            ("retentionDeleteDays", String(settings.retentionDeleteDays ?? 90)),
-            ("newsBriefEnabled", settings.newsBriefConfig.enabled ? "true" : "false"),
-            ("newsBriefTimezone", settings.newsBriefConfig.timezone),
-            ("newsBriefMorningTime", settings.newsBriefConfig.morningTime),
-            ("newsBriefEveningTime", settings.newsBriefConfig.eveningTime),
-            ("newsBriefLookbackHours", String(settings.newsBriefConfig.lookbackHours)),
-            ("newsBriefScoreCutoff", String(settings.newsBriefConfig.scoreCutoff))
-        ]
-
-        let upserts = pairs.map { (key, value) in
-            UserSettingUpsert(userId: userId.uuidString, key: key, value: value)
-        }
-
-        try await client.from("user_settings")
-            .upsert(upserts, onConflict: "user_id,key")
-            .execute()
-
-        return settings
+        let updated: CompanionSettingsPayload = try await api.request(
+            method: "PUT",
+            path: "api/settings",
+            body: settings
+        )
+        return updated
     }
 
     // MARK: - Chat

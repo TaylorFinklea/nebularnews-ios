@@ -1,293 +1,107 @@
 import Foundation
 import NebularNewsKit
-import Supabase
 
 struct EnrichmentService: Sendable {
-    let client: SupabaseClient
-
-    private var currentUserId: UUID? {
-        get async {
-            try? await client.auth.session.user.id
-        }
-    }
+    private let api = APIClient.shared
 
     func fetchChat(articleId: String) async throws -> CompanionChatPayload {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        let threads: [SupabaseChatThreadRow] = try await client.from("chat_threads")
-            .select("id, article_id, created_at, updated_at")
-            .eq("article_id", value: articleId)
-            .eq("user_id", value: userId.uuidString)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let thread = threads.first else {
-            return CompanionChatPayload(thread: nil, messages: [])
-        }
-
-        let messages: [SupabaseChatMessageRow] = try await client.from("chat_messages")
-            .select("id, thread_id, role, content, created_at")
-            .eq("thread_id", value: thread.id)
-            .order("created_at")
-            .execute()
-            .value
-
-        let companionThread = CompanionChatThread(
-            id: thread.id,
-            articleId: thread.articleId,
-            title: nil,
-            createdAt: Int(thread.createdAt?.timeIntervalSince1970 ?? 0),
-            updatedAt: Int(thread.updatedAt?.timeIntervalSince1970 ?? 0)
+        let payload: CompanionChatPayload = try await api.request(
+            path: "api/chat/\(articleId)"
         )
-
-        let companionMessages = messages.map { msg in
-            CompanionChatMessage(
-                id: msg.id,
-                threadId: msg.threadId,
-                role: msg.role,
-                content: msg.content,
-                tokenCount: nil,
-                provider: nil,
-                model: nil,
-                createdAt: Int(msg.createdAt?.timeIntervalSince1970 ?? 0)
-            )
-        }
-
-        return CompanionChatPayload(thread: companionThread, messages: companionMessages)
+        return payload
     }
 
-    func fetchSuggestedQuestions(articleId: String) async throws -> [String] {
-        struct QuestionsRow: Decodable {
-            let questionsJson: String
+    func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-            enum CodingKeys: String, CodingKey {
-                case questionsJson = "questions_json"
-            }
+        struct Body: Encodable {
+            let message: String
         }
 
-        let rows: [QuestionsRow] = try await client.from("article_suggested_questions")
-            .select("questions_json")
-            .eq("article_id", value: articleId)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let row = rows.first,
-              let data = row.questionsJson.data(using: .utf8),
-              let questions = try? JSONDecoder().decode([String].self, from: data)
-        else { return [] }
-
-        return questions
-    }
-
-    func requestSuggestedQuestions(articleId: String) async throws {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
-
-        _ = try await client.functions.invoke(
-            "enrich-article",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: [
-                    "article_id": articleId,
-                    "user_id": userId.uuidString,
-                    "job_type": "suggest_questions"
-                ]
-            )
+        let payload: CompanionChatPayload = try await api.request(
+            method: "POST",
+            path: "api/chat/\(articleId)",
+            body: Body(message: content)
         )
-    }
-
-    func sendMultiChatMessage(content: String) async throws -> CompanionChatPayload {
-        guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
-
-        let payload: CompanionChatPayload = try await client.functions.invoke(
-            "multi-chat",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: ["message": content]
-            )
-        )
-
         return payload
     }
 
     func fetchMultiChat() async throws -> CompanionChatPayload {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        let threads: [SupabaseChatThreadRow] = try await client.from("chat_threads")
-            .select("id, article_id, created_at, updated_at")
-            .eq("article_id", value: "__multi_chat__")
-            .eq("user_id", value: userId.uuidString)
-            .limit(1)
-            .execute()
-            .value
-
-        guard let thread = threads.first else {
-            return CompanionChatPayload(thread: nil, messages: [])
-        }
-
-        let messages: [SupabaseChatMessageRow] = try await client.from("chat_messages")
-            .select("id, thread_id, role, content, created_at")
-            .eq("thread_id", value: thread.id)
-            .order("created_at")
-            .execute()
-            .value
-
-        let companionThread = CompanionChatThread(
-            id: thread.id,
-            articleId: thread.articleId,
-            title: nil,
-            createdAt: Int(thread.createdAt?.timeIntervalSince1970 ?? 0),
-            updatedAt: Int(thread.updatedAt?.timeIntervalSince1970 ?? 0)
-        )
-
-        let companionMessages = messages.map { msg in
-            CompanionChatMessage(
-                id: msg.id,
-                threadId: msg.threadId,
-                role: msg.role,
-                content: msg.content,
-                tokenCount: nil,
-                provider: nil,
-                model: nil,
-                createdAt: Int(msg.createdAt?.timeIntervalSince1970 ?? 0)
-            )
-        }
-
-        return CompanionChatPayload(thread: companionThread, messages: companionMessages)
-    }
-
-    func sendChatMessage(articleId: String, content: String) async throws -> CompanionChatPayload {
-        guard await currentUserId != nil else { throw SupabaseManagerError.notAuthenticated }
-
-        let payload: CompanionChatPayload = try await client.functions.invoke(
-            "article-chat",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: [
-                    "article_id": articleId,
-                    "message": content
-                ]
-            )
-        )
-
+        let payload: CompanionChatPayload = try await api.request(path: "api/chat/multi")
         return payload
     }
 
-    func rerunSummarize(articleId: String) async throws {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+    func sendMultiChatMessage(content: String) async throws -> CompanionChatPayload {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        for jobType in ["summarize", "key_points"] {
-            _ = try await client.functions.invoke(
-                "enrich-article",
-                options: FunctionInvokeOptions(
-                    headers: userAIHeaders(),
-                    body: [
-                        "article_id": articleId,
-                        "user_id": userId.uuidString,
-                        "job_type": jobType
-                    ]
-                )
-            )
+        struct Body: Encodable {
+            let message: String
         }
+
+        let payload: CompanionChatPayload = try await api.request(
+            method: "POST",
+            path: "api/chat/multi",
+            body: Body(message: content)
+        )
+        return payload
+    }
+
+    func fetchSuggestedQuestions(articleId: String) async throws -> [String] {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        let questions: [String] = try await api.request(
+            path: "api/enrich/\(articleId)/suggest-questions"
+        )
+        return questions
+    }
+
+    func requestSuggestedQuestions(articleId: String) async throws {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        try await api.requestVoid(
+            method: "POST",
+            path: "api/enrich/\(articleId)/suggest-questions"
+        )
+    }
+
+    func rerunSummarize(articleId: String) async throws {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        try await api.requestVoid(
+            method: "POST",
+            path: "api/enrich/\(articleId)/summarize"
+        )
     }
 
     func requestAIScore(articleId: String) async throws {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        _ = try await client.functions.invoke(
-            "enrich-article",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: [
-                    "article_id": articleId,
-                    "user_id": userId.uuidString,
-                    "job_type": "score"
-                ]
-            )
+        try await api.requestVoid(
+            method: "POST",
+            path: "api/enrich/\(articleId)/score"
         )
     }
 
     func generateKeyPoints(articleId: String) async throws {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        _ = try await client.functions.invoke(
-            "enrich-article",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: [
-                    "article_id": articleId,
-                    "user_id": userId.uuidString,
-                    "job_type": "key_points"
-                ]
-            )
+        try await api.requestVoid(
+            method: "POST",
+            path: "api/enrich/\(articleId)/key-points"
         )
     }
 
     func generateNewsBrief() async throws -> CompanionNewsBrief? {
-        guard let userId = await currentUserId else { throw SupabaseManagerError.notAuthenticated }
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
-        struct BriefResponse: Decodable {
-            let ok: Bool?
-            let brief: BriefData?
-
-            struct BriefData: Decodable {
-                let id: String
-                let editionType: String
-                let briefText: String
-                let articleIdsJson: String?
-                let provider: String?
-                let model: String?
-                let createdAt: String?
-            }
-        }
-
-        let response: BriefResponse = try await client.functions.invoke(
-            "generate-news-brief",
-            options: FunctionInvokeOptions(
-                headers: userAIHeaders(),
-                body: ["user_id": userId.uuidString]
-            )
+        let brief: CompanionNewsBrief? = try await api.request(
+            method: "POST",
+            path: "api/brief/generate"
         )
-
-        guard let brief = response.brief else { return nil }
-
-        let bullets: [CompanionNewsBrief.Bullet]
-        if let data = brief.briefText.data(using: .utf8),
-           let parsed = try? JSONDecoder().decode([BriefBulletDTO].self, from: data) {
-            bullets = parsed.map { dto in
-                CompanionNewsBrief.Bullet(
-                    text: dto.text,
-                    sources: (dto.sourceArticleIds ?? []).map { id in
-                        CompanionNewsBrief.Bullet.Source(articleId: id, title: "", canonicalUrl: nil)
-                    }
-                )
-            }
-        } else {
-            bullets = [CompanionNewsBrief.Bullet(text: brief.briefText, sources: [])]
-        }
-
-        return CompanionNewsBrief(
-            state: "ready",
-            title: "News Brief",
-            editionLabel: brief.editionType.replacingOccurrences(of: "_", with: " ").capitalized,
-            generatedAt: brief.createdAt.flatMap { timestampMillis($0) },
-            windowHours: 12,
-            scoreCutoff: 3,
-            bullets: bullets,
-            nextScheduledAt: nil,
-            stale: false
-        )
-    }
-
-    private func userAIHeaders() -> [String: String] {
-        let keychain = KeychainManager()
-        if let key = keychain.get(forKey: KeychainManager.Key.anthropicApiKey) {
-            return ["x-user-api-key": key, "x-user-api-provider": "anthropic"]
-        }
-        if let key = keychain.get(forKey: KeychainManager.Key.openaiApiKey) {
-            return ["x-user-api-key": key, "x-user-api-provider": "openai"]
-        }
-        return [:]
+        return brief
     }
 }
