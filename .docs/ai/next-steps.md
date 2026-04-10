@@ -1,38 +1,33 @@
-# Next Steps (2026-04-09)
+# Next Steps (2026-04-10)
 
-> Short checklist of exact next actions. Updated at end of every session.
-> Full roadmap with phases and backlog: `.docs/ai/roadmap.md`
+## Immediate — Deploy & Test
 
-## Status
+- [ ] Create production D1 database: `wrangler d1 create nebular-news-prod`
+- [ ] Update `wrangler.toml` production database_id with real ID
+- [ ] Set production secrets: `wrangler secret put BETTER_AUTH_SECRET --env production` (and APPLE_CLIENT_ID, APPLE_CLIENT_SECRET, optionally OPENAI_API_KEY/ANTHROPIC_API_KEY)
+- [ ] Deploy: `cd ~/git/nebularnews && npx wrangler deploy --env production`
+- [ ] Run migration: `wrangler d1 migrations apply DB --env production --remote`
+- [ ] Test locally: `npx wrangler dev` → curl /api/health, trigger cron
+- [ ] Test Apple Sign In from iOS → verify session token flow
+- [ ] Add a feed, wait for cron poll, verify articles appear
+- [ ] Test AI enrichment with BYOK key
 
-All M1–M5 phases complete. All tiered backlog items (trivial + minor) closed.
-Two refactors landed this session: `score-articles` (455→115 lines) and
-`enrich-article` (496→99 lines). Neither is deployed yet.
+## Soon — Cleanup
 
-## Immediate
+- [ ] Remove Supabase Swift Package dependency from Xcode project
+- [ ] Clean up `.dev.vars` (remove old Supabase secrets)
+- [ ] Remove old `src/lib/server/` directory (104 SvelteKit-era files no longer used)
+- [ ] Remove old `schema.sql` (replaced by `migrations/0001_initial.sql`)
+- [ ] Delete `SupabaseServiceModels.swift` if no longer needed
+- [ ] Update CLAUDE.md to reference Workers backend instead of Supabase
+- [ ] New TestFlight release with Workers backend
 
-- [ ] Deploy refactored Edge Functions once ready to verify behavior:
-  - `/deploy-function score-articles`
-  - `/deploy-function enrich-article`
-- [ ] Decide whether to push the API repo (now 12 commits ahead of origin).
-- [ ] Review untracked `supabase/migrations/00009_monitoring_views.sql` —
-  roadmap says monitoring is done but the file was never committed.
+## Strategic — M6 Candidates
 
-## Soon — possible next milestones
-
-Pick one when ready to start new product work:
-
-- **Reader enhancements**: saved-article folders/collections, highlights,
-  annotations, export to Readwise/Notion.
-- **Brief authoring polish**: scheduled push delivery, per-topic brief
-  generation, audio version.
-- **Feed discovery v2**: personalized recommendations based on reactions,
-  "because you liked X" surfaces.
-- **Scoring v2**: hybrid AI + algorithmic — run AI score only on top-N
-  algorithmically-ranked items to control cost.
-- **Admin dashboard**: user management, usage monitoring surfaces from
-  `00009_monitoring_views.sql`.
-
-## Backlog — empty
-
-No open tiered items. Populate with `/audit-backlog` when resuming.
+See memory file `project_m6_candidates.md`. Pick one after migration is stable:
+1. Reader depth (collections, highlights, annotations)
+2. Listening (TTS, CarPlay)
+3. Inbox unification (email newsletters as feeds)
+4. Brief 2.0 (scheduled push, per-topic)
+5. Scoring v2 (hybrid AI + algorithmic)
+6. Platform polish (iPad, Lock Screen widgets, Watch)
