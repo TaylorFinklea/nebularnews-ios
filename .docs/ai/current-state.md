@@ -1,4 +1,4 @@
-# Current State (2026-04-04)
+# Current State (2026-04-09)
 
 ## Architecture
 - **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj) in us-east-1
@@ -9,29 +9,58 @@
 
 ## Last Session Summary
 
-**Date**: 2026-04-04
+**Date**: 2026-04-09
 
-- Restructured roadmap: phased product work (M2-M5) + two-tier backlog for cheaper models
-- Completed 10 backlog items via subagent-driven development (6 trivial with Haiku, 2 minor with Sonnet, 2 trivial with Haiku in API)
-- Created Claude Code automations: backlog-worker agent, swift-reviewer agent, /release skill, /deploy-function skill, PostToolUse/PreToolUse hooks
-- Created global /handoff-prompt skill for rate-limit handoffs to other AI agents
-- Cleaned up settings.local.json (94 → 41 wildcard entries)
-- Standardized AI handoff docs globally with resume-after-handoff protocol
-- iOS build: passing
+- Closed the last two open `[minor]` backlog items (both API code-quality refactors):
+  1. **score-articles refactor**: moved the per-user scoring pipeline into
+     `_shared/scoring.ts` (`loadUserWeights`, `scoreArticleForUser`,
+     `scoreArticlesForUser`). `computeWeightedScore` now also returns
+     `weightedAvg`/`dataBackedCount`/`totalSignals` so the insert path no
+     longer re-derives them. `score-articles/index.ts`: 455 → 115 lines.
+  2. **enrich-article refactor**: split into one handler file per job type
+     under `enrich-article/handlers/` (`summarize`, `key-points`, `score`,
+     `auto-tag`, `suggest-questions`) plus `enrich-article/shared.ts` for
+     fetch/truncate/normalize helpers. `enrich-article/index.ts`:
+     496 → 99 lines.
+- Both refactors verified with `deno check` + `deno lint`. **Not yet deployed.**
+- iOS roadmap updated to mark both items `[x]`.
 
-## Backend (nebularnews-api)
-- 29 tables with RLS enabled on all
-- 8 migrations applied
-- 10 Edge Functions deployed
-- New shared modules: `_shared/usage.ts`, `_shared/constants.ts`, `_shared/ai-key-resolver.ts`
-- README updated with all 10 functions, .env.example updated with scraper keys
+## Open handoff notes
 
-## iOS App (nebularnews-ios)
-- Fixed isSaved logic bug (was checking isRead, now checks savedAt)
-- Fixed FeedListView force unwraps
-- Extracted Task.sleep named constants
-- Removed stale CloudKit and MobileAPIClient references from all instruction docs
-- TestFlight: Build 4 uploaded (no new release this session)
+- `nebularnews-api` is 12 commits ahead of `origin/main` — safe to push when ready.
+- `nebularnews-api/supabase/migrations/00009_monitoring_views.sql` is untracked;
+  the roadmap says monitoring is done but this file was never committed.
+  Review before committing.
+- No Edge Function deploys since the refactors landed — run
+  `/deploy-function score-articles` and `/deploy-function enrich-article`
+  when convenient to confirm behavior in production.
+
+## Phases — all complete
+- **M1**: Core reading experience (Supabase backend, auth, feeds, enrichment,
+  scoring, offline, push, TestFlight)
+- **M2**: Article reading experience (typography, inline images, progress,
+  reader mode)
+- **M3**: AI improvements (hybrid scoring UI, chat overhaul, suggested
+  questions, multi-article "Today's News" chat, BYOK rate limiting)
+- **M4**: Search & discovery (tsvector search, feed discovery catalog)
+- **M5**: macOS app (builds clean on both iOS and macOS; Xcode signing config
+  outside repo)
+
+## Backend (nebularnews-api) — current file map
+- 9 migrations, 29 tables with RLS
+- 10 Edge Functions deployed; two (score-articles, enrich-article) have
+  pending refactor commits ready to ship
+- Shared modules: `ai.ts`, `ai-key-resolver.ts`, `constants.ts`, `env-config.ts`,
+  `fetch-with-timeout.ts`, `feed-parser.ts`, `logger.ts`, `model-config.ts`,
+  `prompts.ts`, `scoring.ts`, `scraper.ts`, `supabase.ts`, `usage.ts`
+- Per-function modules: `enrich-article/shared.ts` + 5 handlers under
+  `enrich-article/handlers/`
+
+## iOS App (nebularnews-ios) — current state
+- TestFlight: Build 8 (2.0.1) shipped
+- macOS target passing build; signing requires Apple Developer portal config
+  for push entitlement + Sign in with Apple
+- No app-side changes this session (all work was API refactors)
 
 ## Claude Code Automations
 - `.claude/agents/backlog-worker.md` — picks up backlog items by tier
@@ -42,10 +71,8 @@
 - `~/.claude/skills/handoff-prompt/SKILL.md` — /handoff-prompt for rate-limit handoffs
 
 ## What's NOT done
-- macOS target (code ready, needs Xcode setup)
-- Widget Extension target (code ready, needs Xcode wiring — backlog item)
-- Clean marketing version number (backlog item)
-- Per-user AI rate limiting
-- Hybrid AI+algorithmic scoring
-- Full-text search UI
-- Remaining backlog: 14 items (see roadmap.md)
+- Hybrid AI + algorithmic scoring (cost-controlled)
+- Admin user management surface
+- `00009_monitoring_views.sql` file committed and dashboard wired up
+- Reader enhancements (collections, highlights, annotations)
+- Per-topic brief generation + scheduled push delivery
