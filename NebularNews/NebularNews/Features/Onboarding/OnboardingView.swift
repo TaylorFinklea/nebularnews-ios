@@ -101,7 +101,7 @@ struct OnboardingView: View {
             }
 
             do {
-                _ = try await appState.supabase.signInWithApple(idToken: idToken, nonce: nonce)
+                _ = try await appState.supabase.signInWithApple(idToken: idToken, nonce: sha256Hash(nonce))
                 appState.completeSignIn()
             } catch {
                 signInError = error.localizedDescription
