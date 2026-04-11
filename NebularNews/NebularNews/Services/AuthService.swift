@@ -52,6 +52,7 @@ struct AuthService: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(api.baseURL.absoluteString, forHTTPHeaderField: "Origin")
         request.httpBody = jsonData
 
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -85,6 +86,7 @@ struct AuthService: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(api.baseURL.absoluteString, forHTTPHeaderField: "Origin")
         if let token = api.sessionToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -98,6 +100,7 @@ struct AuthService: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(api.baseURL.absoluteString, forHTTPHeaderField: "Origin")
         if let token = api.sessionToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
