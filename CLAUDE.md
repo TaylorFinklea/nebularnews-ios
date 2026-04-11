@@ -1,10 +1,11 @@
 # NebularNews iOS Claude Instructions
 
 ## Architecture
-- **Backend**: Supabase project `nebularnews-v2` (vdjrclxeyjsqyqsjzjfj) — Edge Functions + PostgREST + RLS
-- **Backend repo**: `nebularnews-api` at `/Users/tfinklea/git/nebularnews-api`
-- **iOS app**: SwiftUI + Supabase Swift SDK v2.x — direct PostgREST for reads, Edge Functions for AI/scraping
-- **No web app**: The SvelteKit web app was decommissioned. The old `nebularnews` repo is archived.
+- **Backend**: Cloudflare Workers + D1 (SQLite) at `api.nebularnews.com`
+- **Backend repo**: `nebularnews` at `/Users/tfinklea/git/nebularnews`
+- **iOS app**: SwiftUI + URLSession REST client (no Supabase SDK)
+- **Auth**: better-auth with Apple Sign In, Bearer token sessions stored in Keychain
+- **Old backends**: Supabase (`nebularnews-api`) and SvelteKit (`nebularnews` pre-rewrite) — archived
 
 ## Working Style
 - Prefer native Apple frameworks and interaction patterns over custom UI/control systems.
@@ -22,38 +23,38 @@
 - Never chain independent commands with `&&`. Use `git -C <path>` instead of `cd <path> && git`.
 
 ## Verification
-- Build iOS with: `xcodebuild -project NebularNews/NebularNews.xcodeproj -scheme NebularNews -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build`
-- Deploy Edge Functions with: `cd /Users/tfinklea/git/nebularnews-api && npx supabase functions deploy <name> --no-verify-jwt`
+- Build iOS with: `xcodebuild -project NebularNews/NebularNews.xcodeproj -scheme NebularNews -destination 'platform=macOS' build CODE_SIGNING_ALLOWED=NO`
+- Deploy Workers with: `cd /Users/tfinklea/git/nebularnews && npx wrangler deploy --env production`
 - Mention clearly if something could not be verified.
 
 ## Data Layer
-- **SupabaseManager** (`Services/SupabaseManager.swift`): All Supabase API calls. PostgREST for reads, Edge Functions for AI/chat/scraping.
+- **APIClient** (`Services/APIClient.swift`): Generic REST client with Bearer token auth, BYOK headers, JSON envelope decoding (.convertFromSnakeCase).
+- **SupabaseManager** (`Services/SupabaseManager.swift`): Facade that delegates to service classes. Still named SupabaseManager for compatibility — calls Workers API, not Supabase.
+- **ArticleService/FeedService/EnrichmentService/AuthService**: Domain services using APIClient.
 - **ArticleCache** (`Services/ArticleCache.swift`): SwiftData cache for instant loads and offline reading.
-- **SyncManager** (`Services/SyncManager.swift`): Offline queue. All mutations go through SyncManager which updates cache optimistically, attempts network, queues on failure.
-- **KeychainManager** (in NebularNewsKit): Stores user's personal AI API keys.
+- **SyncManager** (`Services/SyncManager.swift`): Offline queue. All mutations go through SyncManager.
+- **KeychainManager** (in NebularNewsKit): Stores session token and personal AI API keys.
 
 ## Key Patterns
-- Client-side filtering: PostgREST can't filter on left-joined columns. Read/saved/feed-limit filters are applied client-side after fetching. Overfetch 4x to compensate.
-- BYOK: User's API keys stored in iOS Keychain, sent as `x-user-api-key` / `x-user-api-provider` headers to Edge Functions.
-- Per-feed controls: `user_feed_subscriptions` has `paused`, `max_articles_per_day`, `min_score` columns. RLS hides paused feed articles.
-- Algorithmic scoring: 4 signals (feed reputation, freshness, depth, tag match), per-user, auto via pg_cron.
+- **Auth**: better-auth returns session token on sign-in. iOS stores it in Keychain, sends as `Authorization: Bearer <token>`. Auth middleware validates via D1 session table lookup.
+- **BYOK**: User's API keys stored in iOS Keychain, sent as `x-user-api-key` / `x-user-api-provider` headers.
+- **Per-feed controls**: `user_feed_subscriptions` has `paused`, `max_articles_per_day`, `min_score` columns.
+- **Algorithmic scoring**: 4 signals (feed reputation, freshness, depth, tag match), per-user, hourly cron.
+- **Scraping**: Steel (primary) + Browserless (fallback) + Readability extraction for feeds with `scrape_mode != 'rss_only'`.
+- **Response format**: All Workers endpoints return `{ ok: true, data: ... }` with snake_case keys. iOS decoder uses `.convertFromSnakeCase`.
+
+## Workers Backend
+- **D1 schema**: `migrations/0001_initial.sql` — 30+ tables, FTS5 with incremental triggers
+- **Routes**: `src/routes/` — articles, feeds, tags, settings, today, enrich, chat, brief, devices, onboarding, auth, health
+- **Crons**: poll-feeds (*/5 min), score-articles (hourly), cleanup (daily 3:30am)
+- **Secrets**: BETTER_AUTH_SECRET, APPLE_CLIENT_ID, APPLE_CLIENT_SECRET, OPENAI_API_KEY, ANTHROPIC_API_KEY, STEEL_API_KEY, BROWSERLESS_API_KEY
 
 ## Release / TestFlight
 - Run `./scripts/release.sh` to archive and upload to TestFlight.
-- Flags: `--patch` (default, 2.0.1 → 2.0.2) or `--minor` (2.0.1 → 2.1.0).
-- The script bumps version via `agvtool`, archives, exports, uploads, and commits.
-- **Non-interactive auth**: Set `ASC_API_KEY_PATH`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` env vars for automated upload. Without them, falls back to Xcode GUI session auth.
-- **Auto-release**: A PostToolUse hook detects `feat(m\d)` commit messages and emits `AUTO_RELEASE`. When you see this, dispatch the release agent in the background.
-- **Manual release**: Dispatch the release agent directly, or run `bash scripts/release.sh`.
-
-## Edge Function Deployment
-- All functions deployed with `--no-verify-jwt` (auth handled in function code)
-- Secrets managed via `npx supabase secrets set KEY=value`
-- Supabase project ref: `vdjrclxeyjsqyqsjzjfj`
-- Anon key: `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZkanJjbHhleWpzcXlxc2p6amZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5NTk0OTIsImV4cCI6MjA5MDUzNTQ5Mn0.9j644tw6xud8GNW-J0X_sgtR_oyXGEoi59cN-O7wTHY`
+- Flags: `--patch` (default) or `--minor`.
 
 ## Project Notes
-- API keys (OPENAI, ANTHROPIC) stored in macOS Keychain for local dev, Supabase secrets for production.
+- API keys stored in macOS Keychain for local dev, Wrangler secrets for production.
 - Prefer local-first and background-friendly designs; do not block core reading flows on optional enrichment.
-- AI enrichment is on-demand only (no background AI processing) to control costs.
-- Apple client secret JWT expires ~Sep 2026 — regenerate with the .p8 key.
+- AI enrichment is on-demand only (not background) to control costs.
+- Apple client secret JWT expires ~Oct 2026 — regenerate with the .p8 key (Key ID: Z4D9B5P5F6).
