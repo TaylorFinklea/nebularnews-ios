@@ -22,11 +22,10 @@ final class SupabaseManager: Sendable {
     private init() {}
 
     /// Current authenticated user ID, or nil if not signed in.
-    var currentUserId: UUID? {
+    var currentUserId: String? {
         get async {
-            // Validate session with server; return nil if expired
             guard let session = try? await authService.session() else { return nil }
-            return UUID(uuidString: session.user.id)
+            return session.user.id
         }
     }
 
