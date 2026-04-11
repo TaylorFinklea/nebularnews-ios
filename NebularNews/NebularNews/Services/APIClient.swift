@@ -22,7 +22,7 @@ final class APIClient: @unchecked Sendable {
 
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
+        // Don't convert to snake_case — Workers API accepts camelCase request bodies
         return e
     }()
 
