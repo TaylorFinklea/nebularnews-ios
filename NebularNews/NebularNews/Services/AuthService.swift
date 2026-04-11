@@ -58,12 +58,14 @@ struct AuthService: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         let httpResponse = response as! HTTPURLResponse
 
+        // Debug: log raw response
+        let rawBody = String(data: data, encoding: .utf8) ?? "(non-utf8)"
+        print("[AuthService] status=\(httpResponse.statusCode) body=\(rawBody)")
+
         guard httpResponse.statusCode == 200 else {
-            let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
-            throw APIError.serverError(httpResponse.statusCode, errorText)
+            throw APIError.serverError(httpResponse.statusCode, rawBody)
         }
 
-        // better-auth returns { session: { token, ... }, user: { id, email, ... } }
         let decoder = JSONDecoder()
         let authResponse = try decoder.decode(BetterAuthResponse.self, from: data)
 
