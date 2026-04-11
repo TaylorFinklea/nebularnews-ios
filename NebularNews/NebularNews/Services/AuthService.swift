@@ -2,15 +2,10 @@ import Foundation
 import NebularNewsKit
 
 /// better-auth response for social sign-in.
+/// Shape: { "redirect": false, "token": "...", "user": { "id": "...", ... } }
 struct BetterAuthResponse: Decodable {
-    let session: BetterAuthSession
-    let user: BetterAuthUser
-}
-
-struct BetterAuthSession: Decodable {
-    let id: String
     let token: String
-    let expiresAt: String?
+    let user: BetterAuthUser
 }
 
 struct BetterAuthUser: Decodable {
@@ -18,6 +13,18 @@ struct BetterAuthUser: Decodable {
     let email: String?
     let name: String?
     let image: String?
+}
+
+/// better-auth response for get-session.
+/// Shape: { "session": { "id": "...", "token": "...", ... }, "user": { ... } }
+struct BetterAuthSessionResponse: Decodable {
+    let session: BetterAuthSessionInfo
+    let user: BetterAuthUser
+}
+
+struct BetterAuthSessionInfo: Decodable {
+    let id: String
+    let token: String
 }
 
 /// Lightweight Session type matching the old Supabase `Session` interface.
@@ -70,10 +77,10 @@ struct AuthService: Sendable {
         let authResponse = try decoder.decode(BetterAuthResponse.self, from: data)
 
         // Store the session token
-        api.sessionToken = authResponse.session.token
+        api.sessionToken = authResponse.token
 
         return Session(
-            token: authResponse.session.token,
+            token: authResponse.token,
             user: SessionUser(
                 id: authResponse.user.id,
                 email: authResponse.user.email,
@@ -110,12 +117,14 @@ struct AuthService: Sendable {
         let (data, response) = try await URLSession.shared.data(for: request)
         let httpResponse = response as! HTTPURLResponse
 
-        guard httpResponse.statusCode == 200 else {
+        // get-session returns null (literally) when no session
+        let bodyStr = String(data: data, encoding: .utf8) ?? ""
+        guard httpResponse.statusCode == 200, bodyStr != "null" else {
             throw APIError.unauthorized
         }
 
         let decoder = JSONDecoder()
-        let authResponse = try decoder.decode(BetterAuthResponse.self, from: data)
+        let authResponse = try decoder.decode(BetterAuthSessionResponse.self, from: data)
 
         return Session(
             token: authResponse.session.token,
