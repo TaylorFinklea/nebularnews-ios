@@ -172,6 +172,66 @@ public struct ScoreAssistOutput: Sendable {
     }
 }
 
+// MARK: - Chat Types
+
+public struct GenerationChatMessage: Sendable {
+    public let role: String // "system", "user", "assistant"
+    public let content: String
+
+    public init(role: String, content: String) {
+        self.role = role
+        self.content = content
+    }
+}
+
+public struct ChatGenerationOutput: Sendable {
+    public let content: String
+    public let provider: AIGenerationProvider
+    public let modelIdentifier: String?
+
+    public init(content: String, provider: AIGenerationProvider, modelIdentifier: String?) {
+        self.content = content
+        self.provider = provider
+        self.modelIdentifier = modelIdentifier
+    }
+}
+
+// MARK: - Brief Types
+
+public struct BriefSettings: Sendable {
+    public let maxBullets: Int
+    public let maxWordsPerBullet: Int
+
+    public init(maxBullets: Int = 5, maxWordsPerBullet: Int = 18) {
+        self.maxBullets = maxBullets
+        self.maxWordsPerBullet = maxWordsPerBullet
+    }
+}
+
+public struct BriefBullet: Sendable {
+    public let text: String
+    public let sourceArticleId: String?
+
+    public init(text: String, sourceArticleId: String?) {
+        self.text = text
+        self.sourceArticleId = sourceArticleId
+    }
+}
+
+public struct BriefGenerationOutput: Sendable {
+    public let bullets: [BriefBullet]
+    public let provider: AIGenerationProvider
+    public let modelIdentifier: String?
+
+    public init(bullets: [BriefBullet], provider: AIGenerationProvider, modelIdentifier: String?) {
+        self.bullets = bullets
+        self.provider = provider
+        self.modelIdentifier = modelIdentifier
+    }
+}
+
+// MARK: - Engine Protocol
+
 public protocol ArticleGenerationEngine: Sendable {
     var provider: AIGenerationProvider { get }
     func isAvailable() async -> Bool
@@ -185,4 +245,12 @@ public protocol ArticleGenerationEngine: Sendable {
     func generateScoreAssist(
         input: ScoreAssistInput
     ) async throws -> ScoreAssistOutput
+    func generateChat(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) async throws -> ChatGenerationOutput
+    func generateBrief(
+        articles: [ArticleSnapshot],
+        settings: BriefSettings
+    ) async throws -> BriefGenerationOutput
 }

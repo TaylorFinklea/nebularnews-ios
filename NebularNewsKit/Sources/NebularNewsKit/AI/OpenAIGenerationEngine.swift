@@ -157,6 +157,91 @@ public struct OpenAIGenerationEngine: ArticleGenerationEngine {
         )
     }
 
+    public func generateChat(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) async throws -> ChatGenerationOutput {
+        let systemMsg = messages.first(where: { $0.role == "system" })?.content
+            ?? "You are an expert news analyst. Be concise and thorough."
+
+        var openAIMessages: [[String: String]] = [["role": "system", "content": systemMsg]]
+
+        if let article = articleContext {
+            let content = String(article.contentText.prefix(6000))
+            openAIMessages.append([
+                "role": "user",
+                "content": "Article: \(article.title ?? "Untitled")\nURL: \(article.canonicalUrl ?? "")\n\nContent:\n\(content)"
+            ])
+        }
+
+        for msg in messages where msg.role != "system" {
+            openAIMessages.append(["role": msg.role, "content": msg.content])
+        }
+
+        let text = try await completeWithMessages(openAIMessages)
+        return ChatGenerationOutput(content: text, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    public func generateBrief(
+        articles: [ArticleSnapshot],
+        settings: BriefSettings
+    ) async throws -> BriefGenerationOutput {
+        let articleList = articles.enumerated().map { idx, a in
+            "[\(idx + 1)] \(a.title ?? "Untitled") (\(a.feedTitle ?? "Unknown"))\n\(String(a.contentText.prefix(500)))"
+        }.joined(separator: "\n\n")
+
+        let text = try await complete(
+            system: "You write concise newsroom briefings. Return only compact JSON.",
+            user: "Create a news brief. Return JSON with key \"bullets\": array of objects with \"text\" (max \(settings.maxWordsPerBullet) words) and \"source_index\" (article number). Max \(settings.maxBullets) bullets.\n\nArticles:\n\(articleList)"
+        )
+
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let bullets = json["bullets"] as? [[String: Any]] else {
+            return BriefGenerationOutput(bullets: [], provider: provider, modelIdentifier: modelIdentifier)
+        }
+
+        let parsed = bullets.compactMap { b -> BriefBullet? in
+            guard let t = b["text"] as? String else { return nil }
+            let idx = (b["source_index"] as? Int).flatMap { i in
+                (i >= 1 && i <= articles.count) ? articles[i - 1].id : nil
+            }
+            return BriefBullet(text: t, sourceArticleId: idx)
+        }
+
+        return BriefGenerationOutput(bullets: parsed, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    private func completeWithMessages(_ messages: [[String: String]]) async throws -> String {
+        let payload: [String: Any] = [
+            "model": modelIdentifier,
+            "messages": messages,
+            "temperature": 0.3
+        ]
+
+        var request = URLRequest(url: Self.completionsEndpoint)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw OpenAIEngineError.serverError(statusCode: code, body: String(data: data, encoding: .utf8) ?? "")
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String
+        else {
+            throw OpenAIEngineError.invalidResponse
+        }
+        return content
+    }
+
     private func complete(system: String, user: String) async throws -> String {
         let payload: [String: Any] = [
             "model": modelIdentifier,

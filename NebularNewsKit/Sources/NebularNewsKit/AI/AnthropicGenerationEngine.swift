@@ -147,4 +147,81 @@ public struct AnthropicGenerationEngine: ArticleGenerationEngine {
             modelIdentifier: modelIdentifier
         )
     }
+
+    public func generateChat(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) async throws -> ChatGenerationOutput {
+        let systemMsg = messages.first(where: { $0.role == "system" })?.content
+            ?? "You are an expert news analyst. Be concise and thorough."
+
+        var aiMessages: [AIMessage] = []
+
+        // Add article context as the first user message if provided.
+        if let article = articleContext {
+            let contentPreview = String(article.contentText.prefix(6000))
+            aiMessages.append(AIMessage(
+                role: "user",
+                content: "Article: \(article.title ?? "Untitled")\nURL: \(article.canonicalUrl ?? "")\n\nContent:\n\(contentPreview)"
+            ))
+        }
+
+        // Add conversation history (skip system messages).
+        for msg in messages where msg.role != "system" {
+            aiMessages.append(AIMessage(role: msg.role, content: msg.content))
+        }
+
+        let response = try await client.chat(
+            messages: aiMessages,
+            system: systemMsg,
+            model: modelIdentifier,
+            maxTokens: 1024,
+            temperature: 0.3
+        )
+
+        return ChatGenerationOutput(content: response.text, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    public func generateBrief(
+        articles: [ArticleSnapshot],
+        settings: BriefSettings
+    ) async throws -> BriefGenerationOutput {
+        let articleList = articles.enumerated().map { idx, a in
+            "[\(idx + 1)] \(a.title ?? "Untitled") (\(a.feedTitle ?? "Unknown"))\n\(String(a.contentText.prefix(500)))"
+        }.joined(separator: "\n\n")
+
+        let prompt = """
+        Create a news brief from these articles. Return JSON only.
+        JSON key "bullets": array of objects with "text" (max \(settings.maxWordsPerBullet) words) and "source_index" (article number).
+        Maximum \(settings.maxBullets) bullets. Focus on the most important stories.
+
+        Articles:
+        \(articleList)
+        """
+
+        let response = try await client.chat(
+            messages: [AIMessage(role: "user", content: prompt)],
+            system: "You write concise newsroom briefings. Return only compact JSON.",
+            model: modelIdentifier,
+            maxTokens: 500,
+            temperature: 0.2
+        )
+
+        // Parse the JSON bullets.
+        guard let data = response.text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let bullets = json["bullets"] as? [[String: Any]] else {
+            return BriefGenerationOutput(bullets: [], provider: provider, modelIdentifier: modelIdentifier)
+        }
+
+        let parsed = bullets.compactMap { b -> BriefBullet? in
+            guard let text = b["text"] as? String else { return nil }
+            let idx = (b["source_index"] as? Int).flatMap { i in
+                (i >= 1 && i <= articles.count) ? articles[i - 1].id : nil
+            }
+            return BriefBullet(text: text, sourceArticleId: idx)
+        }
+
+        return BriefGenerationOutput(bullets: parsed, provider: provider, modelIdentifier: modelIdentifier)
+    }
 }

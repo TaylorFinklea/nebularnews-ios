@@ -153,6 +153,104 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
         )
     }
 
+    public func generateChat(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) async throws -> ChatGenerationOutput {
+        var contextParts: [String] = []
+
+        if let article = articleContext {
+            contextParts.append("Article: \(article.title ?? "Untitled")")
+            contextParts.append("URL: \(article.canonicalUrl ?? "Unknown")")
+            if !article.contentText.isEmpty {
+                let truncated = article.contentText.prefix(6000)
+                contextParts.append("Content:\n\(truncated)")
+            }
+        }
+
+        let conversationHistory = messages
+            .filter { $0.role != "system" }
+            .map { "\($0.role == "user" ? "User" : "Assistant"): \($0.content)" }
+            .joined(separator: "\n\n")
+
+        let systemMsg = messages.first(where: { $0.role == "system" })?.content ?? "You are an expert news analyst. Be concise and thorough."
+
+        let prompt = """
+        \(contextParts.isEmpty ? "" : contextParts.joined(separator: "\n") + "\n\n---\n\n")
+        \(conversationHistory)
+        """
+
+        let text = try await respond(to: prompt, instructions: systemMsg)
+        return ChatGenerationOutput(content: text, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    public func generateBrief(
+        articles: [ArticleSnapshot],
+        settings: BriefSettings
+    ) async throws -> BriefGenerationOutput {
+        let articleList = articles.enumerated().map { idx, a in
+            "[\(idx + 1)] \(a.title ?? "Untitled") (\(a.feedTitle ?? "Unknown"))\n\(a.contentText.prefix(500))"
+        }.joined(separator: "\n\n")
+
+        let prompt = """
+        Create a news brief from these articles.
+
+        Articles:
+        \(articleList)
+
+        Requirements:
+        - Return JSON only.
+        - JSON key "bullets": array of objects with:
+          - "text": one sentence, max \(settings.maxWordsPerBullet) words
+          - "source_index": the article number [1], [2], etc.
+        - Maximum \(settings.maxBullets) bullets.
+        - Focus on the most important/interesting stories.
+        """
+
+        let text = try await respond(
+            to: prompt,
+            instructions: "You write concise newsroom briefings. Return only compact JSON."
+        )
+
+        return try parseBriefOutput(from: text, articles: articles)
+    }
+
+    private func parseBriefOutput(from text: String, articles: [ArticleSnapshot]) throws -> BriefGenerationOutput {
+        guard let data = text.data(using: .utf8),
+              let json = try? extractJSON(from: data) as? [String: Any],
+              let bullets = json["bullets"] as? [[String: Any]] else {
+            throw FoundationModelsEngineError.invalidResponse
+        }
+
+        let parsed = bullets.compactMap { b -> BriefBullet? in
+            guard let text = b["text"] as? String else { return nil }
+            let idx = (b["source_index"] as? Int).flatMap { i in
+                (i >= 1 && i <= articles.count) ? articles[i - 1].id : nil
+            }
+            return BriefBullet(text: text, sourceArticleId: idx)
+        }
+
+        return BriefGenerationOutput(bullets: parsed, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    private func extractJSON(from data: Data) throws -> Any {
+        // Try direct parse.
+        if let json = try? JSONSerialization.jsonObject(with: data) { return json }
+        // Strip markdown fences.
+        let text = String(data: data, encoding: .utf8) ?? ""
+        if let match = text.range(of: "```(?:json)?\\s*\\n?([\\s\\S]*?)```", options: .regularExpression),
+           let inner = text[match].range(of: "\\{[\\s\\S]*\\}", options: .regularExpression) {
+            let cleaned = Data(text[inner].utf8)
+            return try JSONSerialization.jsonObject(with: cleaned)
+        }
+        // Slice from first { to last }.
+        if let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}") {
+            let cleaned = Data(text[start...end].utf8)
+            return try JSONSerialization.jsonObject(with: cleaned)
+        }
+        throw FoundationModelsEngineError.invalidResponse
+    }
+
     public static var runtimeAvailable: Bool {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
