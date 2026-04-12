@@ -1,0 +1,129 @@
+<h2>M6: AI Overhaul — Architecture Overview</h2>
+<p class="subtitle">Three pillars, two AI tiers, one cohesive experience</p>
+
+<div class="section">
+  <h3>Two-Tier AI Model</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Tier 1: BYOK / On-Device</div>
+      <div class="mockup-body" style="font-size:14px; line-height:1.6">
+        <p><strong>Who:</strong> Users who bring their own API key</p>
+        <p><strong>Where AI runs:</strong></p>
+        <ul>
+          <li>📱 <strong>On-device</strong> — FoundationModels (iOS 26+) for summaries, key points, scoring</li>
+          <li>📱 <strong>Direct API calls</strong> — App calls Anthropic/OpenAI directly with user's key for chat, brief</li>
+        </ul>
+        <p><strong>Background enrichment:</strong> ✅ Yes — on new articles, app enriches locally</p>
+        <p><strong>Cost to you:</strong> $0</p>
+        <p><strong>Rate limits:</strong> None (their key, their bill)</p>
+        <p><strong>Server role:</strong> Storage & sync only</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">Tier 2: Subscription (Server AI)</div>
+      <div class="mockup-body" style="font-size:14px; line-height:1.6">
+        <p><strong>Who:</strong> Users who pay for NebularNews AI</p>
+        <p><strong>Where AI runs:</strong></p>
+        <ul>
+          <li>☁️ <strong>Server-side</strong> — Workers calls AI providers with platform keys</li>
+          <li>📱 <strong>On-device fallback</strong> — FoundationModels when available</li>
+        </ul>
+        <p><strong>Background enrichment:</strong> ✅ Yes — server enriches on feed poll</p>
+        <p><strong>Cost model:</strong></p>
+        <ul>
+          <li>Subscription tiers (daily/weekly token budgets)</li>
+          <li>Opt-in overages at API cost + 10%</li>
+          <li>Hard cap if user opts out of overages</li>
+        </ul>
+        <p><strong>Rate limits:</strong> Enforced per-user via ai_usage table</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Three Pillars of Improvement</h3>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 12px;">
+    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">💬</div>
+      <h3 style="margin:0 0 8px 0; color: #6366f1;">Chat Experience</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0;">
+        <li><strong>Streaming responses</strong> (SSE from Workers)</li>
+        <li><strong>Conversation memory</strong> across articles</li>
+        <li><strong>Richer context</strong> — related articles, user reading history</li>
+        <li><strong>Follow-up suggestions</strong> after each response</li>
+        <li><strong>On-device chat</strong> for BYOK (direct API calls)</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
+      <h3 style="margin:0 0 8px 0; color: #10b981;">Intelligence Layer</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0;">
+        <li><strong>Topic clustering</strong> — group related articles</li>
+        <li><strong>Trend detection</strong> — "AI regulation trending in your feeds"</li>
+        <li><strong>Personalized scoring v2</strong> — learns from reads, saves, reactions</li>
+        <li><strong>Smart recommendations</strong> — "You might also like..."</li>
+        <li><strong>Reading insights</strong> — weekly reading patterns</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">📰</div>
+      <h3 style="margin:0 0 8px 0; color: #f59e0b;">Content Generation</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0;">
+        <li><strong>Brief 2.0</strong> — scheduled push, per-topic, configurable depth</li>
+        <li><strong>Auto-enrichment</strong> — summarize on poll (background)</li>
+        <li><strong>Feed digests</strong> — AI summary per feed/topic</li>
+        <li><strong>Configurable summary style</strong> — wire up length/style settings</li>
+        <li><strong>Key points on all articles</strong> (not just on-demand)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Infrastructure (supports everything above)</h3>
+  <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; font-size:14px;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+      <div>
+        <strong>Metering & Billing</strong>
+        <ul style="padding-left:18px; margin:4px 0;">
+          <li>Token tracking per request (ai_usage table)</li>
+          <li>Daily/weekly budget enforcement</li>
+          <li>Overage calculation (cost + 10%)</li>
+          <li>Usage dashboard in Settings</li>
+          <li>Subscription tier management</li>
+        </ul>
+      </div>
+      <div>
+        <strong>Streaming Infrastructure</strong>
+        <ul style="padding-left:18px; margin:4px 0;">
+          <li>SSE endpoint on Workers</li>
+          <li>URLSession streaming on iOS</li>
+          <li>Incremental UI rendering</li>
+          <li>Error recovery mid-stream</li>
+        </ul>
+      </div>
+      <div>
+        <strong>On-Device AI Pipeline</strong>
+        <ul style="padding-left:18px; margin:4px 0;">
+          <li>Background processing on article fetch</li>
+          <li>FoundationModels integration (iOS 26+)</li>
+          <li>Direct Anthropic/OpenAI calls from app</li>
+          <li>Result sync to server</li>
+        </ul>
+      </div>
+      <div>
+        <strong>Retry & Reliability</strong>
+        <ul style="padding-left:18px; margin:4px 0;">
+          <li>Exponential backoff on failed enrichment</li>
+          <li>Job queue with attempt tracking</li>
+          <li>Fallback provider chain</li>
+          <li>Graceful degradation (no AI → still readable)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
