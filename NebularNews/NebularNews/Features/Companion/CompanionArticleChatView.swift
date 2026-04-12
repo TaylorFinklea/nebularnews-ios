@@ -40,6 +40,12 @@ struct CompanionArticleChatView: View {
                                 TypingIndicator()
                                     .id("thinking")
                             }
+
+                            // Follow-up suggestions after messages
+                            if !suggestedQuestions.isEmpty && !messages.isEmpty && !isStreaming && !isSending {
+                                followUpSuggestions
+                                    .id("follow-ups")
+                            }
                         }
                         .padding()
                     }
@@ -153,6 +159,28 @@ struct CompanionArticleChatView: View {
         }
     }
 
+    private var followUpSuggestions: some View {
+        VStack(spacing: 6) {
+            ForEach(suggestedQuestions, id: \.self) { question in
+                Button {
+                    inputText = question
+                    suggestedQuestions = []
+                    Task { await sendMessage() }
+                } label: {
+                    Text(question)
+                        .font(.caption)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 4)
+    }
+
     private func loadChat() async {
         isLoading = true
         defer { isLoading = false }
@@ -216,12 +244,24 @@ struct CompanionArticleChatView: View {
         isStreaming = false
 
         if !finalContent.isEmpty {
-            // Replace streaming state with the final assistant message
+            // Parse follow-up suggestions (lines starting with >>).
+            let lines = finalContent.components(separatedBy: "\n")
+            let textLines = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix(">>") }
+            let parsedSuggestions = lines.compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix(">>") else { return nil }
+                let q = String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                return q.isEmpty ? nil : q
+            }
+
+            let cleanContent = textLines.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
             let assistantMsg = CompanionChatMessage(
                 id: UUID().uuidString,
                 threadId: "",
                 role: "assistant",
-                content: finalContent,
+                content: cleanContent,
                 tokenCount: nil,
                 provider: nil,
                 model: nil,
@@ -229,6 +269,10 @@ struct CompanionArticleChatView: View {
             )
             messages.append(assistantMsg)
             streamingContent = ""
+
+            if !parsedSuggestions.isEmpty {
+                suggestedQuestions = parsedSuggestions
+            }
         } else if !errorMessage.isEmpty {
             // On error, remove the optimistic user message and restore input
             messages.removeAll { $0.id == tempId }
