@@ -12,6 +12,8 @@ struct CompanionArticleChatView: View {
     @State private var inputText = ""
     @State private var isLoading = false
     @State private var isSending = false
+    @State private var isStreaming = false
+    @State private var streamingContent = ""
     @State private var errorMessage = ""
 
     var body: some View {
@@ -31,7 +33,10 @@ struct CompanionArticleChatView: View {
                                     .id(message.id)
                             }
 
-                            if isSending {
+                            if isStreaming {
+                                StreamingMessageView(content: streamingContent)
+                                    .id("streaming")
+                            } else if isSending {
                                 TypingIndicator()
                                     .id("thinking")
                             }
@@ -49,6 +54,13 @@ struct CompanionArticleChatView: View {
                         if isSending {
                             withAnimation {
                                 proxy.scrollTo("thinking", anchor: .bottom)
+                            }
+                        }
+                    }
+                    .onChange(of: streamingContent) {
+                        if isStreaming {
+                            withAnimation(.easeOut(duration: 0.1)) {
+                                proxy.scrollTo("streaming", anchor: .bottom)
                             }
                         }
                     }
@@ -179,17 +191,50 @@ struct CompanionArticleChatView: View {
         )
         messages.append(optimistic)
 
-        do {
-            let payload = try await appState.supabase.sendChatMessage(articleId: articleId, content: content)
-            messages = payload.messages
-        } catch {
-            // Remove optimistic message on failure
-            messages.removeAll { $0.id == tempId }
-            inputText = savedInput
-            errorMessage = error.localizedDescription
+        // Stream the response
+        streamingContent = ""
+        isSending = false
+        isStreaming = true
+
+        let stream = StreamingChatService.shared.streamChatMessage(
+            articleId: articleId,
+            content: content
+        )
+
+        var finalContent = ""
+        for await delta in stream {
+            switch delta {
+            case .text(let text):
+                streamingContent += text
+            case .done(let content, _):
+                finalContent = content
+            case .error(let msg):
+                errorMessage = msg
+            }
         }
 
-        isSending = false
+        isStreaming = false
+
+        if !finalContent.isEmpty {
+            // Replace streaming state with the final assistant message
+            let assistantMsg = CompanionChatMessage(
+                id: UUID().uuidString,
+                threadId: "",
+                role: "assistant",
+                content: finalContent,
+                tokenCount: nil,
+                provider: nil,
+                model: nil,
+                createdAt: Int(Date().timeIntervalSince1970)
+            )
+            messages.append(assistantMsg)
+            streamingContent = ""
+        } else if !errorMessage.isEmpty {
+            // On error, remove the optimistic user message and restore input
+            messages.removeAll { $0.id == tempId }
+            inputText = savedInput
+            streamingContent = ""
+        }
     }
 }
 
@@ -241,6 +286,46 @@ private struct ChatMessageView: View {
             }
 
             if !isUser { Spacer(minLength: 40) }
+        }
+    }
+}
+
+// MARK: - Streaming Message View
+
+private struct StreamingMessageView: View {
+    let content: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.caption)
+                .foregroundStyle(.purple)
+                .frame(width: 24, height: 24)
+                .background(Color.purple.opacity(0.1), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                if content.isEmpty {
+                    // Show cursor while waiting for first token
+                    Text("▊")
+                        .font(.system(.body, design: .serif))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.platformSecondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                } else {
+                    Text(LocalizedStringKey(content))
+                        .font(.system(.body, design: .serif))
+                        .lineSpacing(4)
+                        .textSelection(.enabled)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(Color.platformSecondaryBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+            }
+
+            Spacer(minLength: 40)
         }
     }
 }
