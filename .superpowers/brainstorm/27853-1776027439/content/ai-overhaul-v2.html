@@ -1,0 +1,142 @@
+<h2>M6: AI Overhaul — Revised Architecture</h2>
+<p class="subtitle">Four pillars, two AI tiers, MCP-connected</p>
+
+<div class="section">
+  <h3>Two-Tier AI Model (revised)</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">Tier 1: BYOK</div>
+      <div class="mockup-body" style="font-size:14px; line-height:1.6">
+        <p><strong>Who:</strong> Users who bring their own API key</p>
+        <p><strong>Where AI runs:</strong></p>
+        <ul>
+          <li>☁️ <strong>Server-proxied</strong> — App sends key in headers → Workers proxies to AI provider</li>
+          <li>📱 <strong>FoundationModels only</strong> — On-device Apple AI when available (iOS 26+), for lightweight enrichment</li>
+        </ul>
+        <p><strong>Background enrichment:</strong> ❌ No background device processing</p>
+        <p><strong>Batch enrichment:</strong> ✅ User-initiated "Enrich All" while app is open, routed through server</p>
+        <p><strong>Cost to you:</strong> Workers compute only (~$0)</p>
+        <p><strong>Rate limits:</strong> None (their key, their bill)</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header">Tier 2: Subscription (Server AI)</div>
+      <div class="mockup-body" style="font-size:14px; line-height:1.6">
+        <p><strong>Who:</strong> Users who pay via RevenueCat subscription</p>
+        <p><strong>Where AI runs:</strong></p>
+        <ul>
+          <li>☁️ <strong>Server-side</strong> — Workers calls AI providers with platform keys</li>
+          <li>📱 <strong>FoundationModels fallback</strong> — On-device when available</li>
+        </ul>
+        <p><strong>Background enrichment:</strong> ✅ Server enriches on feed poll</p>
+        <p><strong>Cost model:</strong></p>
+        <ul>
+          <li>RevenueCat subscription tiers (daily/weekly token budgets)</li>
+          <li>Opt-in overages at API cost + 10%</li>
+          <li>Hard cap if user opts out</li>
+        </ul>
+        <p><strong>Rate limits:</strong> Enforced per-user via ai_usage table</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Four Pillars</h3>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">💬</div>
+      <h3 style="margin:0 0 8px 0; color: #6366f1;">1. Chat Experience</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Streaming responses</strong> — SSE from Workers, incremental rendering in iOS</li>
+        <li><strong>Conversation memory</strong> — cross-article thread continuity</li>
+        <li><strong>Richer context</strong> — related articles, user reading history in context window</li>
+        <li><strong>Follow-up suggestions</strong> — generated after each response</li>
+        <li><strong>Better prompts</strong> — expert analyst with markdown citations</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
+      <h3 style="margin:0 0 8px 0; color: #10b981;">2. Intelligence Layer</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Topic clustering</strong> — group related articles automatically</li>
+        <li><strong>Trend detection</strong> — "AI regulation trending in your feeds"</li>
+        <li><strong>Scoring v2</strong> — learns from reads, saves, dismisses, time spent</li>
+        <li><strong>Smart recommendations</strong> — "You might also like…"</li>
+        <li><strong>Reading insights</strong> — weekly patterns, topic breakdown</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">📰</div>
+      <h3 style="margin:0 0 8px 0; color: #f59e0b;">3. Content Generation</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Brief 2.0</strong> — scheduled push, per-topic, configurable depth</li>
+        <li><strong>Auto-enrichment</strong> — summarize on poll for subscribers</li>
+        <li><strong>Batch enrichment</strong> — user-initiated "Enrich All" for BYOK</li>
+        <li><strong>Configurable style</strong> — wire up summary length/style settings</li>
+        <li><strong>Feed digests</strong> — AI summary per feed or topic</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.2); border-radius: 12px; padding: 20px;">
+      <div style="font-size: 28px; margin-bottom: 8px;">🔌</div>
+      <h3 style="margin:0 0 8px 0; color: #a855f7;">4. MCP Server</h3>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>NebularNews as MCP server</strong> — connect to Claude Desktop, Cursor, etc.</li>
+        <li><strong>Tools exposed:</strong> search articles, get summaries, read article, list feeds, get brief, ask about today's news</li>
+        <li><strong>Resources:</strong> article content, feed lists, briefs, reading history</li>
+        <li><strong>Auth:</strong> Bearer token from existing session</li>
+        <li><strong>Transport:</strong> Streamable HTTP (remote MCP over HTTPS)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Infrastructure</h3>
+  <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; font-size:14px;">
+    <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+      <div>
+        <strong>Metering & Billing</strong>
+        <ul style="padding-left:18px; margin:4px 0; line-height:1.6">
+          <li>Token tracking per request</li>
+          <li>Daily/weekly budget enforcement</li>
+          <li>Overage calc (cost + 10%)</li>
+          <li>Usage dashboard in Settings</li>
+          <li>RevenueCat subscription management</li>
+        </ul>
+      </div>
+      <div>
+        <strong>Streaming</strong>
+        <ul style="padding-left:18px; margin:4px 0; line-height:1.6">
+          <li>SSE from Workers (chat)</li>
+          <li>URLSession streaming on iOS</li>
+          <li>Incremental markdown rendering</li>
+          <li>Error recovery mid-stream</li>
+        </ul>
+      </div>
+      <div>
+        <strong>Reliability</strong>
+        <ul style="padding-left:18px; margin:4px 0; line-height:1.6">
+          <li>Retry with exponential backoff</li>
+          <li>Job queue with attempt tracking</li>
+          <li>Provider fallback chain</li>
+          <li>Graceful degradation</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Suggested Build Order</h3>
+  <div style="font-size:14px; line-height:1.8;">
+    <p><strong>Phase A — Foundation:</strong> Metering/rate-limiting, streaming infrastructure, RevenueCat integration, retry logic</p>
+    <p><strong>Phase B — Chat & Content:</strong> Streaming chat, Brief 2.0, auto/batch enrichment, configurable style</p>
+    <p><strong>Phase C — Intelligence:</strong> Topic clustering, trend detection, scoring v2, reading insights</p>
+    <p><strong>Phase D — MCP:</strong> MCP server on Workers, tool definitions, auth, Claude Desktop integration</p>
+  </div>
+</div>
