@@ -1,0 +1,186 @@
+<h2>M6: AI Overhaul — Architecture v3</h2>
+<p class="subtitle">Three AI tiers, four pillars, MCP-first</p>
+
+<div class="section">
+  <h3>Three-Tier AI Model</h3>
+  <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+    <div class="mockup">
+      <div class="mockup-header" style="background: rgba(16,185,129,0.15); color: #10b981;">Free: On-Device</div>
+      <div class="mockup-body" style="font-size:13px; line-height:1.6">
+        <p><strong>Who:</strong> Any user (opt-in)</p>
+        <p><strong>How:</strong> FoundationModels (iOS 26+)</p>
+        <p><strong>Capabilities:</strong></p>
+        <ul style="padding-left:16px;">
+          <li>Summarization</li>
+          <li>Key points</li>
+          <li>Basic scoring</li>
+          <li>Tag suggestions</li>
+        </ul>
+        <p><strong>Limits:</strong> Device capability only</p>
+        <p><strong>Network:</strong> None — fully offline</p>
+        <p><strong>Cost to you:</strong> $0</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header" style="background: rgba(99,102,241,0.15); color: #6366f1;">BYOK: Bring Your Own Key</div>
+      <div class="mockup-body" style="font-size:13px; line-height:1.6">
+        <p><strong>Who:</strong> Power users with AI API keys</p>
+        <p><strong>How:</strong> App sends key in headers → Workers proxies to AI provider</p>
+        <p><strong>Capabilities:</strong></p>
+        <ul style="padding-left:16px;">
+          <li>Everything on-device can do, plus:</li>
+          <li>Chat (streaming)</li>
+          <li>News briefs</li>
+          <li>Batch enrichment (user-initiated)</li>
+          <li>Advanced scoring</li>
+        </ul>
+        <p><strong>Limits:</strong> None (their key, their bill)</p>
+        <p><strong>Cost to you:</strong> Workers compute (~$0)</p>
+      </div>
+    </div>
+    <div class="mockup">
+      <div class="mockup-header" style="background: rgba(245,158,11,0.15); color: #f59e0b;">Subscription: Server AI</div>
+      <div class="mockup-body" style="font-size:13px; line-height:1.6">
+        <p><strong>Who:</strong> Users who pay via StoreKit IAP</p>
+        <p><strong>How:</strong> Workers uses platform AI keys</p>
+        <p><strong>Capabilities:</strong></p>
+        <ul style="padding-left:16px;">
+          <li>Everything BYOK can do, plus:</li>
+          <li>Auto-enrichment on feed poll</li>
+          <li>Scheduled briefs (push)</li>
+          <li>Priority processing</li>
+        </ul>
+        <p><strong>Limits:</strong> Daily/weekly token budgets per tier</p>
+        <p><strong>Overages:</strong> Opt-in at API cost + 10%</p>
+        <p><strong>Billing:</strong> StoreKit 2 (native IAP)</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Four Pillars (build order)</h3>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px;">
+
+    <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; padding: 20px; position:relative;">
+      <div style="position:absolute; top:12px; right:16px; font-size:11px; opacity:0.4; font-weight:600;">PHASE A</div>
+      <div style="font-size: 28px; margin-bottom: 8px;">⚙️</div>
+      <h3 style="margin:0 0 8px 0; color: #94a3b8;">1. Infrastructure</h3>
+      <p style="font-size:12px; color: rgba(255,255,255,0.5); margin:0 0 8px 0;">Foundation for everything else</p>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Streaming pipeline</strong> — SSE from Workers + URLSession streaming on iOS</li>
+        <li><strong>Metering</strong> — token tracking per request, populate ai_usage table</li>
+        <li><strong>Rate limiting</strong> — daily/weekly budget enforcement, overage tracking</li>
+        <li><strong>Retry logic</strong> — exponential backoff, attempt tracking, provider fallback</li>
+        <li><strong>StoreKit 2 IAP</strong> — subscription tiers, entitlement verification</li>
+        <li><strong>On-device pipeline</strong> — FoundationModels integration, result sync to server</li>
+        <li><strong>Tier resolution</strong> — on-device → BYOK → subscription → no AI (graceful)</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(168,85,247,0.08); border: 1px solid rgba(168,85,247,0.2); border-radius: 12px; padding: 20px; position:relative;">
+      <div style="position:absolute; top:12px; right:16px; font-size:11px; opacity:0.4; font-weight:600;">PHASE B</div>
+      <div style="font-size: 28px; margin-bottom: 8px;">🔌</div>
+      <h3 style="margin:0 0 8px 0; color: #a855f7;">2. MCP Server</h3>
+      <p style="font-size:12px; color: rgba(255,255,255,0.5); margin:0 0 8px 0;">The killer differentiator</p>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Streamable HTTP transport</strong> — remote MCP over HTTPS on Workers</li>
+        <li><strong>Tools:</strong></li>
+        <ul style="padding-left:14px; margin:2px 0;">
+          <li><code>search_articles</code> — FTS5 search across all articles</li>
+          <li><code>get_article</code> — full content + enrichment</li>
+          <li><code>get_brief</code> — today's news brief</li>
+          <li><code>list_feeds</code> — user's subscriptions</li>
+          <li><code>ask_about_news</code> — multi-article chat context</li>
+          <li><code>get_trending_topics</code> — what's hot in user's feeds</li>
+        </ul>
+        <li><strong>Resources:</strong> article content, feed OPML, reading history</li>
+        <li><strong>Auth:</strong> Bearer token (existing session system)</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 12px; padding: 20px; position:relative;">
+      <div style="position:absolute; top:12px; right:16px; font-size:11px; opacity:0.4; font-weight:600;">PHASE C</div>
+      <div style="font-size: 28px; margin-bottom: 8px;">💬</div>
+      <h3 style="margin:0 0 8px 0; color: #6366f1;">3. Chat & Content</h3>
+      <p style="font-size:12px; color: rgba(255,255,255,0.5); margin:0 0 8px 0;">Builds on streaming infra from Phase A</p>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Streaming chat</strong> — words appear as generated (uses SSE pipeline)</li>
+        <li><strong>Conversation memory</strong> — cross-article thread continuity</li>
+        <li><strong>Follow-up suggestions</strong> — after each AI response</li>
+        <li><strong>Brief 2.0</strong> — scheduled push, per-topic, configurable depth</li>
+        <li><strong>Auto-enrichment</strong> — summarize on poll (subscribers)</li>
+        <li><strong>Batch enrichment</strong> — user-initiated "Enrich All" (BYOK)</li>
+        <li><strong>Configurable style</strong> — wire up summary length/style settings</li>
+      </ul>
+    </div>
+
+    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 12px; padding: 20px; position:relative;">
+      <div style="position:absolute; top:12px; right:16px; font-size:11px; opacity:0.4; font-weight:600;">PHASE D</div>
+      <div style="font-size: 28px; margin-bottom: 8px;">🧠</div>
+      <h3 style="margin:0 0 8px 0; color: #10b981;">4. Intelligence</h3>
+      <p style="font-size:12px; color: rgba(255,255,255,0.5); margin:0 0 8px 0;">The "it learns you" layer</p>
+      <ul style="font-size:13px; padding-left:18px; margin:0; line-height:1.7">
+        <li><strong>Topic clustering</strong> — group related articles automatically</li>
+        <li><strong>Trend detection</strong> — "AI regulation trending in your feeds"</li>
+        <li><strong>Scoring v2</strong> — learns from reads, saves, dismisses, time spent</li>
+        <li><strong>Smart recommendations</strong> — "You might also like…"</li>
+        <li><strong>Reading insights</strong> — weekly patterns, topic breakdown</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Data Flow</h3>
+  <div style="font-family: monospace; font-size: 12px; line-height: 1.8; background: rgba(0,0,0,0.2); padding: 20px; border-radius: 8px; overflow-x: auto;">
+    <pre style="margin:0; color: rgba(255,255,255,0.8);">
+┌─────────────────────────────────────────────────────┐
+│                    iOS App                           │
+│                                                     │
+│  ┌──────────────┐  ┌──────────┐  ┌───────────────┐ │
+│  │FoundationMdls│  │ BYOK Key │  │ IAP Entitle.  │ │
+│  │  (on-device) │  │(Keychain)│  │  (StoreKit)   │ │
+│  └──────┬───────┘  └────┬─────┘  └──────┬────────┘ │
+│         │               │               │           │
+│         ▼               ▼               ▼           │
+│  ┌─────────────────────────────────────────────┐    │
+│  │         AI Tier Resolver                     │    │
+│  │  on-device → BYOK → subscription → none     │    │
+│  └──────────────────────┬──────────────────────┘    │
+│                         │                           │
+└─────────────────────────┼───────────────────────────┘
+                          │ (REST + SSE)
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│              Cloudflare Workers                      │
+│                                                     │
+│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
+│  │ AI Routes│  │MCP Server│  │  Cron Workers    │  │
+│  │(enrich,  │  │(tools,   │  │(poll, score,     │  │
+│  │ chat,    │  │resources)│  │ auto-enrich,     │  │
+│  │ brief)   │  │          │  │ cleanup)         │  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────────────┘  │
+│       │              │             │                 │
+│       ▼              ▼             ▼                 │
+│  ┌─────────────────────────────────────────────┐    │
+│  │    AI Key Resolver + Rate Limiter            │    │
+│  │  BYOK header → user DB → platform key        │    │
+│  │  + token budget check + usage recording      │    │
+│  └──────────────────────┬──────────────────────┘    │
+│                         │                           │
+│                         ▼                           │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   D1     │  │  Anthropic   │  │   OpenAI     │  │
+│  │(storage) │  │  Claude API  │  │   GPT API    │  │
+│  └──────────┘  └──────────────┘  └──────────────┘  │
+│                                                     │
+│  ┌─────────────────────────────────────────────┐    │
+│  │          MCP Transport Layer                 │    │
+│  │   Streamable HTTP (HTTPS) ← Claude Desktop  │    │
+│  └─────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────┘
+    </pre>
+  </div>
+</div>
