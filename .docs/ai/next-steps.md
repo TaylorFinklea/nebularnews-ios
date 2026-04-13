@@ -1,32 +1,29 @@
-# Next Steps (2026-04-11)
+# Next Steps (2026-04-12)
 
-## Immediate — Verify & Fix
+## Immediate — Deploy & Test M6
 
-- [ ] Set AI provider keys for enrichment: `wrangler secret put OPENAI_API_KEY --env production`
-- [ ] Set scraper keys: `wrangler secret put STEEL_API_KEY --env production`
-- [ ] Test AI enrichment (summarize, chat) from iOS
-- [ ] Fix 4 stale feed URLs or remove dead feeds
-- [ ] Delete 8 unscored articles, re-score remaining
-- [ ] Test OPML import/export
-- [ ] Test tag add/remove
-- [ ] Test feed add/delete from iOS
-- [ ] Remove debug endpoints (debug-poll, trigger-score) before prod release
-- [ ] Clean up old `src/lib/server/` (104 SvelteKit-era files)
+- [ ] Run migrations 0002-0004 on D1: `wrangler d1 migrations apply DB --env production --remote`
+- [ ] Set AI provider keys: `wrangler secret put OPENAI_API_KEY --env production` / `ANTHROPIC_API_KEY`
+- [ ] Deploy Workers: `cd ~/git/nebularnews && npx wrangler deploy --env production`
+- [ ] Test streaming chat from iOS (send a message, verify words appear incrementally)
+- [ ] Test MCP with Claude Desktop (configure with Bearer token, try search_articles)
+- [ ] Test batch enrichment (BYOK user, POST /enrich/batch with article IDs)
+- [ ] Test follow-up suggestions (chat, verify >> lines parsed into pills)
+- [ ] Configure App Store Connect products for StoreKit 2 (com.nebularnews.ai.basic, com.nebularnews.ai.pro)
+- [ ] Test StoreKit sandbox purchase flow
 
-## Soon — Polish
+## Soon — Polish & Complete
 
-- [ ] Update CLAUDE.md to reference Workers backend
-- [ ] TestFlight release with Workers backend
-- [ ] Remove Supabase Swift Package from Xcode project
-- [ ] Push notifications (verify APNS works with Workers)
-- [ ] Handle articles with null published_at better in scoring
+- [ ] B4: iOS "Integrations" settings section (MCP config snippet generator)
+- [ ] C4: Brief 2.0 (scheduled push briefs, per-topic, configurable depth)
+- [ ] Wire summary style/length user settings through to prompt builder
+- [ ] Usage dashboard UI in iOS Settings
+- [ ] Scoring v2: add behavioral signals (read depth, time spent) to weighted formula
+- [ ] AI-generated weekly reading insights (needs AI call, currently data-only)
+- [ ] TestFlight release with M6 features
 
-## Strategic — M6 Candidates
+## Deferred
 
-See memory `project_m6_candidates.md`. Pick after migration stable:
-1. Reader depth (collections, highlights, annotations)
-2. Listening (TTS, CarPlay)
-3. Inbox unification (email newsletters as feeds)
-4. Brief 2.0 (scheduled push, per-topic)
-5. Scoring v2 (hybrid AI + algorithmic)
-6. Platform polish (iPad, Lock Screen widgets, Watch)
+- [ ] RevenueCat migration (if StoreKit complexity grows)
+- [ ] Apple App Store Server API for receipt validation (currently trusts client)
+- [ ] Auto-enrichment on poll for subscribers (server-side, in poll-feeds cron)
