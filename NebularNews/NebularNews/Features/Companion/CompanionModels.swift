@@ -435,3 +435,17 @@ struct OnboardingSubscribeResponse: Codable {
     let subscribed: Int
     let runId: String?
 }
+
+// MARK: - AI Usage
+
+struct UsageSummaryResponse: Codable {
+    let daily: UsageBucket
+    let weekly: UsageBucket
+    let tier: String?
+    let allowOverages: Bool
+}
+
+struct UsageBucket: Codable {
+    let used: Int
+    let limit: Int
+}

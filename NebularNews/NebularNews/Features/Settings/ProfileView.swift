@@ -23,6 +23,7 @@ struct ProfileView: View {
     @State private var showOpenAIKeyEntry = false
     @State private var pendingKeyValue = ""
     @State private var mcpConfigCopied = false
+    @State private var usageSummary: UsageSummaryResponse?
 
     private static let summaryStyles = ["concise", "detailed", "bullet"]
 
@@ -103,6 +104,52 @@ struct ProfileView: View {
                 Label("AI Keys", systemImage: "key")
             } footer: {
                 Text("Your keys are stored only on this device in the secure Keychain. They are never sent to our servers — only directly to the AI provider.")
+            }
+
+            // MARK: - AI Usage
+
+            if let usage = usageSummary {
+                Section {
+                    if let tier = usage.tier {
+                        LabeledContent("Plan", value: tier.capitalized)
+                    } else if hasAnthropicKey || hasOpenAIKey {
+                        LabeledContent("Plan", value: "BYOK")
+                    } else {
+                        LabeledContent("Plan", value: "On-Device")
+                    }
+
+                    if usage.daily.limit > 0 {
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("Today")
+                                Spacer()
+                                Text("\(formatTokens(usage.daily.used)) / \(formatTokens(usage.daily.limit))")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
+                            ProgressView(value: min(Double(usage.daily.used), Double(usage.daily.limit)), total: Double(usage.daily.limit))
+                                .tint(usage.daily.used > usage.daily.limit ? .red : .accentColor)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("This Week")
+                                Spacer()
+                                Text("\(formatTokens(usage.weekly.used)) / \(formatTokens(usage.weekly.limit))")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
+                            ProgressView(value: min(Double(usage.weekly.used), Double(usage.weekly.limit)), total: Double(usage.weekly.limit))
+                                .tint(usage.weekly.used > usage.weekly.limit ? .red : .accentColor)
+                        }
+                    } else {
+                        Text("No usage limits")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                } header: {
+                    Label("AI Usage", systemImage: "chart.bar")
+                }
             }
 
             // MARK: - Notifications
@@ -264,13 +311,27 @@ struct ProfileView: View {
             userEmail = session.user.email
         }
 
-        // Load settings
+        // Load settings + usage in parallel
         do {
-            settings = try await appState.supabase.fetchSettings()
+            async let fetchedSettings = appState.supabase.fetchSettings()
+            async let fetchedUsage = loadUsageSummary()
+            settings = try await fetchedSettings
+            usageSummary = await fetchedUsage
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func loadUsageSummary() async -> UsageSummaryResponse? {
+        guard APIClient.shared.hasSession else { return nil }
+        return try? await APIClient.shared.request(path: "api/usage/summary")
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 { return String(format: "%.1fM", Double(count) / 1_000_000) }
+        if count >= 1_000 { return String(format: "%.0fK", Double(count) / 1_000) }
+        return "\(count)"
     }
 
     private func save(_ mutate: (inout CompanionSettingsPayload) -> Void) {
