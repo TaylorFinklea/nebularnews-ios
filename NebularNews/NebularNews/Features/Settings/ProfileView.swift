@@ -22,6 +22,7 @@ struct ProfileView: View {
     @State private var showAnthropicKeyEntry = false
     @State private var showOpenAIKeyEntry = false
     @State private var pendingKeyValue = ""
+    @State private var mcpConfigCopied = false
 
     private static let summaryStyles = ["concise", "detailed", "bullet"]
 
@@ -163,6 +164,49 @@ struct ProfileView: View {
                 }
             } header: {
                 Label("Account", systemImage: "person.crop.circle")
+            }
+
+            // MARK: - Integrations
+
+            Section {
+                Button {
+                    let token = APIClient.shared.sessionToken ?? "<your-session-token>"
+                    let baseURL = APIClient.shared.baseURL.absoluteString
+                    let config = """
+                    {
+                      "mcpServers": {
+                        "nebularnews": {
+                          "url": "\(baseURL)/api/mcp",
+                          "headers": {
+                            "Authorization": "Bearer \(token)"
+                          }
+                        }
+                      }
+                    }
+                    """
+                    #if os(iOS)
+                    UIPasteboard.general.string = config
+                    #elseif os(macOS)
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(config, forType: .string)
+                    #endif
+                    mcpConfigCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { mcpConfigCopied = false }
+                } label: {
+                    HStack {
+                        Label("Copy Claude Desktop Config", systemImage: "doc.on.doc")
+                        Spacer()
+                        if mcpConfigCopied {
+                            Text("Copied!")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                }
+            } header: {
+                Label("Integrations", systemImage: "puzzlepiece.extension")
+            } footer: {
+                Text("Paste this JSON into your Claude Desktop settings to connect NebularNews as an MCP server. Search articles, get briefs, and ask about your news directly from Claude.")
             }
 
             // MARK: - Advanced
