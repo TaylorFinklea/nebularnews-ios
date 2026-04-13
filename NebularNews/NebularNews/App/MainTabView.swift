@@ -74,6 +74,7 @@ struct MainTabView: View {
             await loadCompanionSavedCount()
         }
         .tint(.accent)
+        .overlay { AIAssistantOverlay() }
         .sheet(isPresented: $showSettings) {
             NavigationStack {
                 ProfileView()

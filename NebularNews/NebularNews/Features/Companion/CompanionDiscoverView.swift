@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CompanionDiscoverView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AIAssistantCoordinator.self) private var aiAssistant
 
     @Binding var showSettings: Bool
 
@@ -82,6 +83,13 @@ struct CompanionDiscoverView: View {
             }
             .refreshable { await loadTags() }
             .task { await loadTags() }
+            .onAppear {
+                aiAssistant.updateContext(AIPageContext(
+                    pageType: "discover",
+                    pageLabel: "Discover",
+                    tags: tags.map(\.name)
+                ))
+            }
         }
     }
 

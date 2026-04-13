@@ -28,6 +28,7 @@ private let downReactionReasonOptions = [
 
 struct CompanionArticleDetailView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AIAssistantCoordinator.self) private var aiAssistant
     @Environment(\.dismiss) private var dismiss
 
     let articleId: String
@@ -229,7 +230,15 @@ struct CompanionArticleDetailView: View {
         .task {
             if payload == nil {
                 await loadArticle()
+                pushAssistantContext()
             }
+        }
+        .onAppear {
+            aiAssistant.hideFloatingButton = true
+            pushAssistantContext()
+        }
+        .onDisappear {
+            aiAssistant.hideFloatingButton = false
         }
     }
 
@@ -284,6 +293,30 @@ struct CompanionArticleDetailView: View {
             currentValue: payload.reaction?.value,
             onReact: openReactionDraft
         )
+    }
+
+    private func pushAssistantContext() {
+        guard let p = payload else { return }
+        let keyPoints = p.keyPoints?.keyPointsJson.flatMap { json -> [String]? in
+            guard let data = json.data(using: .utf8) else { return nil }
+            return try? JSONDecoder().decode([String].self, from: data)
+        } ?? nil
+        let tags = p.tags.map(\.name)
+        let excerpt = String((p.article.contentText ?? "").prefix(500))
+
+        aiAssistant.updateContext(AIPageContext(
+            pageType: "article_detail",
+            pageLabel: "Article: \(p.article.title ?? "Untitled")",
+            articleDetail: AIArticleDetail(
+                articleId: p.article.id,
+                title: p.article.title ?? "Untitled",
+                summary: p.summary?.summaryText,
+                keyPoints: keyPoints,
+                score: p.score?.score,
+                tags: tags,
+                contentExcerpt: excerpt
+            )
+        ))
     }
 
     private func loadArticle() async {

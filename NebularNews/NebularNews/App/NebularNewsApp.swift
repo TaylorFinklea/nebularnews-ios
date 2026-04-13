@@ -20,6 +20,7 @@ struct NebularNewsApp: App {
     @State private var appState: AppState
     @State private var deepLinkRouter = DeepLinkRouter()
     @State private var themeManager = ThemeManager()
+    @State private var aiAssistant = AIAssistantCoordinator()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -94,6 +95,7 @@ struct NebularNewsApp: App {
             .environment(appState)
             .environment(deepLinkRouter)
             .environment(themeManager)
+            .environment(aiAssistant)
             .preferredColorScheme(themeManager.resolvedColorScheme)
             .onOpenURL { url in
                 deepLinkRouter.handle(url)

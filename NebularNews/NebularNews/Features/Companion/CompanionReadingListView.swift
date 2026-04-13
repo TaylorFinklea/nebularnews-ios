@@ -3,6 +3,7 @@ import NebularNewsKit
 
 struct CompanionReadingListView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AIAssistantCoordinator.self) private var aiAssistant
 
     @Binding var showSettings: Bool
 
@@ -61,6 +62,12 @@ struct CompanionReadingListView: View {
                 #endif
             }
             .refreshable { await loadSaved() }
+            .onAppear {
+                let refs = articles.prefix(10).map { a in
+                    AIArticleRef(id: a.id, title: a.title ?? "Untitled", score: a.score, source: a.sourceName)
+                }
+                aiAssistant.updateContext(AIPageContext(pageType: "reading_list", pageLabel: "Reading List", articles: Array(refs)))
+            }
             .task {
                 if articles.isEmpty {
                     // Show cached immediately

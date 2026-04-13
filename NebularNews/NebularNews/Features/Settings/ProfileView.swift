@@ -256,6 +256,18 @@ struct ProfileView: View {
                 Text("Paste this JSON into your Claude Desktop settings to connect NebularNews as an MCP server. Search articles, get briefs, and ask about your news directly from Claude.")
             }
 
+            // MARK: - AI History
+
+            Section {
+                NavigationLink {
+                    AssistantHistoryView()
+                } label: {
+                    Label("Chat History", systemImage: "bubble.left.and.text.bubble.right")
+                }
+            } header: {
+                Label("AI Assistant", systemImage: "sparkles")
+            }
+
             // MARK: - Advanced
 
             Section {

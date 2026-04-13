@@ -4,6 +4,7 @@ import NebularNewsKit
 struct CompanionTodayView: View {
     @Environment(AppState.self) private var appState
     @Environment(DeepLinkRouter.self) private var deepLinkRouter
+    @Environment(AIAssistantCoordinator.self) private var aiAssistant
 
     @Binding var showSettings: Bool
 
@@ -244,9 +245,29 @@ struct CompanionTodayView: View {
                 hero: result.hero,
                 upNext: result.upNext
             )
+            pushAssistantContext()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func pushAssistantContext() {
+        guard let p = payload else { return }
+        let articleRefs: [AIArticleRef] = p.upNext.prefix(5).map { a in
+            AIArticleRef(id: a.id, title: a.title ?? "Untitled", score: a.score, source: a.sourceName)
+        }
+        let briefText = p.newsBrief?.bullets.map(\.text).joined(separator: ". ")
+        aiAssistant.updateContext(AIPageContext(
+            pageType: "today",
+            pageLabel: "Today",
+            articles: articleRefs,
+            stats: AIPageStats(
+                unreadCount: p.stats.unreadTotal,
+                totalCount: nil,
+                newToday: p.stats.newToday
+            ),
+            briefSummary: briefText
+        ))
     }
 }
 

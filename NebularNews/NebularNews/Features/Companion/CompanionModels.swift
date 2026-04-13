@@ -449,3 +449,13 @@ struct UsageBucket: Codable {
     let used: Int
     let limit: Int
 }
+
+// MARK: - AI Assistant
+
+struct AssistantThreadSummary: Codable, Identifiable {
+    let id: String
+    let title: String?
+    let lastMessage: String?
+    let updatedAt: Int
+    let messageCount: Int
+}

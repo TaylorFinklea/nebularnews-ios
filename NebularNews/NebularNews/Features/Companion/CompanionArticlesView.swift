@@ -78,6 +78,7 @@ private struct CompanionFilterBar: View {
 
 struct CompanionArticlesView: View {
     @Environment(AppState.self) private var appState
+    @Environment(AIAssistantCoordinator.self) private var aiAssistant
 
     @Binding var showSettings: Bool
 
@@ -222,6 +223,8 @@ struct CompanionArticlesView: View {
             .task(id: FilterKey(query: query, filter: filter)) {
                 await loadArticles()
             }
+            .onChange(of: total) { pushAssistantContext() }
+            .onAppear { pushAssistantContext() }
             .refreshable {
                 try? await appState.supabase.triggerPull()
                 try? await Task.sleep(for: .seconds(2))
@@ -335,6 +338,29 @@ struct CompanionArticlesView: View {
         recentSearches.insert(trimmed, at: 0)
         if recentSearches.count > 10 { recentSearches = Array(recentSearches.prefix(10)) }
         UserDefaults.standard.set(recentSearches, forKey: "companionRecentSearches")
+    }
+
+    private func pushAssistantContext() {
+        let refs: [AIArticleRef] = articles.prefix(10).map { a in
+            AIArticleRef(
+                id: a.id, title: a.title ?? "Untitled",
+                score: a.score, source: a.sourceName,
+                isRead: a.isReadBool
+            )
+        }
+        var filters: [String: String] = [:]
+        filters["read"] = "\(filter.readFilter)"
+        filters["sort"] = "\(filter.sortOrder)"
+        if let ms = filter.minScore, ms > 0 { filters["minScore"] = "\(ms)" }
+        if !query.isEmpty { filters["query"] = query }
+
+        aiAssistant.updateContext(AIPageContext(
+            pageType: "articles",
+            pageLabel: "Articles\(query.isEmpty ? "" : " — \"\(query)\"")",
+            articles: refs,
+            stats: AIPageStats(totalCount: total),
+            filters: filters
+        ))
     }
 }
 
