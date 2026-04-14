@@ -15,18 +15,8 @@ struct ArticleCard: View {
         VStack(alignment: .leading, spacing: 0) {
             // Hero image (if available, not compact)
             if style != .compact, let imageUrl = article.imageUrl, let url = URL(string: imageUrl) {
-                Color.clear
+                CachedAsyncImage(url: url, contentMode: .fill)
                     .frame(height: style == .hero ? DesignTokens.heroImageHeight : DesignTokens.cardImageHeight)
-                    .overlay {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            default:
-                                Rectangle().fill(Color.platformTertiaryFill)
-                            }
-                        }
-                    }
                     .clipped()
             }
 

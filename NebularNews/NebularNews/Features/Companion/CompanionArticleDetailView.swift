@@ -703,30 +703,8 @@ private struct CompanionHeroImage: View {
     private let baseHeight = DesignTokens.companionDetailImageHeight
 
     var body: some View {
-        AsyncImage(url: url) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            case .failure:
-                Rectangle()
-                    .fill(Color.platformTertiaryFill)
-                    .overlay {
-                        Image(systemName: "photo")
-                            .font(.title)
-                            .foregroundStyle(.secondary.opacity(0.5))
-                            .accessibilityLabel("Image not available")
-                    }
-            case .empty:
-                Rectangle()
-                    .fill(Color.platformTertiaryFill)
-                    .overlay { ProgressView() }
-            @unknown default:
-                EmptyView()
-            }
-        }
-        .frame(height: baseHeight)
+        CachedAsyncImage(url: url, contentMode: .fill)
+            .frame(height: baseHeight)
         .clipped()
     }
 }

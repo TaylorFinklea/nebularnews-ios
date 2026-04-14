@@ -268,6 +268,16 @@ struct ProfileView: View {
                 Label("AI Assistant", systemImage: "sparkles")
             }
 
+            // MARK: - Admin
+
+            Section {
+                NavigationLink {
+                    AdminDashboardView()
+                } label: {
+                    Label("Admin", systemImage: "shield.lefthalf.filled")
+                }
+            }
+
             // MARK: - Advanced
 
             Section {
