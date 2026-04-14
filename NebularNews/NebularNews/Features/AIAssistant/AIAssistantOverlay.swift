@@ -30,7 +30,7 @@ struct AIAssistantOverlay: View {
                         .shadow(color: .purple.opacity(0.3), radius: 8, y: 4)
                 }
                 .padding(.trailing, 16)
-                .padding(.bottom, 16)
+                .padding(.bottom, 72)
                 .accessibilityLabel("AI Assistant")
             }
         }
