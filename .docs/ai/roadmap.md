@@ -58,9 +58,29 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Platform compatibility (toolbar placements, list styles, UIScreen guards, glassEffect availability)
 - [x] Builds clean on both iOS and macOS (signing requires Apple Developer portal config for push/Sign in with Apple)
 
+### M6: AI Overhaul (complete)
+- [x] Three-tier AI: on-device (FoundationModels) / BYOK (server-proxied) / subscription (StoreKit 2 IAP)
+- [x] Streaming chat: SSE from Workers + URLSession.bytes on iOS, incremental rendering
+- [x] MCP Server: 8 tools, 4 resources, Streamable HTTP at POST /mcp for Claude Desktop integration
+- [x] Metering & rate limiting: ai_usage tracking, daily/weekly budgets, subscription_tiers table
+- [x] Retry & reliability: exponential backoff with jitter on all AI calls
+- [x] On-device pipeline: ArticleGenerationEngine extended with chat + brief for all 3 engines
+- [x] Conversation memory: chat_context_summaries, last 3 summaries in system prompt
+- [x] Follow-up suggestions: >> prefixed questions parsed into tappable pills
+- [x] Brief 2.0: per-topic, configurable depth (headlines/summary/deep), scheduled push briefs
+- [x] Batch enrichment: POST /enrich/batch with SSE results for BYOK users
+- [x] Topic clustering + trend detection: daily cron, topic_clusters and topic_trends tables
+- [x] AI-generated reading insights: weekly summary with AI narrative
+- [x] Scoring v2: 6 signals (added save_rate, dismiss_rate behavioral signals)
+- [x] Usage dashboard: token usage progress bars in iOS Settings
+- [x] Floating AI assistant: context-aware sparkle FAB on every page, bottom sheet, page-context segments
+- [x] Assistant history: viewable in sheet and Settings
+- [x] Auto-enrichment: subscribers get articles auto-summarized on feed poll
+- [x] Scheduled brief push notifications: morning/evening cron with APNS
+
 ## Priority Order
 
-M2 → M3 → M4 → M5. Reading experience first (core loop), then AI differentiation, then findability, then platform expansion.
+M2 → M3 → M4 → M5 → M6. Reading experience first, then AI differentiation, then findability, then platform expansion, then AI overhaul.
 
 ---
 
