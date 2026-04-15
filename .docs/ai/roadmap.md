@@ -78,9 +78,36 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Auto-enrichment: subscribers get articles auto-summarized on feed poll
 - [x] Scheduled brief push notifications: morning/evening cron with APNS
 
+### M7: Inbox Unification (in progress)
+- [x] Email newsletter backend: CF Email Worker handler, MIME parsing (postal-mime), auto-create newsletter feeds per sender
+- [x] Newsletter management API: GET/POST /newsletters/address, regenerate token
+- [x] Web clipper endpoint: POST /articles/clip — scrapes URL, creates article in per-user "Web Clips" feed
+- [x] Poll exclusion: email_newsletter and web_clip feeds skipped by feed poll cron
+- [x] iOS newsletter UI: forwarding address in Settings with copy/regenerate
+- [x] Feed type icons: envelope for newsletters, link for clips in feed list
+- [x] Share Extension source: ShareViewController.swift + Info.plist ready
+- [ ] **Share Extension Xcode target**: wire NebularNewsShareExtension into xcodeproj, shared Keychain access group, build & test from Safari
+- [ ] **CF Email Routing**: configure `read.nebularnews.com` in CF Dashboard, catch-all rule → nebular-news worker (manual)
+- [ ] **End-to-end test**: forward a newsletter → appears in app; clip from Safari → appears in app
+- [ ] **M7 acceptance**: both newsletter and clipper work on-device via TestFlight
+
+### M8: Reader Depth
+- [ ] Collections/folders: user-created groups of articles (not just saved/unsaved)
+- [ ] Highlights: select text in article detail, save highlight with optional note
+- [ ] Annotations: per-article notes visible in detail view
+- [ ] Export: Markdown export of articles with highlights/annotations; Readwise integration (optional)
+- [ ] **M8 acceptance**: can create a collection, add articles, highlight text, export as Markdown
+
+### M9: Platform Polish
+- [ ] iPad layout: proper split view, not just scaled iPhone
+- [ ] Lock Screen widgets: unread count, latest brief bullet
+- [ ] Live Activities: feed poll progress, brief generation
+- [ ] Apple Watch glance: unread count + latest brief
+- [ ] **M9 acceptance**: iPad looks native, widget shows on Lock Screen, Watch shows data
+
 ## Priority Order
 
-M2 → M3 → M4 → M5 → M6. Reading experience first, then AI differentiation, then findability, then platform expansion, then AI overhaul.
+M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9.
 
 ---
 
