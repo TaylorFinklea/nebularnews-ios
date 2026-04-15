@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A2C57C4A2F7C4F7B0058043E /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C492F7C4F7B0058043E /* Auth */; };
 		A2C57C4C2F7C4F7B0058043E /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C4B2F7C4F7B0058043E /* Functions */; };
 		A2C57C4E2F7C4F7B0058043E /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = A2C57C4D2F7C4F7B0058043E /* PostgREST */; };
@@ -28,7 +28,7 @@
 			containerPortal = A2D0B8E72F5A05FB001EB670 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A2B95BD82F8FA680004DAF08;
-			remoteInfo = "NebularNewsShareExtension NebularNewsShareExtension";
+			remoteInfo = NebularNewsShareExtension;
 		};
 		A2D0B8FD2F5A05FB001EB670 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -53,7 +53,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex in Embed Foundation Extensions */,
+				A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -61,29 +61,29 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "NebularNewsShareExtension NebularNewsShareExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NebularNewsShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2D0B8EF2F5A05FB001EB670 /* NebularNews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NebularNews.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2D0B8FC2F5A05FB001EB670 /* NebularNewsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NebularNewsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2D0B9062F5A05FB001EB670 /* NebularNewsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NebularNewsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		A2B95BE42F8FA680004DAF08 /* Exceptions for "NebularNewsShareExtension NebularNewsShareExtension" folder in "NebularNewsShareExtension NebularNewsShareExtension" target */ = {
+		A2B95BE42F8FA680004DAF08 /* Exceptions for "NebularNewsShareExtension" folder in "NebularNewsShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */;
+			target = A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */ = {
+		A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				A2B95BE42F8FA680004DAF08 /* Exceptions for "NebularNewsShareExtension NebularNewsShareExtension" folder in "NebularNewsShareExtension NebularNewsShareExtension" target */,
+				A2B95BE42F8FA680004DAF08 /* Exceptions for "NebularNewsShareExtension" folder in "NebularNewsShareExtension" target */,
 			);
-			path = "NebularNewsShareExtension NebularNewsShareExtension";
+			path = NebularNewsShareExtension;
 			sourceTree = "<group>";
 		};
 		A2D0B8F12F5A05FB001EB670 /* NebularNews */ = {
@@ -153,7 +153,7 @@
 				A2D0B8F12F5A05FB001EB670 /* NebularNews */,
 				A2D0B8FF2F5A05FB001EB670 /* NebularNewsTests */,
 				A2D0B9092F5A05FB001EB670 /* NebularNewsUITests */,
-				A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */,
+				A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension */,
 				A2C57C4F2F7C5D7C0058043E /* Frameworks */,
 				A2D0B8F02F5A05FB001EB670 /* Products */,
 			);
@@ -165,7 +165,7 @@
 				A2D0B8EF2F5A05FB001EB670 /* NebularNews.app */,
 				A2D0B8FC2F5A05FB001EB670 /* NebularNewsTests.xctest */,
 				A2D0B9062F5A05FB001EB670 /* NebularNewsUITests.xctest */,
-				A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex */,
+				A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -173,9 +173,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */ = {
+		A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension NebularNewsShareExtension" */;
+			buildConfigurationList = A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension" */;
 			buildPhases = (
 				A2B95BD52F8FA680004DAF08 /* Sources */,
 				A2B95BD62F8FA680004DAF08 /* Frameworks */,
@@ -186,13 +186,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */,
+				A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension */,
 			);
-			name = "NebularNewsShareExtension NebularNewsShareExtension";
+			name = NebularNewsShareExtension;
 			packageProductDependencies = (
 			);
-			productName = "NebularNewsShareExtension NebularNewsShareExtension";
-			productReference = A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension.appex */;
+			productName = NebularNewsShareExtension;
+			productReference = A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		A2D0B8EE2F5A05FB001EB670 /* NebularNews */ = {
@@ -318,7 +318,7 @@
 				A2D0B8EE2F5A05FB001EB670 /* NebularNews */,
 				A2D0B8FB2F5A05FB001EB670 /* NebularNewsTests */,
 				A2D0B9052F5A05FB001EB670 /* NebularNewsUITests */,
-				A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */,
+				A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -393,7 +393,7 @@
 		A2B95BE22F8FA680004DAF08 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = ios;
-			target = A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension NebularNewsShareExtension */;
+			target = A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */;
 			targetProxy = A2B95BE12F8FA680004DAF08 /* PBXContainerItemProxy */;
 		};
 		A2D0B8FE2F5A05FB001EB670 /* PBXTargetDependency */ = {
@@ -412,12 +412,12 @@
 		A2B95BE62F8FA680004DAF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "NebularNewsShareExtension NebularNewsShareExtension/NebularNewsShareExtension.entitlements";
+				CODE_SIGN_ENTITLEMENTS = NebularNewsShareExtension/NebularNewsShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K7CBQW6MPG;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "NebularNewsShareExtension NebularNewsShareExtension/Info.plist";
+				INFOPLIST_FILE = NebularNewsShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NebularNews;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -431,8 +431,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -444,12 +444,12 @@
 		A2B95BE72F8FA680004DAF08 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = "NebularNewsShareExtension NebularNewsShareExtension/NebularNewsShareExtension.entitlements";
+				CODE_SIGN_ENTITLEMENTS = NebularNewsShareExtension/NebularNewsShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K7CBQW6MPG;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "NebularNewsShareExtension NebularNewsShareExtension/Info.plist";
+				INFOPLIST_FILE = NebularNewsShareExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NebularNews;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
@@ -463,8 +463,8 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
@@ -763,7 +763,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension NebularNewsShareExtension" */ = {
+		A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A2B95BE62F8FA680004DAF08 /* Debug */,

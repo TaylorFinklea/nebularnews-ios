@@ -130,6 +130,7 @@ class ShareViewController: UIViewController {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: keychainTokenKey,
+            kSecAttrAccessGroup as String: "$(AppIdentifierPrefix)com.nebularnews.ios",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
