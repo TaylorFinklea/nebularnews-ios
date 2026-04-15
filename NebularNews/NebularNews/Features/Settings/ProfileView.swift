@@ -24,6 +24,9 @@ struct ProfileView: View {
     @State private var pendingKeyValue = ""
     @State private var mcpConfigCopied = false
     @State private var usageSummary: UsageSummaryResponse?
+    @State private var newsletterAddress: String?
+    @State private var addressCopied = false
+    @State private var showRegenerateConfirm = false
 
     private static let summaryStyles = ["concise", "detailed", "bullet"]
 
@@ -150,6 +153,54 @@ struct ProfileView: View {
                 } header: {
                     Label("AI Usage", systemImage: "chart.bar")
                 }
+            }
+
+            // MARK: - Newsletter Inbox
+
+            Section {
+                if let address = newsletterAddress {
+                    LabeledContent("Address", value: address)
+                        .font(.caption)
+                    Button {
+                        #if os(iOS)
+                        UIPasteboard.general.string = address
+                        #elseif os(macOS)
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(address, forType: .string)
+                        #endif
+                        addressCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { addressCopied = false }
+                    } label: {
+                        HStack {
+                            Label("Copy Address", systemImage: "doc.on.doc")
+                            Spacer()
+                            if addressCopied {
+                                Text("Copied!").font(.caption).foregroundStyle(.green)
+                            }
+                        }
+                    }
+                    Button("Regenerate Address", role: .destructive) {
+                        showRegenerateConfirm = true
+                    }
+                } else {
+                    Button {
+                        Task { await enableNewsletter() }
+                    } label: {
+                        Label("Enable Newsletter Inbox", systemImage: "envelope.badge.shield.half.filled")
+                    }
+                }
+            } header: {
+                Label("Newsletter Inbox", systemImage: "envelope")
+            } footer: {
+                Text("Forward newsletters to this address. They appear alongside your RSS feeds.")
+            }
+            .alert("Regenerate Address?", isPresented: $showRegenerateConfirm) {
+                Button("Regenerate", role: .destructive) {
+                    Task { await regenerateNewsletter() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your old address will stop receiving newsletters. You'll need to update your forwarding rules.")
             }
 
             // MARK: - Notifications
@@ -337,17 +388,45 @@ struct ProfileView: View {
         do {
             async let fetchedSettings = appState.supabase.fetchSettings()
             async let fetchedUsage = loadUsageSummary()
+            async let fetchedNewsletter = loadNewsletterAddress()
             settings = try await fetchedSettings
             usageSummary = await fetchedUsage
+            newsletterAddress = await fetchedNewsletter
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
     }
 
+    private func loadNewsletterAddress() async -> String? {
+        guard APIClient.shared.hasSession else { return nil }
+        struct Resp: Decodable { let address: String }
+        return try? await (APIClient.shared.request(path: "api/newsletters/address") as Resp).address
+    }
+
     private func loadUsageSummary() async -> UsageSummaryResponse? {
         guard APIClient.shared.hasSession else { return nil }
         return try? await APIClient.shared.request(path: "api/usage/summary")
+    }
+
+    private func enableNewsletter() async {
+        do {
+            struct Resp: Decodable { let address: String }
+            let resp: Resp = try await APIClient.shared.request(path: "api/newsletters/address")
+            newsletterAddress = resp.address
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func regenerateNewsletter() async {
+        do {
+            struct Resp: Decodable { let address: String }
+            let resp: Resp = try await APIClient.shared.request(method: "POST", path: "api/newsletters/address/regenerate")
+            newsletterAddress = resp.address
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func formatTokens(_ count: Int) -> String {

@@ -43,9 +43,22 @@ struct CompanionFeedsView: View {
 
             ForEach(feeds) { feed in
                 HStack(spacing: 12) {
-                    Circle()
-                        .fill(feedStatusColor(feed))
-                        .frame(width: 8, height: 8)
+                    Group {
+                        switch feed.feedType {
+                        case "email_newsletter":
+                            Image(systemName: "envelope.fill")
+                                .foregroundStyle(.blue)
+                                .frame(width: 16, height: 16)
+                        case "web_clip":
+                            Image(systemName: "link.circle.fill")
+                                .foregroundStyle(.purple)
+                                .frame(width: 16, height: 16)
+                        default:
+                            Circle()
+                                .fill(feedStatusColor(feed))
+                                .frame(width: 8, height: 8)
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(feed.title?.isEmpty == false ? feed.title! : feed.url)
