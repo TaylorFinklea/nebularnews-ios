@@ -18,6 +18,7 @@ final class SupabaseManager: Sendable {
     private var articleService: ArticleService { ArticleService(logger: logger) }
     private var feedService: FeedService { FeedService() }
     private var enrichmentService: EnrichmentService { EnrichmentService() }
+    private var collectionService: CollectionService { CollectionService() }
 
     private init() {}
 
@@ -237,5 +238,39 @@ final class SupabaseManager: Sendable {
 
     func bulkSubscribe(feedUrls: [String]) async throws -> Int {
         try await feedService.bulkSubscribe(feedUrls: feedUrls)
+    }
+
+    // MARK: - Collections
+
+    func fetchCollections() async throws -> [CompanionCollection] {
+        try await collectionService.fetchCollections()
+    }
+
+    func createCollection(name: String, description: String? = nil, color: String? = nil, icon: String? = nil) async throws -> CompanionCollection {
+        try await collectionService.createCollection(name: name, description: description, color: color, icon: icon)
+    }
+
+    func fetchCollection(id: String) async throws -> CompanionCollectionDetail {
+        try await collectionService.fetchCollection(id: id)
+    }
+
+    func updateCollection(id: String, name: String? = nil, description: String? = nil, color: String? = nil, icon: String? = nil) async throws -> CompanionCollection {
+        try await collectionService.updateCollection(id: id, name: name, description: description, color: color, icon: icon)
+    }
+
+    func deleteCollection(id: String) async throws {
+        try await collectionService.deleteCollection(id: id)
+    }
+
+    func addArticleToCollection(collectionId: String, articleId: String) async throws -> CompanionCollectionArticleResponse {
+        try await collectionService.addArticle(collectionId: collectionId, articleId: articleId)
+    }
+
+    func removeArticleFromCollection(collectionId: String, articleId: String) async throws {
+        try await collectionService.removeArticle(collectionId: collectionId, articleId: articleId)
+    }
+
+    func fetchArticleCollections(articleId: String) async throws -> [CompanionCollection] {
+        try await collectionService.fetchArticleCollections(articleId: articleId)
     }
 }

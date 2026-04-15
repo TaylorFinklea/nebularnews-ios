@@ -459,3 +459,53 @@ struct AssistantThreadSummary: Codable, Identifiable {
     let updatedAt: Int
     let messageCount: Int
 }
+
+// MARK: - Collections
+
+struct CompanionCollection: Codable, Identifiable {
+    let id: String
+    var name: String
+    var description: String?
+    var color: String?
+    var icon: String?
+    var position: Int?
+    var articleCount: Int?
+    let createdAt: Int?
+    var updatedAt: Int?
+}
+
+struct CompanionCollectionDetail: Codable {
+    let collection: CompanionCollection
+    let articles: [CompanionArticleListItem]
+}
+
+struct CompanionCollectionArticleResponse: Codable {
+    let collectionId: String
+    let articleId: String
+    let position: Int
+}
+
+// MARK: - Highlights
+
+struct CompanionHighlight: Codable, Identifiable {
+    let id: String
+    let articleId: String
+    let selectedText: String
+    let blockIndex: Int?
+    let textOffset: Int?
+    let textLength: Int?
+    var note: String?
+    var color: String?
+    let createdAt: Int?
+    var updatedAt: Int?
+}
+
+// MARK: - Annotations
+
+struct CompanionAnnotation: Codable, Identifiable {
+    let id: String
+    let articleId: String
+    var content: String
+    let createdAt: Int?
+    var updatedAt: Int?
+}

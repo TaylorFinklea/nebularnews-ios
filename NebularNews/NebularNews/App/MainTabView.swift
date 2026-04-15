@@ -8,7 +8,7 @@ struct MainTabView: View {
 
     #if os(macOS)
     enum Tab: String, CaseIterable {
-        case today, articles, discover, lists
+        case today, articles, discover, library
     }
 
     @State private var selectedTab: Tab = .today
@@ -33,8 +33,8 @@ struct MainTabView: View {
                 CompanionArticlesView(showSettings: $showSettings)
             case .discover:
                 CompanionDiscoverView(showSettings: $showSettings)
-            case .lists:
-                CompanionReadingListView(showSettings: $showSettings)
+            case .library:
+                LibraryView(showSettings: $showSettings)
             }
         }
         .task {
@@ -65,8 +65,8 @@ struct MainTabView: View {
                 CompanionDiscoverView(showSettings: $showSettings)
             }
 
-            Tab("Lists", systemImage: "bookmark") {
-                CompanionReadingListView(showSettings: $showSettings)
+            Tab("Library", systemImage: "books.vertical") {
+                LibraryView(showSettings: $showSettings)
             }
             .badge(companionSavedCount)
         }
@@ -97,8 +97,8 @@ struct MainTabView: View {
                 .tag(Tab.articles)
             Label("Discover", systemImage: "safari")
                 .tag(Tab.discover)
-            Label("Lists", systemImage: "bookmark")
-                .tag(Tab.lists)
+            Label("Library", systemImage: "books.vertical")
+                .tag(Tab.library)
                 .badge(companionSavedCount)
         }
         .navigationTitle("Nebular News")

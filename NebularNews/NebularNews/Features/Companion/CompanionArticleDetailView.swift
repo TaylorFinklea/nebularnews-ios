@@ -45,6 +45,7 @@ struct CompanionArticleDetailView: View {
     @State private var isSaved = false
     @State private var savingBookmark = false
     @State private var showingChat = false
+    @State private var showingAddToCollection = false
     @State private var isSummarizing = false
     @State private var isGeneratingKeyPoints = false
 
@@ -197,6 +198,13 @@ struct CompanionArticleDetailView: View {
                                 .accessibilityLabel(isSaved ? "Remove from saved" : "Save article")
                         }
                         .disabled(savingBookmark)
+
+                        Button {
+                            showingAddToCollection = true
+                        } label: {
+                            Image(systemName: "folder.badge.plus")
+                                .accessibilityLabel("Add to collection")
+                        }
                     }
                     ToolbarItemGroup(placement: .platformBottom) {
                         bottomActionTray(payload)
@@ -212,6 +220,9 @@ struct CompanionArticleDetailView: View {
                         articleId: articleId,
                         articleTitle: payload.article.title
                     )
+                }
+                .sheet(isPresented: $showingAddToCollection) {
+                    AddToCollectionSheet(articleId: articleId)
                 }
             } else {
                 VStack(spacing: 20) {
