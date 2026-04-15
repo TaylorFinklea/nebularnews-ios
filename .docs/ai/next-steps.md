@@ -1,26 +1,34 @@
-# Next Steps (2026-04-13)
+# Next Steps (2026-04-15)
 
-## Immediate — Test & Ship
+## M7 Manual Items (User)
 
-- [x] Run migrations 0002-0005 on D1
-- [x] Deploy Workers to production
-- [ ] Set AI provider keys if not already: `wrangler secret put ANTHROPIC_API_KEY --env production`
-- [ ] Test floating AI assistant from iOS (sparkle button → bottom sheet → send message)
-- [ ] Test streaming chat (words appear incrementally)
-- [ ] Test MCP with Claude Desktop
-- [ ] Test auto-enrichment (subscribe → wait for poll → verify summaries appear)
-- [ ] Test scheduled briefs (configure morning time → verify push notification)
-- [ ] Configure App Store Connect products (com.nebularnews.ai.basic, com.nebularnews.ai.pro)
-- [ ] TestFlight release
+- [ ] Configure CF Email Routing: `read.nebularnews.com` in CF Dashboard, catch-all → nebular-news worker
+- [ ] End-to-end test: forward a newsletter, clip from Safari on device
+- [ ] TestFlight release with Share Extension
 
-## M7 Candidates
+## M8: Reader Depth — Phase 1 (Collections)
 
-Pick from these for the next milestone:
+### Backend
+- [ ] Write `migrations/0008_reader_depth.sql` (4 tables: collections, collection_articles, article_highlights, article_annotations)
+- [ ] Create `src/routes/collections.ts` (CRUD + article membership)
+- [ ] Register collections route in `src/index.ts`
 
-1. **Reader depth** — collections/folders, highlights, annotations, export to Readwise/Obsidian/Markdown
-2. **Listening** — in-app TTS, CarPlay, podcast-style queue
-3. **Inbox unification** — email newsletters as feeds, Safari web clipper
-4. **Platform polish** — iPad layout, Lock Screen widgets, Live Activities, Watch glance
+### iOS
+- [ ] Add `CompanionCollection` / `CompanionCollectionDetail` DTOs to `CompanionModels.swift`
+- [ ] Create `Services/CollectionService.swift`
+- [ ] Add facade methods to `SupabaseManager.swift`
+- [ ] Create `Features/Library/LibraryView.swift` (replaces Lists tab)
+- [ ] Create `Features/Library/CollectionDetailView.swift`
+- [ ] Create `Features/Library/CreateCollectionSheet.swift`
+- [ ] Create `Features/Library/AddToCollectionSheet.swift`
+- [ ] Update `App/MainTabView.swift` — "Lists" → "Library" with `books.vertical` icon
+
+## M8 Upcoming Phases
+
+- Phase 2: Highlights (backend routes + iOS highlight rendering + creation flow)
+- Phase 3: Annotations (backend routes + iOS annotation editor)
+- Phase 4: Markdown export (client-side MarkdownExporter + ShareLink)
+- Phase 5: SyncManager offline support + polish
 
 ## Deferred
 

@@ -78,7 +78,7 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] Auto-enrichment: subscribers get articles auto-summarized on feed poll
 - [x] Scheduled brief push notifications: morning/evening cron with APNS
 
-### M7: Inbox Unification (in progress)
+### M7: Inbox Unification (code complete)
 - [x] Email newsletter backend: CF Email Worker handler, MIME parsing (postal-mime), auto-create newsletter feeds per sender
 - [x] Newsletter management API: GET/POST /newsletters/address, regenerate token
 - [x] Web clipper endpoint: POST /articles/clip — scrapes URL, creates article in per-user "Web Clips" feed
@@ -86,16 +86,22 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - [x] iOS newsletter UI: forwarding address in Settings with copy/regenerate
 - [x] Feed type icons: envelope for newsletters, link for clips in feed list
 - [x] Share Extension source: ShareViewController.swift + Info.plist ready
-- [ ] **Share Extension Xcode target**: wire NebularNewsShareExtension into xcodeproj, shared Keychain access group, build & test from Safari
-- [ ] **CF Email Routing**: configure `read.nebularnews.com` in CF Dashboard, catch-all rule → nebular-news worker (manual)
-- [ ] **End-to-end test**: forward a newsletter → appears in app; clip from Safari → appears in app
-- [ ] **M7 acceptance**: both newsletter and clipper work on-device via TestFlight
+- [x] Share Extension Xcode target: NebularNewsShareExtension wired into xcodeproj, shared Keychain access group, builds with main app
+- [ ] **CF Email Routing** *(manual)*: configure `read.nebularnews.com` in CF Dashboard, catch-all rule → nebular-news worker
+- [ ] **End-to-end test** *(manual)*: forward a newsletter → appears in app; clip from Safari → appears in app
+- [ ] **M7 acceptance** *(manual)*: both newsletter and clipper work on-device via TestFlight
 
-### M8: Reader Depth
-- [ ] Collections/folders: user-created groups of articles (not just saved/unsaved)
-- [ ] Highlights: select text in article detail, save highlight with optional note
-- [ ] Annotations: per-article notes visible in detail view
-- [ ] Export: Markdown export of articles with highlights/annotations; Readwise integration (optional)
+### M8: Reader Depth (in progress)
+- [ ] D1 migration: collections, collection_articles, article_highlights, article_annotations tables
+- [ ] Collections API: CRUD routes for collections + article membership
+- [ ] iOS Library tab: replace Lists with Library (Saved + Collections sections)
+- [ ] Collection views: create, detail, add-to-collection sheet
+- [ ] Highlights API: CRUD routes for text highlights with block position
+- [ ] Highlight rendering: yellow background overlays on matching text in RichArticleContentView
+- [ ] Highlight creation: toolbar action after text selection in article detail
+- [ ] Annotations API: single per-article note (GET/PUT/DELETE)
+- [ ] Annotation editor: TextEditor section in article detail view
+- [ ] Markdown export: client-side MarkdownExporter with ShareLink
 - [ ] **M8 acceptance**: can create a collection, add articles, highlight text, export as Markdown
 
 ### M9: Platform Polish
