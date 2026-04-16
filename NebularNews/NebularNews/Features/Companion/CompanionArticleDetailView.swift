@@ -48,6 +48,9 @@ struct CompanionArticleDetailView: View {
     @State private var showingAddToCollection = false
     @State private var isSummarizing = false
     @State private var isGeneratingKeyPoints = false
+    @State private var showingHighlightInput = false
+    @State private var highlightText = ""
+    @State private var exportedMarkdown: String?
 
     var body: some View {
         Group {
@@ -103,6 +106,28 @@ struct CompanionArticleDetailView: View {
                     EnrichmentSection(payload: payload)
 
                     ArticleBodyView(article: payload.article)
+
+                    // Highlights
+                    if let highlights = payload.highlights, !highlights.isEmpty {
+                        HighlightsSection(
+                            highlights: highlights,
+                            onDelete: { highlight in
+                                Task { await deleteHighlight(highlight) }
+                            }
+                        )
+                    }
+
+                    // Annotation
+                    AnnotationSection(
+                        articleId: articleId,
+                        annotation: payload.annotation,
+                        onSave: { content in
+                            Task { await saveAnnotation(content) }
+                        },
+                        onDelete: {
+                            Task { await deleteAnnotation() }
+                        }
+                    )
 
                     // Sources
                     if !payload.sources.isEmpty {
@@ -205,6 +230,23 @@ struct CompanionArticleDetailView: View {
                             Image(systemName: "folder.badge.plus")
                                 .accessibilityLabel("Add to collection")
                         }
+
+                        ShareLink(
+                            item: MarkdownExporter.exportArticle(
+                                article: payload.article,
+                                summary: payload.summary,
+                                keyPoints: payload.keyPoints,
+                                tags: payload.tags,
+                                highlights: payload.highlights ?? [],
+                                annotation: payload.annotation,
+                                sourceName: payload.preferredSource?.feedTitle
+                            ),
+                            subject: Text(payload.article.title ?? "Article"),
+                            message: Text("Exported from NebularNews")
+                        ) {
+                            Image(systemName: "square.and.arrow.up")
+                                .accessibilityLabel("Export as Markdown")
+                        }
                     }
                     ToolbarItemGroup(placement: .platformBottom) {
                         bottomActionTray(payload)
@@ -223,6 +265,17 @@ struct CompanionArticleDetailView: View {
                 }
                 .sheet(isPresented: $showingAddToCollection) {
                     AddToCollectionSheet(articleId: articleId)
+                }
+                .alert("Highlight Text", isPresented: $showingHighlightInput) {
+                    TextField("Paste selected text", text: $highlightText)
+                    Button("Highlight") {
+                        Task { await createHighlight() }
+                    }
+                    Button("Cancel", role: .cancel) {
+                        highlightText = ""
+                    }
+                } message: {
+                    Text("Copy text from the article, then paste it here to highlight.")
                 }
             } else {
                 VStack(spacing: 20) {
@@ -297,6 +350,12 @@ struct CompanionArticleDetailView: View {
             showingChat = true
         } label: {
             Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
+        }
+
+        Button {
+            showingHighlightInput = true
+        } label: {
+            Label("Highlight", systemImage: "highlighter")
         }
 
         ReactionsView(
@@ -481,6 +540,53 @@ struct CompanionArticleDetailView: View {
             } catch {
                 errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    // MARK: - Highlights
+
+    private func createHighlight() async {
+        let text = highlightText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        do {
+            let highlight = try await appState.supabase.createHighlight(articleId: articleId, selectedText: text)
+            if payload?.highlights != nil {
+                payload?.highlights?.append(highlight)
+            } else {
+                payload?.highlights = [highlight]
+            }
+            highlightText = ""
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteHighlight(_ highlight: CompanionHighlight) async {
+        do {
+            try await appState.supabase.deleteHighlight(articleId: articleId, highlightId: highlight.id)
+            payload?.highlights?.removeAll { $0.id == highlight.id }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Annotations
+
+    private func saveAnnotation(_ content: String) async {
+        do {
+            let annotation = try await appState.supabase.upsertAnnotation(articleId: articleId, content: content)
+            payload?.annotation = annotation
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteAnnotation() async {
+        do {
+            try await appState.supabase.deleteAnnotation(articleId: articleId)
+            payload?.annotation = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
@@ -792,6 +898,127 @@ private struct CompanionReactionReasonSheet: View {
                         dismiss()
                     }
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Highlights Section
+
+private struct HighlightsSection: View {
+    let highlights: [CompanionHighlight]
+    let onDelete: (CompanionHighlight) -> Void
+
+    var body: some View {
+        Section {
+            ForEach(highlights) { highlight in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Rectangle()
+                            .fill(highlightColor(highlight.color))
+                            .frame(width: 3)
+
+                        Text(highlight.selectedText)
+                            .font(.subheadline)
+                            .italic()
+                    }
+
+                    if let note = highlight.note, !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 11)
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        onDelete(highlight)
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                }
+            }
+        } header: {
+            Label("Highlights", systemImage: "highlighter")
+        }
+    }
+
+    private func highlightColor(_ name: String?) -> Color {
+        switch name {
+        case "blue": return .blue
+        case "green": return .green
+        case "pink": return .pink
+        case "orange": return .orange
+        default: return .yellow
+        }
+    }
+}
+
+// MARK: - Annotation Section
+
+private struct AnnotationSection: View {
+    let articleId: String
+    let annotation: CompanionAnnotation?
+    let onSave: (String) -> Void
+    let onDelete: () -> Void
+
+    @State private var isEditing = false
+    @State private var editText = ""
+
+    var body: some View {
+        Section {
+            if let annotation {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(annotation.content)
+                        .font(.subheadline)
+
+                    HStack {
+                        Button("Edit") {
+                            editText = annotation.content
+                            isEditing = true
+                        }
+                        .font(.caption)
+
+                        Button("Delete", role: .destructive) {
+                            onDelete()
+                        }
+                        .font(.caption)
+                    }
+                }
+            } else {
+                Button {
+                    editText = ""
+                    isEditing = true
+                } label: {
+                    Label("Add Note", systemImage: "note.text.badge.plus")
+                }
+            }
+        } header: {
+            Label("Notes", systemImage: "note.text")
+        }
+        .sheet(isPresented: $isEditing) {
+            NavigationStack {
+                TextEditor(text: $editText)
+                    .padding()
+                    .navigationTitle("Note")
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { isEditing = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                let text = editText.trimmingCharacters(in: .whitespacesAndNewlines)
+                                if !text.isEmpty {
+                                    onSave(text)
+                                }
+                                isEditing = false
+                            }
+                            .disabled(editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        }
+                    }
             }
         }
     }

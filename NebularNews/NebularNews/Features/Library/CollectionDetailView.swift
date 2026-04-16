@@ -60,6 +60,19 @@ struct CollectionDetailView: View {
                     Button { showEditSheet = true } label: {
                         Label("Edit Collection", systemImage: "pencil")
                     }
+
+                    if !articles.isEmpty {
+                        ShareLink(
+                            item: MarkdownExporter.exportCollection(
+                                name: displayCollection.name,
+                                articles: articles
+                            ),
+                            subject: Text(displayCollection.name),
+                            message: Text("Exported from NebularNews")
+                        ) {
+                            Label("Export as Markdown", systemImage: "square.and.arrow.up")
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }

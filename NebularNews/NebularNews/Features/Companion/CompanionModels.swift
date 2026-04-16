@@ -109,6 +109,8 @@ struct CompanionArticleDetailPayload: Codable {
     let sources: [CompanionSource]
     var tags: [CompanionTag]
     let tagSuggestions: [CompanionTagSuggestion]
+    var highlights: [CompanionHighlight]?
+    var annotation: CompanionAnnotation?
 }
 
 struct CompanionArticle: Codable {

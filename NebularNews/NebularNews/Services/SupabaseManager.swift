@@ -19,6 +19,8 @@ final class SupabaseManager: Sendable {
     private var feedService: FeedService { FeedService() }
     private var enrichmentService: EnrichmentService { EnrichmentService() }
     private var collectionService: CollectionService { CollectionService() }
+    private var highlightService: HighlightService { HighlightService() }
+    private var annotationService: AnnotationService { AnnotationService() }
 
     private init() {}
 
@@ -272,5 +274,37 @@ final class SupabaseManager: Sendable {
 
     func fetchArticleCollections(articleId: String) async throws -> [CompanionCollection] {
         try await collectionService.fetchArticleCollections(articleId: articleId)
+    }
+
+    // MARK: - Highlights
+
+    func fetchHighlights(articleId: String) async throws -> [CompanionHighlight] {
+        try await highlightService.fetchHighlights(articleId: articleId)
+    }
+
+    func createHighlight(articleId: String, selectedText: String, blockIndex: Int? = nil, textOffset: Int? = nil, textLength: Int? = nil, note: String? = nil, color: String? = nil) async throws -> CompanionHighlight {
+        try await highlightService.createHighlight(articleId: articleId, selectedText: selectedText, blockIndex: blockIndex, textOffset: textOffset, textLength: textLength, note: note, color: color)
+    }
+
+    func updateHighlight(articleId: String, highlightId: String, note: String?, color: String? = nil) async throws -> CompanionHighlight {
+        try await highlightService.updateHighlight(articleId: articleId, highlightId: highlightId, note: note, color: color)
+    }
+
+    func deleteHighlight(articleId: String, highlightId: String) async throws {
+        try await highlightService.deleteHighlight(articleId: articleId, highlightId: highlightId)
+    }
+
+    // MARK: - Annotations
+
+    func fetchAnnotation(articleId: String) async throws -> CompanionAnnotation? {
+        try await annotationService.fetchAnnotation(articleId: articleId)
+    }
+
+    func upsertAnnotation(articleId: String, content: String) async throws -> CompanionAnnotation {
+        try await annotationService.upsertAnnotation(articleId: articleId, content: content)
+    }
+
+    func deleteAnnotation(articleId: String) async throws {
+        try await annotationService.deleteAnnotation(articleId: articleId)
     }
 }
