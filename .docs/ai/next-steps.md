@@ -1,34 +1,30 @@
 # Next Steps (2026-04-15)
 
-## M7 Manual Items (User)
+## Deploy & Test M8
 
-- [ ] Configure CF Email Routing: `read.nebularnews.com` in CF Dashboard, catch-all → nebular-news worker
+- [ ] Deploy Workers: `cd ~/git/nebularnews && npx wrangler deploy --env production`
+- [ ] Run migration: `npx wrangler d1 migrations apply nebularnews-prod --env production --remote`
+- [ ] Test collections: create, add articles, view, edit, delete
+- [ ] Test highlights: create from article detail, view in section, delete
+- [ ] Test annotations: add note, edit, delete
+- [ ] Test export: share Markdown from article detail and collection detail
+- [ ] TestFlight release
+
+## M7 Manual Items (Still Pending)
+
+- [ ] Configure CF Email Routing: `read.nebularnews.com` in CF Dashboard
 - [ ] End-to-end test: forward a newsletter, clip from Safari on device
-- [ ] TestFlight release with Share Extension
 
-## M8: Reader Depth — Phase 1 (Collections)
+## M8 Phase 5 (Deferred Polish)
 
-### Backend
-- [ ] Write `migrations/0008_reader_depth.sql` (4 tables: collections, collection_articles, article_highlights, article_annotations)
-- [ ] Create `src/routes/collections.ts` (CRUD + article membership)
-- [ ] Register collections route in `src/index.ts`
+- [ ] SyncManager offline support for collection/highlight/annotation mutations
+- [ ] Improve highlight creation: intercept native text selection instead of paste alert
+- [ ] Highlight rendering: yellow background overlays in RichArticleContentView
+- [ ] CompanionCache integration for collections
 
-### iOS
-- [ ] Add `CompanionCollection` / `CompanionCollectionDetail` DTOs to `CompanionModels.swift`
-- [ ] Create `Services/CollectionService.swift`
-- [ ] Add facade methods to `SupabaseManager.swift`
-- [ ] Create `Features/Library/LibraryView.swift` (replaces Lists tab)
-- [ ] Create `Features/Library/CollectionDetailView.swift`
-- [ ] Create `Features/Library/CreateCollectionSheet.swift`
-- [ ] Create `Features/Library/AddToCollectionSheet.swift`
-- [ ] Update `App/MainTabView.swift` — "Lists" → "Library" with `books.vertical` icon
+## Future Milestones
 
-## M8 Upcoming Phases
-
-- Phase 2: Highlights (backend routes + iOS highlight rendering + creation flow)
-- Phase 3: Annotations (backend routes + iOS annotation editor)
-- Phase 4: Markdown export (client-side MarkdownExporter + ShareLink)
-- Phase 5: SyncManager offline support + polish
+- **M9: Platform Polish** — iPad layout, Lock Screen widgets, Live Activities, Watch glance
 
 ## Deferred
 
