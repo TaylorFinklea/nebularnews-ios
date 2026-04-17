@@ -121,8 +121,8 @@ final class SupabaseManager: Sendable {
         try await feedService.fetchFeeds()
     }
 
-    func addFeed(url: String) async throws -> String {
-        try await feedService.addFeed(url: url)
+    func addFeed(url: String, scrapeMode: String? = nil) async throws -> String {
+        try await feedService.addFeed(url: url, scrapeMode: scrapeMode)
     }
 
     func deleteFeed(id: String) async throws {
@@ -133,8 +133,8 @@ final class SupabaseManager: Sendable {
         try await feedService.updateFeedSettings(feedId: feedId, paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
     }
 
-    func updateFeedScrapeConfig(feedId: String, scrapeMode: String, scrapeProvider: String?, feedType: String) async throws {
-        try await feedService.updateFeedScrapeConfig(feedId: feedId, scrapeMode: scrapeMode, scrapeProvider: scrapeProvider, feedType: feedType)
+    func updateScrapeMode(feedId: String, scrapeMode: String) async throws {
+        try await feedService.updateScrapeMode(feedId: feedId, scrapeMode: scrapeMode)
     }
 
     func importOPML(xml: String) async throws -> Int {
@@ -214,6 +214,10 @@ final class SupabaseManager: Sendable {
 
     func generateKeyPoints(articleId: String) async throws {
         try await enrichmentService.generateKeyPoints(articleId: articleId)
+    }
+
+    func fetchFullContent(articleId: String) async throws -> FetchContentResult {
+        try await enrichmentService.fetchFullContent(articleId: articleId)
     }
 
     // MARK: - News Brief

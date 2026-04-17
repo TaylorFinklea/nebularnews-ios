@@ -95,6 +95,16 @@ struct EnrichmentService: Sendable {
         )
     }
 
+    func fetchFullContent(articleId: String) async throws -> FetchContentResult {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        let result: FetchContentResult = try await api.request(
+            method: "POST",
+            path: "api/articles/\(articleId)/fetch-content"
+        )
+        return result
+    }
+
     func generateNewsBrief() async throws -> CompanionNewsBrief? {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 

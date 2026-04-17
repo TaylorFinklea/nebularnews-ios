@@ -51,6 +51,7 @@ struct CompanionArticleDetailView: View {
     @State private var showingHighlightInput = false
     @State private var highlightText = ""
     @State private var exportedMarkdown: String?
+    @State private var isFetchingContent = false
 
     var body: some View {
         Group {
@@ -105,7 +106,9 @@ struct CompanionArticleDetailView: View {
 
                     EnrichmentSection(payload: payload)
 
-                    ArticleBodyView(article: payload.article)
+                    ArticleBodyView(article: payload.article) {
+                        Task { await fetchContent() }
+                    }
 
                     // Highlights
                     if let highlights = payload.highlights, !highlights.isEmpty {
@@ -230,6 +233,18 @@ struct CompanionArticleDetailView: View {
                             Image(systemName: "folder.badge.plus")
                                 .accessibilityLabel("Add to collection")
                         }
+
+                        Button {
+                            Task { await fetchContent() }
+                        } label: {
+                            if isFetchingContent {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.down.circle")
+                                    .accessibilityLabel("Fetch full article")
+                            }
+                        }
+                        .disabled(isFetchingContent)
 
                         ShareLink(
                             item: MarkdownExporter.exportArticle(
@@ -543,6 +558,24 @@ struct CompanionArticleDetailView: View {
         }
     }
 
+    // MARK: - Full-content fetch
+
+    private func fetchContent() async {
+        isFetchingContent = true
+        defer { isFetchingContent = false }
+        do {
+            let result = try await appState.supabase.fetchFullContent(articleId: articleId)
+            payload?.article.contentHtml = result.contentHtml
+            payload?.article.contentText = result.contentText
+            payload?.article.excerpt = result.excerpt
+            payload?.article.wordCount = result.wordCount
+            payload?.article.lastFetchAttemptAt = result.lastFetchAttemptAt
+            payload?.article.lastFetchError = result.lastFetchError
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     // MARK: - Highlights
 
     private func createHighlight() async {
@@ -693,12 +726,13 @@ private struct EnrichmentSection: View {
 
 private struct ArticleBodyView: View {
     let article: CompanionArticle
+    var onFetchRequested: (() -> Void)? = nil
 
     @ViewBuilder
     var body: some View {
         if let contentHtml = article.contentHtml, !contentHtml.isEmpty {
             Section {
-                RichArticleContentView(html: contentHtml)
+                RichArticleContentView(html: contentHtml, onFetchRequested: onFetchRequested)
             }
         } else if let contentText = article.contentText, !contentText.isEmpty {
             Section {
@@ -709,6 +743,21 @@ private struct ArticleBodyView: View {
         } else if let excerpt = article.excerpt, !excerpt.isEmpty {
             Section("Excerpt") {
                 Text(excerpt)
+            }
+        } else if let onFetch = onFetchRequested {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Only a title and link came in from the feed.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        onFetch()
+                    } label: {
+                        Label("Fetch Full Article", systemImage: "arrow.down.circle")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.vertical, 4)
             }
         }
     }

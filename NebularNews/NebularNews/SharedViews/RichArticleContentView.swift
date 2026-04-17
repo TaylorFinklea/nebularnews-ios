@@ -285,6 +285,7 @@ private struct HTMLBlockParser {
 
 struct RichArticleContentView: View {
     let html: String
+    var onFetchRequested: (() -> Void)? = nil
 
     @State private var blocks: [ContentBlock]? = nil
 
@@ -406,12 +407,28 @@ struct RichArticleContentView: View {
         .padding(.vertical, 4)
     }
 
+    @ViewBuilder
     private var emptyContent: some View {
-        Text("This article didn't include readable inline text. Open it in your browser for the full version.")
-            .font(.body)
-            .foregroundStyle(.secondary)
-            .lineSpacing(4)
-            .textSelection(.enabled)
+        if let onFetch = onFetchRequested {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("The feed only delivered a title and link — no article body.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Button {
+                    onFetch()
+                } label: {
+                    Label("Fetch Full Article", systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding(.vertical, 4)
+        } else {
+            Text("This article didn't include readable inline text. Open it in your browser for the full version.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .lineSpacing(4)
+                .textSelection(.enabled)
+        }
     }
 
     // MARK: Helpers

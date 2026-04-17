@@ -121,14 +121,35 @@ struct CompanionArticle: Codable {
     let author: String?
     let publishedAt: Int?
     let fetchedAt: Int?
+    var contentHtml: String?
+    var contentText: String?
+    var excerpt: String?
+    var wordCount: Int?
+    var isRead: Int?
+    var savedAt: String?
+    // Deep-fetch tracking (populated after 0009 migration)
+    var lastFetchAttemptAt: Int?
+    var fetchAttemptCount: Int?
+    var lastFetchError: String?
+
+    var isReadBool: Bool { isRead == 1 }
+
+    var hasContent: Bool {
+        (contentHtml?.isEmpty == false) || (contentText?.isEmpty == false)
+    }
+}
+
+struct FetchContentResult: Codable {
+    let articleId: String
     let contentHtml: String?
     let contentText: String?
     let excerpt: String?
     let wordCount: Int?
-    var isRead: Int?
-    var savedAt: String?
-
-    var isReadBool: Bool { isRead == 1 }
+    let imageUrl: String?
+    let extractionMethod: String?
+    let extractionQuality: Double?
+    let lastFetchAttemptAt: Int?
+    let lastFetchError: String?
 }
 
 struct CompanionArticleSummary: Codable {

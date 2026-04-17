@@ -90,7 +90,8 @@ struct CompanionFeedsView: View {
                         }
 
                         if let mode = feed.scrapeMode, mode != "rss_only" {
-                            Label(mode == "link_target" ? "Link scraper" : "Page scraper", systemImage: "globe")
+                            let label = mode == "auto_fetch_on_empty" ? "Auto-fetch" : "Full page"
+                            Label(label, systemImage: mode == "auto_fetch_on_empty" ? "arrow.down.circle" : "globe")
                                 .font(.caption2)
                                 .foregroundStyle(.blue)
                         }
@@ -185,10 +186,10 @@ struct CompanionFeedsView: View {
         }
         .refreshable { await loadFeeds() }
         .sheet(isPresented: $showingAddFeed) {
-            CompanionAddFeedSheet { url in
+            CompanionAddFeedSheet { url, scrapeMode in
                 Task {
                     do {
-                        _ = try await appState.supabase.addFeed(url: url)
+                        _ = try await appState.supabase.addFeed(url: url, scrapeMode: scrapeMode)
                         await loadFeeds()
                     } catch {
                         errorMessage = error.localizedDescription
@@ -295,8 +296,16 @@ struct CompanionFeedsView: View {
 private struct CompanionAddFeedSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let onAdd: (String) -> Void
+    let onAdd: (String, String?) -> Void
     @State private var url = ""
+
+    private var normalized: FeedURLNormalized {
+        FeedURLNormalizer.normalize(url)
+    }
+
+    private var isEmpty: Bool {
+        url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -309,6 +318,15 @@ private struct CompanionAddFeedSheet: View {
                         #endif
                         .textContentType(.URL)
                         .autocorrectionDisabled()
+                } footer: {
+                    if let label = normalized.sourceLabel, !isEmpty {
+                        Label(label, systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.footnote)
+                    } else {
+                        Text("Paste an RSS, Atom, or source URL. Reddit, YouTube, Mastodon, and Hacker News URLs are normalized automatically.")
+                            .font(.footnote)
+                    }
                 }
             }
             .navigationTitle("Add Feed")
@@ -319,10 +337,10 @@ private struct CompanionAddFeedSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
-                        onAdd(url)
+                        onAdd(normalized.url, normalized.scrapeMode)
                         dismiss()
                     }
-                    .disabled(url.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(isEmpty)
                 }
             }
         }
@@ -449,8 +467,8 @@ private struct FeedSettingsSheet: View {
                 Section {
                     Picker("Scrape mode", selection: $scrapeMode) {
                         Text("RSS Only").tag("rss_only")
-                        Text("Full Page").tag("full_page")
-                        Text("Link Target").tag("link_target")
+                        Text("Auto-fetch when empty").tag("auto_fetch_on_empty")
+                        Text("Always fetch full page").tag("always")
                     }
 
                     if scrapeMode != "rss_only" {
@@ -459,22 +477,17 @@ private struct FeedSettingsSheet: View {
                             Text("Steel").tag("steel")
                             Text("Browserless").tag("browserless")
                         }
-
-                        Picker("Feed type", selection: $feedType) {
-                            Text("Standard").tag("standard")
-                            Text("Aggregator").tag("aggregator")
-                        }
                     }
                 } header: {
                     Text("Content Extraction")
                 } footer: {
                     switch scrapeMode {
-                    case "full_page":
-                        Text("Fetches and extracts the full article from the feed's own page.")
-                    case "link_target":
-                        Text("Follows outbound links (for aggregators like Hacker News) and extracts the target article.")
+                    case "auto_fetch_on_empty":
+                        Text("Fetches the full article when the feed only delivers a title and link — ideal for Anthropic, subreddits, and link-aggregators.")
+                    case "always":
+                        Text("Always fetches and extracts the full article even when RSS has content. Most thorough, highest cost.")
                     default:
-                        Text("Uses only the content provided in the RSS feed.")
+                        Text("Uses only the content provided in the RSS feed. Choose 'Auto-fetch when empty' if articles are showing no content.")
                     }
                 }
 
@@ -526,16 +539,8 @@ private struct FeedSettingsSheet: View {
             minScore: minScore
         )
 
-        let scrapeChanged = scrapeMode != (feed.scrapeMode ?? "rss_only")
-            || scrapeProvider != (feed.scrapeProvider ?? "")
-            || feedType != (feed.feedType ?? "standard")
-        if scrapeChanged {
-            try? await appState.supabase.updateFeedScrapeConfig(
-                feedId: feed.id,
-                scrapeMode: scrapeMode,
-                scrapeProvider: scrapeProvider.isEmpty ? nil : scrapeProvider,
-                feedType: feedType
-            )
+        if scrapeMode != (feed.scrapeMode ?? "rss_only") {
+            try? await appState.supabase.updateScrapeMode(feedId: feed.id, scrapeMode: scrapeMode)
         }
 
         onSave()

@@ -11,11 +11,12 @@ struct FeedService: Sendable {
         return feeds
     }
 
-    func addFeed(url: String) async throws -> String {
+    func addFeed(url: String, scrapeMode: String? = nil) async throws -> String {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
         struct Body: Encodable {
             let url: String
+            let scrapeMode: String?
         }
 
         struct AddFeedResponse: Decodable {
@@ -25,7 +26,7 @@ struct FeedService: Sendable {
         let response: AddFeedResponse = try await api.request(
             method: "POST",
             path: "api/feeds",
-            body: Body(url: url)
+            body: Body(url: url, scrapeMode: scrapeMode)
         )
         return response.id
     }
@@ -52,19 +53,17 @@ struct FeedService: Sendable {
         )
     }
 
-    func updateFeedScrapeConfig(feedId: String, scrapeMode: String, scrapeProvider: String?, feedType: String) async throws {
+    func updateScrapeMode(feedId: String, scrapeMode: String) async throws {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
         struct Body: Encodable {
             let scrapeMode: String
-            let scrapeProvider: String?
-            let feedType: String
         }
 
         try await api.requestVoid(
             method: "PATCH",
-            path: "api/feeds/\(feedId)/settings",
-            body: Body(scrapeMode: scrapeMode, scrapeProvider: scrapeProvider, feedType: feedType)
+            path: "api/feeds/\(feedId)",
+            body: Body(scrapeMode: scrapeMode)
         )
     }
 
