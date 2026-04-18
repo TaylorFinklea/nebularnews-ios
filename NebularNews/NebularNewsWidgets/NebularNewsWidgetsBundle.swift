@@ -1,12 +1,14 @@
-import SwiftUI
 import WidgetKit
+import SwiftUI
 
 @main
-struct NebularNewsWidgets: WidgetBundle {
+struct NebularNewsWidgetsBundle: WidgetBundle {
     var body: some Widget {
         StatsWidget()
         TopArticleWidget()
         ReadingQueueWidget()
+        #if os(iOS)
         BriefLiveActivity()
+        #endif
     }
 }

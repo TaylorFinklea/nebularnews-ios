@@ -201,7 +201,11 @@ struct ReadingQueueWidget: Widget {
         }
         .configurationDisplayName("Reading Queue")
         .description("Your top unread articles ranked by score.")
+        #if os(iOS)
         .supportedFamilies([.systemLarge, .accessoryRectangular])
+        #else
+        .supportedFamilies([.systemLarge])
+        #endif
     }
 }
 

@@ -143,7 +143,11 @@ struct StatsWidget: Widget {
         }
         .configurationDisplayName("Reading Stats")
         .description("Your unread count, new articles, and top-fit stories at a glance.")
+        #if os(iOS)
         .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryInline])
+        #else
+        .supportedFamilies([.systemSmall])
+        #endif
     }
 }
 

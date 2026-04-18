@@ -195,7 +195,11 @@ struct TopArticleWidget: Widget {
         }
         .configurationDisplayName("Top Article")
         .description("Your highest-scored unread article.")
+        #if os(iOS)
         .supportedFamilies([.systemMedium, .accessoryRectangular, .accessoryInline])
+        #else
+        .supportedFamilies([.systemMedium])
+        #endif
     }
 }
 

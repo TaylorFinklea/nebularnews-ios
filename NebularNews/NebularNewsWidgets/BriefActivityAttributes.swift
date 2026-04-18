@@ -1,3 +1,4 @@
+#if os(iOS)
 import ActivityKit
 import Foundation
 
@@ -16,3 +17,4 @@ struct BriefActivityAttributes: ActivityAttributes {
 
     let editionLabel: String
 }
+#endif
