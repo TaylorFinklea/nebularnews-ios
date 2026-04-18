@@ -9,7 +9,7 @@
 - [x] Generate news brief (24h) → works after JOIN rewrite
 - [ ] Paste `https://news.ycombinator.com` → normalizes to `https://hnrss.org/frontpage`
 - [ ] Open feed settings → change scrape mode to "Auto-fetch when empty" → save
-- [ ] Admin → Scraping Stats → data loads correctly
+- [x] Admin → Users / Feeds / AI Stats / Scraping Stats → all fixed (wrong table name, nullable title, nullable attemptedAt)
 
 ## Test M8 Reader Depth (if not yet done)
 
