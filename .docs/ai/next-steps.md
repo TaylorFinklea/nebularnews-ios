@@ -1,19 +1,15 @@
-# Next Steps (2026-04-17)
+# Next Steps (2026-04-18)
 
-## Deploy M9 Backend
+## Test M9 Deep Fetch (in progress)
 
-- [ ] Deploy Workers: `cd ~/git/nebularnews && npx wrangler deploy --env production`
-- [ ] Run migration: `npx wrangler d1 migrations apply nebular-news-prod --env production --remote`
-  - Note: binding name is `nebular-news-prod` (hyphens), not `nebularnews-prod`
-
-## Test M9 Deep Fetch
-
-- [ ] Open an Anthropic article (title-only) → tap "Fetch Full Article" → content loads
-- [ ] Tap "Summarize" on a second empty article → backend auto-fetches + summary generates
-- [ ] Paste a subreddit URL in AddFeed → detects as Subreddit, normalizes to `.rss`, shows hint
-- [ ] Paste a YouTube channel URL → normalizes to RSS feed URL
+- [x] Deploy Workers + migration 0009
+- [x] Open an Anthropic article → tap "Fetch Full Article" → content loads
+- [x] Summarize on empty article → auto-fetch + summary generates
+- [x] Paste subreddit URL → detects as Subreddit, normalizes to `.rss`, shows hint
+- [x] Generate news brief (24h) → works after JOIN rewrite
 - [ ] Paste `https://news.ycombinator.com` → normalizes to `https://hnrss.org/frontpage`
-- [ ] Open feed settings → change scrape mode to "Auto-fetch when empty" → save → next poll uses it
+- [ ] Open feed settings → change scrape mode to "Auto-fetch when empty" → save
+- [ ] Admin → Scraping Stats → data loads correctly
 
 ## Test M8 Reader Depth (if not yet done)
 
@@ -33,6 +29,7 @@
 - [ ] Quality-based retry: if `extraction_quality < 0.3`, try next provider tier
 - [ ] Retroactive backfill of existing empty articles (per-feed opt-in)
 - [ ] True non-RSS source integrations: Reddit JSON API, Mastodon REST, YouTube Data API
+- [ ] YouTube @handle → RSS resolution (requires network call to resolve channel_id)
 - [ ] Source-type dispatcher refactor in poll-feeds.ts
 
 ## M8 Deferred Polish
