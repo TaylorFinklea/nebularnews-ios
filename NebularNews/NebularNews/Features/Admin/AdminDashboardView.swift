@@ -40,6 +40,12 @@ struct AdminDashboardView: View {
                     } label: {
                         Label("System Health", systemImage: "heart.text.square")
                     }
+
+                    NavigationLink {
+                        AdminScrapingStatsView()
+                    } label: {
+                        Label("Scraping Stats", systemImage: "arrow.down.circle")
+                    }
                 }
             }
         }
