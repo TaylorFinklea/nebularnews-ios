@@ -20,7 +20,7 @@ struct AdminFetchError: Codable, Identifiable {
     let articleId: String
     let title: String?
     let error: String
-    let attemptedAt: Int
+    let attemptedAt: Int?
     let feedTitle: String?
     var id: String { articleId }
 }
@@ -81,9 +81,11 @@ struct AdminScrapingStatsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.red)
                                     .lineLimit(2)
-                                Text(formatDate(fetchError.attemptedAt))
-                                    .font(.caption2)
-                                    .foregroundStyle(.tertiary)
+                                if let at = fetchError.attemptedAt {
+                                    Text(formatDate(at))
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                }
                             }
                             .padding(.vertical, 2)
                         }
