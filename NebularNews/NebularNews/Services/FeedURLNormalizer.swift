@@ -33,9 +33,11 @@ struct FeedURLNormalizer {
         // YouTube channel or handle
         if host == "youtube.com" || host == "www.youtube.com" {
             if path.hasPrefix("/@") {
+                // @handles need a channel_id to generate a valid RSS URL, which
+                // requires a network lookup. Pass through so the feed validator
+                // surfaces a clear error rather than silently subscribing to a broken feed.
                 let handle = String(path.dropFirst(2)).components(separatedBy: "/").first ?? ""
-                let rssURL = "https://www.youtube.com/feeds/videos.xml?user=\(handle)"
-                return FeedURLNormalized(url: rssURL, scrapeMode: nil, sourceLabel: "YouTube Channel")
+                return FeedURLNormalized(url: "https://www.youtube.com/@\(handle)", scrapeMode: nil, sourceLabel: "YouTube – paste the channel RSS URL instead (youtube.com/feeds/videos.xml?channel_id=…)")
             }
             if path.hasPrefix("/channel/") {
                 let channelId = String(path.dropFirst("/channel/".count)).components(separatedBy: "/").first ?? ""

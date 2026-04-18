@@ -27,9 +27,7 @@ final class ArticleCache {
         limit: Int = 40
     ) -> [CachedArticle] {
         var descriptor = FetchDescriptor<CachedArticle>()
-        descriptor.fetchLimit = limit
 
-        // Sort by cachedAt (non-optional Date that tracks fetch order)
         switch sortOrder {
         case .newest, .score, .unreadFirst:
             descriptor.sortBy = [SortDescriptor(\CachedArticle.cachedAt, order: .reverse)]
@@ -37,81 +35,43 @@ final class ArticleCache {
             descriptor.sortBy = [SortDescriptor(\CachedArticle.cachedAt, order: .forward)]
         }
 
-        // Build predicate
-        // Build predicate based on active filters.
-        // SwiftData predicates must be constructed statically, so we branch
-        // on the filter combination rather than composing at runtime.
-        let hasSearch = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let searchTerm = query.lowercased()
+        // Keep read/score filtering in SQL; search filtering applied in memory
+        // below to avoid CoreData TERNARY predicate generation on optional fields.
         let scoreThreshold = minScore ?? 0
         let filteringScore = minScore != nil
 
-        switch (readFilter, filteringScore, hasSearch) {
-        case (.unread, false, false):
+        switch (readFilter, filteringScore) {
+        case (.unread, false):
             descriptor.predicate = #Predicate<CachedArticle> { $0.isRead == false }
-        case (.read, false, false):
+        case (.read, false):
             descriptor.predicate = #Predicate<CachedArticle> { $0.isRead == true }
-        case (.unread, true, false):
+        case (.unread, true):
             descriptor.predicate = #Predicate<CachedArticle> { article in
                 article.isRead == false && (article.score ?? 0) >= scoreThreshold
             }
-        case (.read, true, false):
+        case (.read, true):
             descriptor.predicate = #Predicate<CachedArticle> { article in
                 article.isRead == true && (article.score ?? 0) >= scoreThreshold
             }
-        case (.all, true, false):
+        case (.all, true):
             descriptor.predicate = #Predicate<CachedArticle> { article in
                 (article.score ?? 0) >= scoreThreshold
             }
-        case (.unread, false, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                article.isRead == false
-                && ((article.title ?? "").localizedStandardContains(searchTerm)
-                    || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                    || (article.sourceName ?? "").localizedStandardContains(searchTerm))
-            }
-        case (.read, false, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                article.isRead == true
-                && ((article.title ?? "").localizedStandardContains(searchTerm)
-                    || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                    || (article.sourceName ?? "").localizedStandardContains(searchTerm))
-            }
-        case (.all, false, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                (article.title ?? "").localizedStandardContains(searchTerm)
-                || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                || (article.sourceName ?? "").localizedStandardContains(searchTerm)
-            }
-        case (.unread, true, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                article.isRead == false
-                && (article.score ?? 0) >= scoreThreshold
-                && ((article.title ?? "").localizedStandardContains(searchTerm)
-                    || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                    || (article.sourceName ?? "").localizedStandardContains(searchTerm))
-            }
-        case (.read, true, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                article.isRead == true
-                && (article.score ?? 0) >= scoreThreshold
-                && ((article.title ?? "").localizedStandardContains(searchTerm)
-                    || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                    || (article.sourceName ?? "").localizedStandardContains(searchTerm))
-            }
-        case (.all, true, true):
-            descriptor.predicate = #Predicate<CachedArticle> { article in
-                (article.score ?? 0) >= scoreThreshold
-                && ((article.title ?? "").localizedStandardContains(searchTerm)
-                    || (article.excerpt ?? "").localizedStandardContains(searchTerm)
-                    || (article.sourceName ?? "").localizedStandardContains(searchTerm))
-            }
-        case (.all, false, false):
-            break // No predicate needed
+        case (.all, false):
+            break
         }
 
         do {
-            return try modelContext.fetch(descriptor)
+            var results = try modelContext.fetch(descriptor)
+            let searchTerm = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if !searchTerm.isEmpty {
+                results = results.filter { article in
+                    (article.title?.lowercased().contains(searchTerm) == true)
+                    || (article.excerpt?.lowercased().contains(searchTerm) == true)
+                    || (article.sourceName?.lowercased().contains(searchTerm) == true)
+                }
+            }
+            return Array(results.prefix(limit))
         } catch {
             logger.error("Failed to fetch cached articles: \(error, privacy: .public)")
             return []
