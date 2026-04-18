@@ -89,6 +89,11 @@ struct CompanionArticlesView: View {
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var filter = CompanionArticleFilter()
+    @State private var feedCaps: [String: Int] = [:]
+
+    private var displayArticles: [CompanionArticleListItem] {
+        PerFeedDailyCapFilter.apply(articles, caps: feedCaps)
+    }
     @State private var recentSearches: [String] = {
         UserDefaults.standard.stringArray(forKey: "companionRecentSearches") ?? []
     }()
@@ -141,7 +146,7 @@ struct CompanionArticlesView: View {
                         .listRowBackground(Color.clear)
                     }
 
-                    ForEach(articles) { article in
+                    ForEach(displayArticles) { article in
                         NavigationLink(destination: CompanionArticleDetailView(articleId: article.id)) {
                             ArticleCard(article: article)
                         }
@@ -234,6 +239,15 @@ struct CompanionArticlesView: View {
     }
 
     private func loadArticles() async {
+        // Refresh per-feed daily caps from the cached feed list (cheap; no network).
+        if let cache = appState.articleCache {
+            let pairs = cache.getCachedFeeds().compactMap { feed -> (String, Int)? in
+                guard let cap = feed.maxArticlesPerDay, cap > 0 else { return nil }
+                return (feed.id, cap)
+            }
+            feedCaps = Dictionary(uniqueKeysWithValues: pairs)
+        }
+
         // Show cached data instantly while network request is in flight
         if articles.isEmpty, let cache = appState.articleCache {
             let cached = cache.getCachedArticles(
