@@ -50,17 +50,46 @@ struct ReadingQueueProvider: TimelineProvider {
 // MARK: - Widget View
 
 struct ReadingQueueWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     var entry: ReadingQueueEntry
 
     var body: some View {
         Group {
-            if entry.articles.isEmpty {
-                emptyState
-            } else {
-                articleList
+            switch family {
+            case .accessoryRectangular:
+                accessoryRectangularBody
+            default:
+                if entry.articles.isEmpty {
+                    emptyState
+                } else {
+                    articleList
+                }
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private var accessoryRectangularBody: some View {
+        Group {
+            if let top = entry.articles.first {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Up next · \(entry.articles.count)")
+                        .font(.caption2)
+                        .widgetAccentable()
+                    Text(top.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(2)
+                        .privacySensitive()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .widgetURL(URL(string: "nebularnews://article/\(top.id)"))
+            } else {
+                Text("Queue is empty")
+                    .font(.caption)
+                    .widgetURL(URL(string: "nebularnews://today"))
+            }
+        }
     }
 
     private var articleList: some View {
@@ -172,7 +201,7 @@ struct ReadingQueueWidget: Widget {
         }
         .configurationDisplayName("Reading Queue")
         .description("Your top unread articles ranked by score.")
-        .supportedFamilies([.systemLarge])
+        .supportedFamilies([.systemLarge, .accessoryRectangular])
     }
 }
 

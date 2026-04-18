@@ -45,9 +45,40 @@ struct StatsProvider: TimelineProvider {
 // MARK: - Widget View
 
 struct StatsWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     var entry: StatsEntry
 
     var body: some View {
+        Group {
+            switch family {
+            case .accessoryCircular:
+                accessoryCircularBody
+            case .accessoryInline:
+                accessoryInlineBody
+            default:
+                homeScreenBody
+            }
+        }
+        .containerBackground(.fill.tertiary, for: .widget)
+        .widgetURL(URL(string: "nebularnews://today"))
+    }
+
+    private var accessoryCircularBody: some View {
+        VStack(spacing: 1) {
+            Text("\(entry.stats.unreadTotal)")
+                .font(.title3.bold())
+                .monospacedDigit()
+                .widgetAccentable()
+            Text("unread")
+                .font(.caption2)
+        }
+    }
+
+    private var accessoryInlineBody: some View {
+        Text("\(Image(systemName: "envelope.badge")) \(entry.stats.unreadTotal) unread")
+    }
+
+    private var homeScreenBody: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "sun.max.fill")
@@ -81,8 +112,6 @@ struct StatsWidgetView: View {
                 color: entry.stats.highFitUnread > 0 ? .green : .secondary
             )
         }
-        .containerBackground(.fill.tertiary, for: .widget)
-        .widgetURL(URL(string: "nebularnews://today"))
     }
 
     private func statRow(icon: String, label: String, value: Int, color: Color) -> some View {
@@ -114,7 +143,7 @@ struct StatsWidget: Widget {
         }
         .configurationDisplayName("Reading Stats")
         .description("Your unread count, new articles, and top-fit stories at a glance.")
-        .supportedFamilies([.systemSmall])
+        .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryInline])
     }
 }
 

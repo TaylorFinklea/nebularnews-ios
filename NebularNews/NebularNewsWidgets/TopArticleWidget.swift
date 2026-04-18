@@ -52,17 +52,63 @@ struct TopArticleProvider: TimelineProvider {
 // MARK: - Widget View
 
 struct TopArticleWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     var entry: TopArticleEntry
 
     var body: some View {
         Group {
-            if let article = entry.article {
-                articleContent(article)
-            } else {
-                emptyState
+            switch family {
+            case .accessoryRectangular:
+                accessoryRectangularBody
+            case .accessoryInline:
+                accessoryInlineBody
+            default:
+                if let article = entry.article {
+                    articleContent(article)
+                } else {
+                    emptyState
+                }
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
+    }
+
+    private var accessoryRectangularBody: some View {
+        Group {
+            if let article = entry.article {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let feedName = article.feedName {
+                        Text(feedName)
+                            .font(.caption2)
+                            .widgetAccentable()
+                    }
+                    Text(article.title)
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(2)
+                        .privacySensitive()
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .widgetURL(URL(string: "nebularnews://article/\(article.id)"))
+            } else {
+                Text("No top article")
+                    .font(.caption)
+                    .widgetURL(URL(string: "nebularnews://today"))
+            }
+        }
+    }
+
+    private var accessoryInlineBody: some View {
+        Group {
+            if let article = entry.article {
+                Text("\(Image(systemName: "newspaper")) \(article.title)")
+                    .privacySensitive()
+                    .widgetURL(URL(string: "nebularnews://article/\(article.id)"))
+            } else {
+                Text("No top article")
+                    .widgetURL(URL(string: "nebularnews://today"))
+            }
+        }
     }
 
     private func articleContent(_ article: WidgetArticle) -> some View {
@@ -149,7 +195,7 @@ struct TopArticleWidget: Widget {
         }
         .configurationDisplayName("Top Article")
         .description("Your highest-scored unread article.")
-        .supportedFamilies([.systemMedium])
+        .supportedFamilies([.systemMedium, .accessoryRectangular, .accessoryInline])
     }
 }
 

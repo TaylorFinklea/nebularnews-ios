@@ -37,6 +37,8 @@
 	<string>$(MOBILE_OAUTH_CLIENT_NAME)</string>
 	<key>MobileOAuthRedirectURI</key>
 	<string>$(MOBILE_OAUTH_REDIRECT_URI)</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIBackgroundModes</key>

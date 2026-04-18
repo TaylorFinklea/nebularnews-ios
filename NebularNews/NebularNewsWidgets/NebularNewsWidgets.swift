@@ -7,5 +7,6 @@ struct NebularNewsWidgets: WidgetBundle {
         StatsWidget()
         TopArticleWidget()
         ReadingQueueWidget()
+        BriefLiveActivity()
     }
 }

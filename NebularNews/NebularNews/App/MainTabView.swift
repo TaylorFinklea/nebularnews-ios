@@ -3,30 +3,51 @@ import SwiftUI
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
 
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
+
     @State private var companionSavedCount = 0
     @State private var showSettings = false
 
-    #if os(macOS)
-    enum Tab: String, CaseIterable {
+    enum RootSection: String, CaseIterable {
         case today, articles, discover, library
     }
 
-    @State private var selectedTab: Tab = .today
-    #endif
+    @State private var selectedTab: RootSection? = .today
 
     var body: some View {
-        #if os(macOS)
+        Group {
+            #if os(macOS)
+            splitViewBody
+            #else
+            if horizontalSizeClass == .regular {
+                splitViewBody
+            } else {
+                tabViewBody
+            }
+            #endif
+        }
+        .task {
+            await loadCompanionSavedCount()
+        }
+        .sheet(isPresented: $showSettings) {
+            settingsSheet
+        }
+    }
+
+    private var splitViewBody: some View {
         NavigationSplitView {
             sidebarContent
-            .toolbar {
-                ToolbarItem {
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gear")
+                .toolbar {
+                    ToolbarItem {
+                        Button { showSettings = true } label: {
+                            Image(systemName: "gear")
+                        }
                     }
                 }
-            }
         } detail: {
-            switch selectedTab {
+            switch selectedTab ?? .today {
             case .today:
                 CompanionTodayView(showSettings: $showSettings)
             case .articles:
@@ -37,21 +58,13 @@ struct MainTabView: View {
                 LibraryView(showSettings: $showSettings)
             }
         }
-        .task {
-            await loadCompanionSavedCount()
-        }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack {
-                ProfileView()
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { showSettings = false }
-                        }
-                    }
-            }
-            .frame(minWidth: 500, minHeight: 500)
-        }
-        #else
+        #if os(iOS)
+        .overlay { AIAssistantOverlay() }
+        #endif
+    }
+
+    #if os(iOS)
+    private var tabViewBody: some View {
         TabView {
             Tab("Today", systemImage: "sun.max") {
                 CompanionTodayView(showSettings: $showSettings)
@@ -70,40 +83,50 @@ struct MainTabView: View {
             }
             .badge(companionSavedCount)
         }
-        .task {
-            await loadCompanionSavedCount()
-        }
         .tint(.accent)
         .overlay { AIAssistantOverlay() }
-        .sheet(isPresented: $showSettings) {
-            NavigationStack {
-                ProfileView()
-                    .toolbar {
-                        ToolbarItem(placement: .platformTrailing) {
-                            Button("Done") { showSettings = false }
-                        }
-                    }
-            }
-        }
-        #endif
     }
+    #endif
 
-    #if os(macOS)
     private var sidebarContent: some View {
         List(selection: $selectedTab) {
-            Label("Today", systemImage: "sun.max")
-                .tag(Tab.today)
-            Label("Articles", systemImage: "doc.text")
-                .tag(Tab.articles)
-            Label("Discover", systemImage: "safari")
-                .tag(Tab.discover)
-            Label("Library", systemImage: "books.vertical")
-                .tag(Tab.library)
-                .badge(companionSavedCount)
+            NavigationLink(value: RootSection.today) {
+                Label("Today", systemImage: "sun.max")
+            }
+            NavigationLink(value: RootSection.articles) {
+                Label("Articles", systemImage: "doc.text")
+            }
+            NavigationLink(value: RootSection.discover) {
+                Label("Discover", systemImage: "safari")
+            }
+            NavigationLink(value: RootSection.library) {
+                Label("Library", systemImage: "books.vertical")
+            }
+            .badge(companionSavedCount)
         }
         .navigationTitle("Nebular News")
     }
-    #endif
+
+    @ViewBuilder
+    private var settingsSheet: some View {
+        NavigationStack {
+            ProfileView()
+                .toolbar {
+                    #if os(macOS)
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showSettings = false }
+                    }
+                    #else
+                    ToolbarItem(placement: .platformTrailing) {
+                        Button("Done") { showSettings = false }
+                    }
+                    #endif
+                }
+        }
+        #if os(macOS)
+        .frame(minWidth: 500, minHeight: 500)
+        #endif
+    }
 
     private func loadCompanionSavedCount() async {
         if let payload = try? await appState.supabase.fetchArticles(limit: 1, saved: true) {

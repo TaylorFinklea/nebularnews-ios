@@ -728,21 +728,26 @@ private struct ArticleBodyView: View {
     let article: CompanionArticle
     var onFetchRequested: (() -> Void)? = nil
 
+    private let readableMaxWidth: CGFloat = 720
+
     @ViewBuilder
     var body: some View {
         if let contentHtml = article.contentHtml, !contentHtml.isEmpty {
             Section {
                 RichArticleContentView(html: contentHtml, onFetchRequested: onFetchRequested)
+                    .frame(maxWidth: readableMaxWidth, alignment: .leading)
             }
         } else if let contentText = article.contentText, !contentText.isEmpty {
             Section {
                 Text(contentText)
                     .font(.body)
                     .lineSpacing(4)
+                    .frame(maxWidth: readableMaxWidth, alignment: .leading)
             }
         } else if let excerpt = article.excerpt, !excerpt.isEmpty {
             Section("Excerpt") {
                 Text(excerpt)
+                    .frame(maxWidth: readableMaxWidth, alignment: .leading)
             }
         } else if let onFetch = onFetchRequested {
             Section {
@@ -758,6 +763,7 @@ private struct ArticleBodyView: View {
                     .buttonStyle(.borderedProminent)
                 }
                 .padding(.vertical, 4)
+                .frame(maxWidth: readableMaxWidth, alignment: .leading)
             }
         }
     }

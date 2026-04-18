@@ -38,9 +38,27 @@
 - [ ] Improve highlight creation: intercept native text selection instead of paste alert
 - [ ] Highlight rendering: yellow background overlays in RichArticleContentView
 
+## M10: Platform Polish (Tier 1 code complete — needs device testing)
+
+- [x] Lock Screen widget completion: TopArticleWidget + StatsWidget + ReadingQueueWidget all support accessory families (rectangular/circular/inline as appropriate)
+- [x] iPad split-view: NavigationSplitView on regular size class, TabView on compact; reused macOS sidebar pattern
+- [x] Article reader max-width 720pt for iPad/Mac comfort
+- [x] Live Activity for brief generation: shared BriefActivityAttributes, BriefLiveActivity widget (lock + DI compact + DI expanded), BriefLiveActivityController wraps generateBrief() flow; NSSupportsLiveActivities=true added to Info.plist
+- [ ] **Device test**: install on iPad → verify split-view layout in portrait + landscape, Stage Manager
+- [ ] **Device test**: add accessory widget to Lock Screen → verify renders + privacy redaction
+- [ ] **Device test**: trigger brief generation → verify Live Activity appears in Dynamic Island + Lock Screen, dismisses after 30s
+
+## M10 Deferred / Stretch (Tier 2)
+
+- [ ] Apple Watch glance — new watchOS target with unread complication + top-5 list, Handoff to phone
+- [ ] AddFeedSheet popover-vs-sheet on iPad regular size class
+- [ ] AI assistant FAB anchor in detail pane on iPad regular (currently anchors to window edge)
+- [ ] Post-mutation widget refresh — markRead/save mutations don't currently invalidate widget cache
+- [ ] APNs Live Activity push for scheduled (cron) brief generation
+
 ## Future Milestones
 
-- **M10: Platform Polish** — iPad layout, Lock Screen widgets, Live Activities, Watch glance
+- **M11**: AI assistant direct actions (tool-calling: filter articles, navigate, apply tags) — see backlog
 
 ## Deferred
 

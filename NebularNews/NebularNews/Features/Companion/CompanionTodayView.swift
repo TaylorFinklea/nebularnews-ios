@@ -205,6 +205,12 @@ struct CompanionTodayView: View {
     private func generateBrief() async {
         isGeneratingBrief = true
         defer { isGeneratingBrief = false }
+
+        #if os(iOS)
+        let editionLabel = Calendar.current.component(.hour, from: Date()) < 12 ? "Morning Brief" : "Evening Brief"
+        let activity = BriefLiveActivityController.start(editionLabel: editionLabel)
+        #endif
+
         do {
             let brief = try await appState.supabase.generateNewsBrief()
             if let brief {
@@ -214,9 +220,23 @@ struct CompanionTodayView: View {
                     stats: payload?.stats ?? CompanionTodayStats(unreadTotal: 0, newToday: 0, highFitUnread: 0),
                     newsBrief: brief
                 )
+                #if os(iOS)
+                await BriefLiveActivityController.finish(
+                    activity: activity,
+                    firstBullet: brief.bullets.first?.text,
+                    bulletCount: brief.bullets.count
+                )
+                #endif
+            } else {
+                #if os(iOS)
+                await BriefLiveActivityController.fail(activity: activity)
+                #endif
             }
         } catch {
             errorMessage = error.localizedDescription
+            #if os(iOS)
+            await BriefLiveActivityController.fail(activity: activity)
+            #endif
         }
     }
 
