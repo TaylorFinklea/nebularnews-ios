@@ -6,6 +6,14 @@ struct AdminAIStats: Codable {
     let byProvider: [AdminProviderStat]
     let byEndpoint: [AdminEndpointStat]
     let possibleErrors7d: Int
+
+    enum CodingKeys: String, CodingKey {
+        case daily
+        case weekly
+        case byProvider = "by_provider"
+        case byEndpoint = "by_endpoint"
+        case possibleErrors7d = "possible_errors_7d"
+    }
 }
 
 struct AdminTokenBucket: Codable {

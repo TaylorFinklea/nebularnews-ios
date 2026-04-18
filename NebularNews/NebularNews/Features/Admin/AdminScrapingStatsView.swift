@@ -8,6 +8,16 @@ struct AdminScrapingStats: Codable {
     let avgExtractionQuality24h: Double?
     let byScrapeMode: [AdminScrapeModeCount]
     let recentErrors: [AdminFetchError]
+
+    enum CodingKeys: String, CodingKey {
+        case fetched1h = "fetched_1h"
+        case fetched24h = "fetched_24h"
+        case onCooldown = "on_cooldown"
+        case totalWithErrors = "total_with_errors"
+        case avgExtractionQuality24h = "avg_extraction_quality_24h"
+        case byScrapeMode = "by_scrape_mode"
+        case recentErrors = "recent_errors"
+    }
 }
 
 struct AdminScrapeModeCount: Codable, Identifiable {
