@@ -245,11 +245,8 @@ struct CompanionTodayView: View {
         defer { isLoading = false }
         do {
             let result = try await appState.supabase.fetchToday()
-            payload = result
-            errorMessage = ""
-            await CompanionCache.shared.store(result, category: .today)
 
-            // Cache today's articles in SwiftData for offline access
+            // Cache today's articles in SwiftData for offline access (uncapped — cache mirrors server)
             if let cache = appState.articleCache {
                 var todayArticles: [CompanionArticleListItem] = []
                 if let hero = result.hero { todayArticles.append(hero) }
@@ -259,16 +256,38 @@ struct CompanionTodayView: View {
                 }
             }
 
-            // Update Home Screen widgets with fresh data
-            WidgetDataWriter.updateFromToday(
-                stats: result.stats,
+            // Apply per-feed daily caps to upNext (hero is the editorial pick, never capped).
+            let cappedUpNext = applyFeedCaps(to: result.upNext)
+            let cappedResult = CompanionTodayPayload(
                 hero: result.hero,
-                upNext: result.upNext
+                upNext: cappedUpNext,
+                stats: result.stats,
+                newsBrief: result.newsBrief
+            )
+            payload = cappedResult
+            errorMessage = ""
+            await CompanionCache.shared.store(cappedResult, category: .today)
+
+            // Update Home Screen widgets with capped data so widgets respect the cap too
+            WidgetDataWriter.updateFromToday(
+                stats: cappedResult.stats,
+                hero: cappedResult.hero,
+                upNext: cappedResult.upNext
             )
             pushAssistantContext()
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func applyFeedCaps(to articles: [CompanionArticleListItem]) -> [CompanionArticleListItem] {
+        guard let cache = appState.articleCache else { return articles }
+        let pairs = cache.getCachedFeeds().compactMap { feed -> (String, Int)? in
+            guard let cap = feed.maxArticlesPerDay, cap > 0 else { return nil }
+            return (feed.id, cap)
+        }
+        let caps = Dictionary(uniqueKeysWithValues: pairs)
+        return PerFeedDailyCapFilter.apply(articles, caps: caps)
     }
 
     private func pushAssistantContext() {

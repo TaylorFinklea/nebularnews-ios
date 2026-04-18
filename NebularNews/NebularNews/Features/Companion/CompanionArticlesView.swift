@@ -355,7 +355,7 @@ struct CompanionArticlesView: View {
     }
 
     private func pushAssistantContext() {
-        let refs: [AIArticleRef] = articles.prefix(10).map { a in
+        let refs: [AIArticleRef] = displayArticles.prefix(10).map { a in
             AIArticleRef(
                 id: a.id, title: a.title ?? "Untitled",
                 score: a.score, source: a.sourceName,
