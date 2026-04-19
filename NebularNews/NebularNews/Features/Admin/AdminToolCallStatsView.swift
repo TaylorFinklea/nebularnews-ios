@@ -7,15 +7,6 @@ struct AdminToolCallStats: Codable {
     let clientCalls: Int
     let messagesWithTools: Int
     let byTool: [AdminToolUsage]
-
-    enum CodingKeys: String, CodingKey {
-        case windowDays = "window_days"
-        case totalCalls = "total_calls"
-        case serverCalls = "server_calls"
-        case clientCalls = "client_calls"
-        case messagesWithTools = "messages_with_tools"
-        case byTool = "by_tool"
-    }
 }
 
 struct AdminToolUsage: Codable, Identifiable {
@@ -27,12 +18,6 @@ struct AdminToolUsage: Codable, Identifiable {
     let lastAt: Int
 
     var id: String { name }
-
-    enum CodingKeys: String, CodingKey {
-        case name, count, succeeded, failed
-        case successRate = "success_rate"
-        case lastAt = "last_at"
-    }
 }
 
 struct AdminToolCallStatsView: View {

@@ -119,7 +119,18 @@ final class StreamingChatService: Sendable {
         let httpResponse = response as! HTTPURLResponse
 
         if httpResponse.statusCode == 401 { throw APIError.unauthorized }
-        if httpResponse.statusCode >= 400 { throw APIError.serverError(httpResponse.statusCode, "HTTP \(httpResponse.statusCode)") }
+        if httpResponse.statusCode >= 400 {
+            // Drain the body — backend emits a JSON envelope with the real error.
+            var bodyText = ""
+            for try await line in bytes.lines { bodyText += line }
+            struct ErrShape: Decodable { struct E: Decodable { let message: String? }; let error: E? }
+            if let data = bodyText.data(using: .utf8),
+               let parsed = try? JSONDecoder().decode(ErrShape.self, from: data),
+               let msg = parsed.error?.message, !msg.isEmpty {
+                throw APIError.serverError(httpResponse.statusCode, msg)
+            }
+            throw APIError.serverError(httpResponse.statusCode, bodyText.isEmpty ? "HTTP \(httpResponse.statusCode)" : bodyText)
+        }
 
         for try await line in bytes.lines {
             if Task.isCancelled { break }

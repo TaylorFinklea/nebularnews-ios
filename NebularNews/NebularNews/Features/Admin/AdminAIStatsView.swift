@@ -6,14 +6,9 @@ struct AdminAIStats: Codable {
     let byProvider: [AdminProviderStat]
     let byEndpoint: [AdminEndpointStat]
     let possibleErrors7d: Int
-
-    enum CodingKeys: String, CodingKey {
-        case daily
-        case weekly
-        case byProvider = "by_provider"
-        case byEndpoint = "by_endpoint"
-        case possibleErrors7d = "possible_errors_7d"
-    }
+    // No explicit CodingKeys: the APIClient decoder uses .convertFromSnakeCase,
+    // which applies the snake→camel transformation before lookup. Explicit
+    // CodingKeys with snake_case rawValues would fight that strategy and fail.
 }
 
 struct AdminTokenBucket: Codable {
