@@ -5,13 +5,20 @@ import Foundation
 enum AssistantContentSegment: Identifiable {
     case text(String)
     case articleCard(id: String, title: String)
-    case toolResult(name: String, summary: String, succeeded: Bool)
+    case toolResult(name: String, summary: String, succeeded: Bool, undo: UndoPayload?)
+
+    /// Pair of (inverse-tool name, base64-encoded JSON args). When present,
+    /// the chip renders an Undo button that POSTs to /chat/undo-tool.
+    struct UndoPayload: Equatable, Hashable {
+        let tool: String
+        let argsB64: String
+    }
 
     var id: String {
         switch self {
         case .text(let t): return "text-\(t.prefix(20).hashValue)"
         case .articleCard(let id, _): return "card-\(id)"
-        case .toolResult(let name, let summary, _): return "tool-\(name)-\(summary.hashValue)"
+        case .toolResult(let name, let summary, _, _): return "tool-\(name)-\(summary.hashValue)"
         }
     }
 }
@@ -40,13 +47,22 @@ enum AssistantMessageParser {
             let markerContent = nsContent.substring(with: match.range)
             // Strip leading [[ and trailing ]]
             let inner = String(markerContent.dropFirst(2).dropLast(2))
-            let parts = inner.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+            // Tool markers can have 4 or 6 colon-separated parts:
+            //   tool:name:summary:succeeded
+            //   tool:name:summary:succeeded:undoTool:base64Args
+            let parts = inner.split(separator: ":", maxSplits: 5, omittingEmptySubsequences: false).map(String.init)
 
             if parts.count >= 3, parts[0] == "article" {
-                segments.append(.articleCard(id: parts[1], title: parts[2]))
-            } else if parts.count == 4, parts[0] == "tool" {
+                // Article cards use maxSplits=3 semantics; rejoin in case title has colons.
+                let title = parts.count > 3 ? parts[2...].joined(separator: ":") : parts[2]
+                segments.append(.articleCard(id: parts[1], title: title))
+            } else if parts.count >= 4, parts[0] == "tool" {
                 let succeeded = parts[3] == "1"
-                segments.append(.toolResult(name: parts[1], summary: parts[2], succeeded: succeeded))
+                var undo: AssistantContentSegment.UndoPayload? = nil
+                if parts.count >= 6, !parts[4].isEmpty {
+                    undo = .init(tool: parts[4], argsB64: parts[5])
+                }
+                segments.append(.toolResult(name: parts[1], summary: parts[2], succeeded: succeeded, undo: undo))
             }
 
             lastEnd = match.range.location + match.range.length
@@ -61,11 +77,21 @@ enum AssistantMessageParser {
     }
 
     /// Build the inline marker a coordinator injects when a tool result arrives.
-    static func toolMarker(name: String, summary: String, succeeded: Bool) -> String {
-        // Strip colons from name/summary so our split logic stays sane.
+    /// Optional undo payload encodes as `:undoTool:base64Args` appended.
+    static func toolMarker(
+        name: String,
+        summary: String,
+        succeeded: Bool,
+        undoTool: String? = nil,
+        undoArgsB64: String? = nil
+    ) -> String {
         let safeName = name.replacingOccurrences(of: ":", with: "-")
         let safeSummary = summary.replacingOccurrences(of: ":", with: "-")
-        return "\n[[tool:\(safeName):\(safeSummary):\(succeeded ? "1" : "0")]]\n"
+        let succ = succeeded ? "1" : "0"
+        if let undoTool, !undoTool.isEmpty, let undoArgsB64, !undoArgsB64.isEmpty {
+            return "\n[[tool:\(safeName):\(safeSummary):\(succ):\(undoTool):\(undoArgsB64)]]\n"
+        }
+        return "\n[[tool:\(safeName):\(safeSummary):\(succ)]]\n"
     }
 
     /// Extract follow-up suggestions (lines starting with >>).

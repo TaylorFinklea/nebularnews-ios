@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Renders an assistant message with parsed article card references.
 struct AssistantChatBubble: View {
+    @Environment(AIAssistantCoordinator.self) private var coordinator
     let message: CompanionChatMessage
     var onArticleTap: ((String) -> Void)?
 
@@ -89,7 +90,7 @@ struct AssistantChatBubble: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
-        case .toolResult(_, let summary, let succeeded):
+        case .toolResult(_, let summary, let succeeded, let undo):
             HStack(spacing: 6) {
                 Image(systemName: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .font(.caption)
@@ -97,6 +98,17 @@ struct AssistantChatBubble: View {
                 Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let undo, succeeded {
+                    Button {
+                        Task { await coordinator.undoTool(tool: undo.tool, argsB64: undo.argsB64) }
+                    } label: {
+                        Text("Undo")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.blue)
+                    .padding(.leading, 4)
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)

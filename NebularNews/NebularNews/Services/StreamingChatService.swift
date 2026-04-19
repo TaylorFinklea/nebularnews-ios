@@ -16,7 +16,9 @@ final class StreamingChatService: Sendable {
         case done(content: String, usage: TokenUsage)
         case error(String)
         /// Server-executed tool — backend already applied the effect; show a chip.
-        case toolServerResult(name: String, summary: String, succeeded: Bool)
+        /// `undo` carries the inverse tool name + JSON args (base64-encoded) when
+        /// the mutation is reversible.
+        case toolServerResult(name: String, summary: String, succeeded: Bool, undoTool: String?, undoArgsB64: String?)
         /// Client-executed tool — iOS must dispatch locally.
         case toolClientCall(name: String, args: [String: AnyCodable])
     }
@@ -137,10 +139,20 @@ final class StreamingChatService: Sendable {
                 case "error":
                     continuation.yield(.error(event.error ?? "Unknown error"))
                 case "tool_call_server":
+                    let undoTool = event.undo?.tool
+                    // Encode undo args as JSON → base64 so we can round-trip verbatim
+                    // when the user taps Undo (POST /chat/undo-tool with the same bag).
+                    var undoArgsB64: String? = nil
+                    if let undoArgs = event.undo?.args,
+                       let data = try? JSONEncoder().encode(undoArgs) {
+                        undoArgsB64 = data.base64EncodedString()
+                    }
                     continuation.yield(.toolServerResult(
                         name: event.name ?? "unknown",
                         summary: event.summary ?? event.name ?? "",
-                        succeeded: event.succeeded ?? true
+                        succeeded: event.succeeded ?? true,
+                        undoTool: undoTool,
+                        undoArgsB64: undoArgsB64
                     ))
                 case "tool_call_client":
                     continuation.yield(.toolClientCall(
@@ -267,6 +279,12 @@ private struct SSEEvent: Decodable {
     var summary: String?
     var succeeded: Bool?
     var args: [String: AnyCodable]?
+    var undo: SSEUndoPayload?
+}
+
+struct SSEUndoPayload: Decodable, Sendable {
+    let tool: String
+    let args: [String: AnyCodable]
 }
 
 private struct SSEUsage: Decodable {
