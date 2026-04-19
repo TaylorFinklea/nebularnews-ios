@@ -77,13 +77,14 @@
 
 ## M11 Deferred / Stretch (Tier 2)
 
-- [ ] Confirm-before-mutate sheet for destructive actions (mark_articles_read >5 items, pause_feed, unsubscribe)
-- [ ] Tool-call analytics in Admin dashboard (reads `chat_messages.tool_calls_json`)
-- [ ] `subscribe_to_feed` server tool — needs server-side FeedURLNormalizer
+- [x] Tool-call analytics in Admin dashboard — `GET /admin/tool-call-stats` + `AdminToolCallStatsView` (7-day totals + per-tool success rates)
+- [x] `subscribe_to_feed` server tool — ports FeedURLNormalizer to TypeScript; guards YouTube @handles
+- [x] AI-applied filter banner — purple "AI applied filter · Reset" strip in CompanionArticlesView
+- [x] Assistant system prompt updated with tool-use guardrails (don't invent ids, don't narrate over chips)
+- [ ] Confirm-before-mutate sheet OR undo-chip for destructive actions (mark_articles_read >5, pause_feed, unsubscribe) — pick one approach; undo-chip recommended for lower friction
 - [ ] On-device FoundationModels tool-calling when Apple Intelligence supports it
 - [ ] Multi-step planner mode using extended thinking / reasoning models
 - [ ] Voice input → tool call via SiriKit / AppIntents
-- [ ] AI-applied filter banner ("AI applied filter: unread + tag: tech · Reset?")
 
 ## Future Milestones
 
