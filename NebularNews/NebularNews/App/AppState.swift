@@ -48,6 +48,11 @@ final class AppState {
     /// Pending filter snapshot for the Articles tab.
     var pendingArticlesFilter: PendingArticlesFilter?
 
+    /// Human-readable description of the most recent AI-applied filter.
+    /// CompanionArticlesView surfaces this as a dismissible banner so the user
+    /// knows why their view state changed. Cleared on reset or tab switch.
+    var aiAppliedFilterDescription: String?
+
     /// Flag: the next render of CompanionTodayView should trigger brief generation.
     var pendingBriefGeneration: Bool = false
 

@@ -130,6 +130,33 @@ struct CompanionArticlesView: View {
                     }
                 }
 
+                if let aiDescription = appState.aiAppliedFilterDescription {
+                    Section {
+                        HStack(spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .font(.caption)
+                                .foregroundStyle(.purple)
+                            Text("AI applied filter — \(aiDescription)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Reset") {
+                                filter = CompanionArticleFilter()
+                                query = ""
+                                appState.aiAppliedFilterDescription = nil
+                            }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.purple)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(Color.purple.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+                        .listRowInsets(.init(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .listRowBackground(Color.clear)
+                    }
+                }
+
                 Section {
                     CompanionFilterBar(filter: $filter)
                         .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))

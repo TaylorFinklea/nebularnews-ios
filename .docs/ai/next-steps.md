@@ -56,9 +56,38 @@
 - [ ] Post-mutation widget refresh — markRead/save mutations don't currently invalidate widget cache
 - [ ] APNs Live Activity push for scheduled (cron) brief generation
 
+## M11: AI Assistant Direct Actions (Tier 1 code complete — needs device testing)
+
+- [x] Migration 0010: `chat_messages.tool_calls_json` column (applied to production D1)
+- [x] Backend: `runChatWithTools()` for OpenAI + Anthropic native tool-calling with normalized `RunChatToolResult` union
+- [x] Backend: `src/lib/chat-tools.ts` registry — 9 server-executed tools (4 data reads reusing MCP handlers + 5 mutations: mark_articles_read / set_article_reaction / apply_tag_to_article / set_feed_max_per_day / pause_feed) + 4 client-executed tools (open_article / navigate_to_tab / set_articles_filter / generate_brief_now)
+- [x] Backend: `/chat/assistant` runs max-4-round tool loop; emits `tool_call_server` + `tool_call_client` SSE events; persists tool calls to `tool_calls_json`
+- [x] Backend: assistant system prompt updated with tool usage guidance
+- [x] iOS: `AssistantContentSegment.toolResult` + parser for `[[tool:name:summary:1|0]]` inline markers; chip rendering in `AssistantChatBubble`
+- [x] iOS: `StreamingChatService` parses new SSE event types into `ChatDelta.toolServerResult` / `.toolClientCall`
+- [x] iOS: `AssistantActionDispatcher` maps client tools to AppState mutations + DeepLinkRouter
+- [x] iOS: AppState `pendingTabSwitch` / `pendingArticlesFilter` / `pendingBriefGeneration` bindings observed by MainTabView / CompanionArticlesView / CompanionTodayView
+- [x] iOS + macOS builds clean. Backend deployed (325c6049).
+- [ ] **Device test**: ask AI to mark articles read → chip appears, articles flip to read in list
+- [ ] **Device test**: ask AI to open an article → detail view pushes
+- [ ] **Device test**: ask AI to filter articles → filter bar updates, list refreshes
+- [ ] **Device test**: ask AI to tag an article → tag appears in article detail
+- [ ] **Device test**: ask AI to pause/cap a noisy feed → feed settings update
+- [ ] **Device test**: try a prompt that should require no tools → no spurious tool calls
+
+## M11 Deferred / Stretch (Tier 2)
+
+- [ ] Confirm-before-mutate sheet for destructive actions (mark_articles_read >5 items, pause_feed, unsubscribe)
+- [ ] Tool-call analytics in Admin dashboard (reads `chat_messages.tool_calls_json`)
+- [ ] `subscribe_to_feed` server tool — needs server-side FeedURLNormalizer
+- [ ] On-device FoundationModels tool-calling when Apple Intelligence supports it
+- [ ] Multi-step planner mode using extended thinking / reasoning models
+- [ ] Voice input → tool call via SiriKit / AppIntents
+- [ ] AI-applied filter banner ("AI applied filter: unread + tag: tech · Reset?")
+
 ## Future Milestones
 
-- **M11**: AI assistant direct actions (tool-calling: filter articles, navigate, apply tags) — see backlog
+- **M12**: TBD — next major theme to be scoped (candidates: watchOS app, RevenueCat/receipt validation, timezone-aware briefs, offline mutation queue for tags/saves)
 
 ## Deferred
 

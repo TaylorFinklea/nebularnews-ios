@@ -46,6 +46,7 @@ enum AssistantActionDispatcher {
                 query: args["query"]?.stringValue
             )
             appState.pendingArticlesFilter = filter
+            appState.aiAppliedFilterDescription = describeFilter(filter)
             appState.pendingTabSwitch = "articles"
             return .init(summary: "Applied articles filter", succeeded: true)
 
@@ -58,5 +59,14 @@ enum AssistantActionDispatcher {
             logger.warning("Unknown client tool: \(toolName)")
             return .init(summary: "Unknown action: \(toolName)", succeeded: false)
         }
+    }
+
+    private static func describeFilter(_ filter: AppState.PendingArticlesFilter) -> String {
+        var parts: [String] = []
+        if let read = filter.read { parts.append(read) }
+        if let minScore = filter.minScore, minScore > 0 { parts.append("score ≥ \(minScore)") }
+        if let tag = filter.tag { parts.append("tag: \(tag)") }
+        if let q = filter.query, !q.isEmpty { parts.append("\"\(q)\"") }
+        return parts.isEmpty ? "all articles" : parts.joined(separator: " · ")
     }
 }
