@@ -46,6 +46,12 @@ struct AdminDashboardView: View {
                     } label: {
                         Label("Scraping Stats", systemImage: "arrow.down.circle")
                     }
+
+                    NavigationLink {
+                        AdminToolCallStatsView()
+                    } label: {
+                        Label("Tool Calls", systemImage: "sparkles.rectangle.stack")
+                    }
                 }
             }
         }
