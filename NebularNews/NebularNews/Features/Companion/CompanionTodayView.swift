@@ -198,8 +198,19 @@ struct CompanionTodayView: View {
                     deepLinkArticleId = articleId
                     deepLinkRouter.clearPendingArticle()
                 }
+                // Handle AI-triggered brief generation that was queued before we mounted
+                observePendingBriefGeneration(appState.pendingBriefGeneration)
+            }
+            .onChange(of: appState.pendingBriefGeneration) { _, newValue in
+                observePendingBriefGeneration(newValue)
             }
         }
+    }
+
+    private func observePendingBriefGeneration(_ newValue: Bool) {
+        guard newValue else { return }
+        appState.pendingBriefGeneration = false
+        Task { await generateBrief() }
     }
 
     private func generateBrief() async {

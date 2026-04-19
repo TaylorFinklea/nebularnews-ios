@@ -4,6 +4,8 @@ import SwiftUI
 /// Applied as an overlay on `MainTabView`.
 struct AIAssistantOverlay: View {
     @Environment(AIAssistantCoordinator.self) private var coordinator
+    @Environment(AppState.self) private var appState
+    @Environment(DeepLinkRouter.self) private var deepLinkRouter
 
     var body: some View {
         @Bindable var coordinator = coordinator
@@ -39,6 +41,19 @@ struct AIAssistantOverlay: View {
                 .presentationDetents([.fraction(1.0/3.0), .medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackgroundInteraction(.enabled(upThrough: .fraction(1.0/3.0)))
+        }
+        .onAppear {
+            // Wire the client-side tool dispatcher — the coordinator itself
+            // doesn't depend on AppState / DeepLinkRouter.
+            coordinator.clientToolHandler = { [appState, deepLinkRouter] name, args in
+                let result = AssistantActionDispatcher.dispatch(
+                    toolName: name,
+                    args: args,
+                    appState: appState,
+                    deepLinkRouter: deepLinkRouter
+                )
+                return (summary: result.summary, succeeded: result.succeeded)
+            }
         }
     }
 }

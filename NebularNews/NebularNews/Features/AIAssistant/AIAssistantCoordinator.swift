@@ -34,6 +34,10 @@ final class AIAssistantCoordinator {
 
     var recentThreads: [AssistantThreadSummary] = []
 
+    /// Injected by the overlay view; handles client-side tool calls.
+    /// Returns a (summary, succeeded) pair for confirmation-chip rendering.
+    var clientToolHandler: ((String, [String: AnyCodable]) -> (summary: String, succeeded: Bool))?
+
     private let logger = Logger(subsystem: "com.nebularnews", category: "AIAssistant")
 
     // MARK: - Context Management
@@ -87,7 +91,22 @@ final class AIAssistantCoordinator {
                 finalContent = content
             case .error(let msg):
                 errorMessage = msg
+            case .toolServerResult(let name, let summary, let succeeded):
+                // Backend already ran the tool — render as a confirmation chip inline.
+                streamingContent += AssistantMessageParser.toolMarker(name: name, summary: summary, succeeded: succeeded)
+            case .toolClientCall(let name, let args):
+                // Dispatch locally and render the result as a chip.
+                let result = clientToolHandler?(name, args) ?? (summary: "Unhandled action: \(name)", succeeded: false)
+                streamingContent += AssistantMessageParser.toolMarker(name: name, summary: result.summary, succeeded: result.succeeded)
             }
+        }
+
+        // The backend emits tool chips via SSE events *in addition to* including
+        // them in the final `done` payload. Keep the locally-accumulated
+        // streamingContent as the source of truth so the UI matches what it just
+        // watched stream in.
+        if !streamingContent.isEmpty && !finalContent.contains("[[tool:") {
+            finalContent = streamingContent
         }
 
         isStreaming = false

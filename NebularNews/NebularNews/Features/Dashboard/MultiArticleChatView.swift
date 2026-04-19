@@ -164,6 +164,9 @@ struct MultiArticleChatView: View {
                 finalContent = content
             case .error(let msg):
                 errorMessage = msg
+            case .toolServerResult, .toolClientCall:
+                // Multi-article chat doesn't use tool calling — ignore.
+                break
             }
         }
 

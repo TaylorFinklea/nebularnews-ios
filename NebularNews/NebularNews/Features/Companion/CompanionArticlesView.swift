@@ -230,6 +230,9 @@ struct CompanionArticlesView: View {
             }
             .onChange(of: total) { pushAssistantContext() }
             .onAppear { pushAssistantContext() }
+            .onChange(of: appState.pendingArticlesFilter) { _, newValue in
+                applyPendingFilter(newValue)
+            }
             .refreshable {
                 try? await appState.supabase.triggerPull()
                 try? await Task.sleep(for: .seconds(2))
@@ -352,6 +355,19 @@ struct CompanionArticlesView: View {
         recentSearches.insert(trimmed, at: 0)
         if recentSearches.count > 10 { recentSearches = Array(recentSearches.prefix(10)) }
         UserDefaults.standard.set(recentSearches, forKey: "companionRecentSearches")
+    }
+
+    private func applyPendingFilter(_ pending: AppState.PendingArticlesFilter?) {
+        guard let pending else { return }
+        if let read = pending.read, let parsed = CompanionReadFilter(rawValue: read) {
+            filter.readFilter = parsed
+        }
+        if let minScore = pending.minScore { filter.minScore = minScore }
+        if let sort = pending.sort, let parsed = CompanionSortOrder(rawValue: sort) {
+            filter.sortOrder = parsed
+        }
+        if let q = pending.query { query = q }
+        appState.pendingArticlesFilter = nil
     }
 
     private func pushAssistantContext() {

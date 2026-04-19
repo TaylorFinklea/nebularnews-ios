@@ -34,6 +34,34 @@ final class AppState {
     /// Whether the user has an active Supabase session.
     private(set) var hasSession: Bool = false
 
+    // MARK: - AI assistant cross-view actions (M11)
+    //
+    // The floating AI assistant can request the app to change view state
+    // (switch tab, apply filter, trigger brief generation). Those actions
+    // are "posted" here as pending bindings; the relevant view observes the
+    // field, applies it on next render, and calls the clear method below.
+
+    /// Pending tab switch requested by the AI assistant.
+    /// Observed by the root view; cleared after read.
+    var pendingTabSwitch: String?
+
+    /// Pending filter snapshot for the Articles tab.
+    var pendingArticlesFilter: PendingArticlesFilter?
+
+    /// Flag: the next render of CompanionTodayView should trigger brief generation.
+    var pendingBriefGeneration: Bool = false
+
+    /// Flag: the next render of CompanionArticleDetailView for this article id should open it.
+    var pendingArticleOpen: String?
+
+    struct PendingArticlesFilter: Equatable {
+        var read: String?      // "unread" | "read" | "all"
+        var minScore: Int?
+        var sort: String?      // "score" | "fetched"
+        var tag: String?
+        var query: String?
+    }
+
     var hasCompletedOnboarding: Bool {
         didSet {
             defaults.set(hasCompletedOnboarding, forKey: DefaultsKey.hasCompletedOnboarding)

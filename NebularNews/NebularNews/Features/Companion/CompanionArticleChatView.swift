@@ -238,6 +238,9 @@ struct CompanionArticleChatView: View {
                 finalContent = content
             case .error(let msg):
                 errorMessage = msg
+            case .toolServerResult, .toolClientCall:
+                // Article chat doesn't use tool calling — ignore.
+                break
             }
         }
 

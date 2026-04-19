@@ -89,6 +89,19 @@ struct AssistantChatBubble: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
             .buttonStyle(.plain)
+        case .toolResult(_, let summary, let succeeded):
+            HStack(spacing: 6) {
+                Image(systemName: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(succeeded ? .green : .orange)
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background((succeeded ? Color.green : Color.orange).opacity(0.1))
+            .clipShape(Capsule())
         }
     }
 }

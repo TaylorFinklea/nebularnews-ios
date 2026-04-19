@@ -34,6 +34,11 @@ struct MainTabView: View {
         .sheet(isPresented: $showSettings) {
             settingsSheet
         }
+        .onChange(of: appState.pendingTabSwitch) { _, newValue in
+            guard let raw = newValue, let target = RootSection(rawValue: raw) else { return }
+            selectedTab = target
+            appState.pendingTabSwitch = nil
+        }
     }
 
     private var splitViewBody: some View {
