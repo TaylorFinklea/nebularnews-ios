@@ -209,11 +209,10 @@ struct ProfileView: View {
                 Section {
                     Toggle("News brief", isOn: newsBriefEnabledBinding(settings))
                     if settings.newsBriefConfig.enabled {
-                        HStack {
-                            Text("Timezone")
-                            Spacer()
-                            Text(settings.newsBriefConfig.timezone)
-                                .foregroundStyle(.secondary)
+                        Picker("Timezone", selection: timezoneBinding(settings)) {
+                            ForEach(BriefTimezoneOptions.all, id: \.self) { id in
+                                Text(BriefTimezoneOptions.label(for: id)).tag(id)
+                            }
                         }
                         HStack {
                             Text("Morning")
@@ -499,6 +498,13 @@ struct ProfileView: View {
         Binding(
             get: { current.newsBriefConfig.eveningTime },
             set: { val in save { $0.newsBriefConfig.eveningTime = val } }
+        )
+    }
+
+    private func timezoneBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
+        Binding(
+            get: { current.newsBriefConfig.timezone },
+            set: { val in save { $0.newsBriefConfig.timezone = val } }
         )
     }
 

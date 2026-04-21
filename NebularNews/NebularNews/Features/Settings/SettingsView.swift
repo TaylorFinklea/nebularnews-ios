@@ -89,6 +89,11 @@ struct SettingsView: View {
                 // MARK: - News Brief
                 Section {
                     Toggle("Enabled", isOn: newsBriefEnabledBinding(settings))
+                    Picker("Timezone", selection: timezoneBinding(settings)) {
+                        ForEach(BriefTimezoneOptions.all, id: \.self) { id in
+                            Text(BriefTimezoneOptions.label(for: id)).tag(id)
+                        }
+                    }
                     HStack {
                         Text("Morning")
                         Spacer()
@@ -106,7 +111,18 @@ struct SettingsView: View {
                 } header: {
                     Label("News Brief", systemImage: "newspaper")
                 } footer: {
-                    Text("Notification digests are sent at these times. Use HH:mm format.")
+                    Text("Notification digests fire at these local times in the selected timezone.")
+                }
+                .onAppear {
+                    // Soft default: if the stored timezone is the baked-in UTC
+                    // default but the device is somewhere else, nudge to the
+                    // device zone so the cron fires at local time by default.
+                    if settings.newsBriefConfig.timezone == "UTC" {
+                        let device = TimeZone.current.identifier
+                        if device != "UTC" {
+                            save { $0.newsBriefConfig.timezone = device }
+                        }
+                    }
                 }
             }
 
@@ -216,6 +232,13 @@ struct SettingsView: View {
         Binding(
             get: { current.newsBriefConfig.eveningTime },
             set: { val in save { $0.newsBriefConfig.eveningTime = val } }
+        )
+    }
+
+    private func timezoneBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
+        Binding(
+            get: { current.newsBriefConfig.timezone },
+            set: { val in save { $0.newsBriefConfig.timezone = val } }
         )
     }
 

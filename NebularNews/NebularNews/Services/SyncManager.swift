@@ -252,6 +252,7 @@ final class SyncManager {
         } else {
             do {
                 try await supabase.setRead(articleId: articleId, isRead: isRead)
+                reloadWidgetTimelines()
             } catch {
                 queueAction(type: "read", articleId: articleId, payload: ReadPayload(isRead: isRead))
             }
@@ -267,7 +268,9 @@ final class SyncManager {
             return SaveResponse(articleId: articleId, saved: saved, savedAt: saved ? Date().ISO8601Format() : nil)
         } else {
             do {
-                return try await supabase.saveArticle(id: articleId, saved: saved)
+                let result = try await supabase.saveArticle(id: articleId, saved: saved)
+                reloadWidgetTimelines()
+                return result
             } catch {
                 queueAction(type: "save", articleId: articleId, payload: SavePayload(saved: saved))
                 return SaveResponse(articleId: articleId, saved: saved, savedAt: saved ? Date().ISO8601Format() : nil)
@@ -284,7 +287,9 @@ final class SyncManager {
             return ReactionResponse(articleId: articleId, value: value, createdAt: nil, reasonCodes: reasonCodes)
         } else {
             do {
-                return try await supabase.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
+                let result = try await supabase.setReaction(articleId: articleId, value: value, reasonCodes: reasonCodes)
+                reloadWidgetTimelines()
+                return result
             } catch {
                 queueAction(type: "reaction", articleId: articleId, payload: ReactionPayload(value: value, reasonCodes: reasonCodes))
                 return ReactionResponse(articleId: articleId, value: value, createdAt: nil, reasonCodes: reasonCodes)
