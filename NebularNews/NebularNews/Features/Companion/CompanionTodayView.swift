@@ -13,6 +13,8 @@ struct CompanionTodayView: View {
     @State private var isLoading = false
     @State private var isGeneratingBrief = false
     @State private var deepLinkArticleId: String?
+    @State private var showBriefHistory = false
+    @State private var deepLinkBriefId: String?
 
     var body: some View {
         NavigationStack {
@@ -163,13 +165,26 @@ struct CompanionTodayView: View {
             .toolbar {
                 #if os(iOS)
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showBriefHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                        .accessibilityLabel("Brief history")
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
                 }
                 #else
                 ToolbarItem(placement: .primaryAction) {
+                    Button { showBriefHistory = true } label: { Image(systemName: "clock.arrow.circlepath") }
+                }
+                ToolbarItem(placement: .primaryAction) {
                     Button { showSettings = true } label: { Image(systemName: "gear") }
                 }
                 #endif
+            }
+            .sheet(isPresented: $showBriefHistory) {
+                BriefHistoryView()
+            }
+            .navigationDestination(item: $deepLinkBriefId) { briefId in
+                BriefDetailView(briefId: briefId)
             }
             .refreshable {
                 try? await appState.supabase.triggerPull()
@@ -192,11 +207,21 @@ struct CompanionTodayView: View {
                     deepLinkRouter.clearPendingArticle()
                 }
             }
+            .onChange(of: deepLinkRouter.pendingBriefId) { _, newValue in
+                if let briefId = newValue {
+                    deepLinkBriefId = briefId
+                    deepLinkRouter.clearPendingBrief()
+                }
+            }
             .onAppear {
                 // Handle deep link that arrived before this view appeared
                 if let articleId = deepLinkRouter.pendingArticleId {
                     deepLinkArticleId = articleId
                     deepLinkRouter.clearPendingArticle()
+                }
+                if let briefId = deepLinkRouter.pendingBriefId {
+                    deepLinkBriefId = briefId
+                    deepLinkRouter.clearPendingBrief()
                 }
                 // Handle AI-triggered brief generation that was queued before we mounted
                 observePendingBriefGeneration(appState.pendingBriefGeneration)

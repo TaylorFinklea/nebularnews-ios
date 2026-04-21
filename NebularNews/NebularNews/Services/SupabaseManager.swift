@@ -226,6 +226,14 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.generateNewsBrief()
     }
 
+    func fetchBriefHistory(before: Int? = nil, limit: Int = 20) async throws -> CompanionBriefHistoryPayload {
+        try await enrichmentService.fetchBriefHistory(before: before, limit: limit)
+    }
+
+    func fetchBrief(id: String) async throws -> CompanionBriefDetail {
+        try await enrichmentService.fetchBrief(id: id)
+    }
+
     // MARK: - Device Token
 
     func registerDeviceToken(token: String) async throws {

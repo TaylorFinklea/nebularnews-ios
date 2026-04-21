@@ -341,6 +341,46 @@ struct CompanionTodayPayload: Codable {
     let newsBrief: CompanionNewsBrief?
 }
 
+// MARK: - Brief history
+
+struct CompanionBriefSummary: Codable, Identifiable {
+    let id: String
+    let editionKind: String       // "morning" | "evening" | "ondemand"
+    let editionSlot: String
+    let timezone: String
+    let generatedAt: Int
+    let windowStart: Int
+    let windowEnd: Int
+    let scoreCutoff: Int
+    let bullets: [CompanionNewsBrief.Bullet]
+    let sourceArticleIds: [String]
+}
+
+struct CompanionBriefDetail: Codable, Identifiable {
+    struct SourceArticle: Codable, Identifiable {
+        let id: String
+        let title: String?
+        let canonicalUrl: String?
+    }
+
+    let id: String
+    let editionKind: String
+    let editionSlot: String
+    let timezone: String
+    let generatedAt: Int
+    let windowStart: Int
+    let windowEnd: Int
+    let scoreCutoff: Int
+    let bullets: [CompanionNewsBrief.Bullet]
+    let sourceArticleIds: [String]
+    let sourceArticles: [SourceArticle]
+}
+
+struct CompanionBriefHistoryPayload: Codable {
+    let briefs: [CompanionBriefSummary]
+    let nextBefore: Int?
+}
+
 struct CompanionTodayStats: Codable {
     let unreadTotal: Int
     let newToday: Int

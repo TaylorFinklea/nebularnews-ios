@@ -114,4 +114,28 @@ struct EnrichmentService: Sendable {
         )
         return brief
     }
+
+    func fetchBriefHistory(before: Int? = nil, limit: Int = 20) async throws -> CompanionBriefHistoryPayload {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        var query: [URLQueryItem] = [URLQueryItem(name: "limit", value: String(limit))]
+        if let before {
+            query.append(URLQueryItem(name: "before", value: String(before)))
+        }
+
+        let payload: CompanionBriefHistoryPayload = try await api.request(
+            path: "api/brief/history",
+            queryItems: query
+        )
+        return payload
+    }
+
+    func fetchBrief(id: String) async throws -> CompanionBriefDetail {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        let detail: CompanionBriefDetail = try await api.request(
+            path: "api/brief/\(id)"
+        )
+        return detail
+    }
 }
