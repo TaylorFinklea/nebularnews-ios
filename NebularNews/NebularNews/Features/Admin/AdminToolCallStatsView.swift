@@ -14,6 +14,8 @@ struct AdminToolUsage: Codable, Identifiable {
     let count: Int
     let succeeded: Int
     let failed: Int
+    let thrownErrors: Int?
+    let loggingGap: Int?
     let successRate: Double?
     let lastAt: Int
 
@@ -66,6 +68,16 @@ struct AdminToolCallStatsView: View {
                                         Text("\(tool.failed) failed")
                                             .font(.caption)
                                             .foregroundStyle(.red)
+                                    }
+                                    if let thrown = tool.thrownErrors, thrown > 0 {
+                                        Text("\(thrown) thrown")
+                                            .font(.caption)
+                                            .foregroundStyle(.red)
+                                    }
+                                    if let gap = tool.loggingGap, gap > 0 {
+                                        Text("\(gap) unlogged")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
                                     }
                                     Spacer()
                                     Text(formatDate(tool.lastAt))

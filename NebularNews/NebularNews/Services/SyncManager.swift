@@ -2,6 +2,9 @@ import Foundation
 import SwiftData
 import Network
 import os
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 // MARK: - Payload types for offline queue serialization
 
@@ -22,6 +25,19 @@ struct TagPayload: Codable {
     let tagName: String?
     let tagId: String?
 }
+
+struct FeedSettingsPayload: Codable {
+    let paused: Bool?
+    let maxArticlesPerDay: Int?
+    let minScore: Int?
+}
+
+struct SubscribeFeedPayload: Codable {
+    let url: String
+    let scrapeMode: String?
+}
+
+struct EmptyPayload: Codable {}
 
 // MARK: - SyncManager
 
@@ -49,6 +65,15 @@ final class SyncManager {
     var pendingActionCount: Int {
         fetchPendingActions().count
     }
+
+    /// Dead-letter actions — exceeded max retries without succeeding.
+    /// Surface these in Settings so the user can retry or discard manually.
+    var deadLetterActionCount: Int {
+        fetchDeadLetterActions().count
+    }
+
+    /// Max retries before a queued action moves to the dead-letter state.
+    private let maxRetries = 10
 
     init(modelContext: ModelContext, supabase: SupabaseManager) {
         self.modelContext = modelContext
@@ -92,29 +117,72 @@ final class SyncManager {
         guard !pending.isEmpty else { return }
         logger.info("Syncing \(pending.count) pending actions")
 
+        var anySucceeded = false
         for action in pending {
             do {
                 try await executeAction(action)
                 modelContext.delete(action)
+                anySucceeded = true
             } catch {
                 action.retryCount += 1
                 action.lastError = error.localizedDescription
                 logger.warning("Action \(action.actionType) for \(action.articleId) failed (attempt \(action.retryCount)): \(error.localizedDescription)")
-                if action.retryCount >= 5 {
-                    logger.error("Dropping action \(action.actionType) for \(action.articleId) after 5 retries")
-                    modelContext.delete(action)
+                if action.retryCount >= maxRetries {
+                    // Move to dead-letter state — keep the row but mark it so it
+                    // stops being picked up by `fetchPendingActions`. The user
+                    // can retry or discard via Settings.
+                    logger.error("Dead-lettering action \(action.actionType) for \(action.articleId) after \(self.maxRetries) retries")
                 }
             }
         }
         save()
+
+        if anySucceeded {
+            // Any queue flush that made at least one change could affect widget
+            // state (unread count, saved count, top article). Reload timelines.
+            reloadWidgetTimelines()
+        }
     }
 
+    /// Pending = retryCount < maxRetries. Dead-letter actions are excluded.
     func fetchPendingActions() -> [PendingAction] {
+        let ceiling = maxRetries
         var descriptor = FetchDescriptor<PendingAction>(
+            predicate: #Predicate<PendingAction> { $0.retryCount < ceiling },
             sortBy: [SortDescriptor(\PendingAction.createdAt, order: .forward)]
         )
         descriptor.fetchLimit = 100
         return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Dead-letter = exceeded maxRetries. User visible in Advanced settings.
+    func fetchDeadLetterActions() -> [PendingAction] {
+        let ceiling = maxRetries
+        var descriptor = FetchDescriptor<PendingAction>(
+            predicate: #Predicate<PendingAction> { $0.retryCount >= ceiling },
+            sortBy: [SortDescriptor(\PendingAction.createdAt, order: .forward)]
+        )
+        descriptor.fetchLimit = 100
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Reset a dead-letter action's retry count so it gets picked up next sync.
+    func retryDeadLetter(_ action: PendingAction) {
+        action.retryCount = 0
+        action.lastError = nil
+        save()
+    }
+
+    /// Permanently discard a dead-letter action.
+    func discardDeadLetter(_ action: PendingAction) {
+        modelContext.delete(action)
+        save()
+    }
+
+    private func reloadWidgetTimelines() {
+#if canImport(WidgetKit) && !targetEnvironment(macCatalyst)
+        WidgetCenter.shared.reloadAllTimelines()
+#endif
     }
 
     // MARK: - Action execution
@@ -140,6 +208,20 @@ final class SyncManager {
             if let tagId = payload.tagId {
                 _ = try await supabase.removeTag(articleId: action.articleId, tagId: tagId)
             }
+        case "feed_settings":
+            // articleId holds the feed_id for feed-scoped mutations.
+            let payload = try JSONDecoder().decode(FeedSettingsPayload.self, from: Data(action.payload.utf8))
+            try await supabase.updateFeedSettings(
+                feedId: action.articleId,
+                paused: payload.paused,
+                maxArticlesPerDay: payload.maxArticlesPerDay,
+                minScore: payload.minScore
+            )
+        case "subscribe_feed":
+            let payload = try JSONDecoder().decode(SubscribeFeedPayload.self, from: Data(action.payload.utf8))
+            _ = try await supabase.addFeed(url: payload.url, scrapeMode: payload.scrapeMode)
+        case "unsubscribe_feed":
+            try await supabase.deleteFeed(id: action.articleId)
         default:
             logger.warning("Unknown action type: \(action.actionType)")
         }
@@ -221,6 +303,57 @@ final class SyncManager {
                 queueAction(type: "tag_remove", articleId: articleId, payload: TagPayload(tagName: nil, tagId: tagId))
                 throw error
             }
+        }
+    }
+
+    // MARK: - Feed mutations (queue-aware)
+
+    /// Update feed settings (paused, cap, min score). Queues on offline/failure.
+    func updateFeedSettings(feedId: String, paused: Bool? = nil, maxArticlesPerDay: Int? = nil, minScore: Int? = nil) async throws {
+        let payload = FeedSettingsPayload(paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+        if isOffline {
+            queueAction(type: "feed_settings", articleId: feedId, payload: payload)
+            throw SyncManagerError.queuedOffline
+        }
+        do {
+            try await supabase.updateFeedSettings(feedId: feedId, paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+        } catch {
+            queueAction(type: "feed_settings", articleId: feedId, payload: payload)
+            throw error
+        }
+    }
+
+    /// Subscribe to a new feed by URL. Queues on offline/failure.
+    /// Returns the feed id from the backend response, or throws `queuedOffline`
+    /// if the request was queued (caller may choose to optimistically reflect
+    /// the subscription in UI and reconcile later).
+    func subscribeFeed(url: String, scrapeMode: String? = nil) async throws -> String {
+        let payload = SubscribeFeedPayload(url: url, scrapeMode: scrapeMode)
+        if isOffline {
+            // articleId is unused for subscribe; store the URL as a stable key
+            // so dead-letter UI can still identify the target.
+            queueAction(type: "subscribe_feed", articleId: url, payload: payload)
+            throw SyncManagerError.queuedOffline
+        }
+        do {
+            return try await supabase.addFeed(url: url, scrapeMode: scrapeMode)
+        } catch {
+            queueAction(type: "subscribe_feed", articleId: url, payload: payload)
+            throw error
+        }
+    }
+
+    /// Unsubscribe (delete) a feed by id. Queues on offline/failure.
+    func unsubscribeFeed(feedId: String) async throws {
+        if isOffline {
+            queueAction(type: "unsubscribe_feed", articleId: feedId, payload: EmptyPayload())
+            throw SyncManagerError.queuedOffline
+        }
+        do {
+            try await supabase.deleteFeed(id: feedId)
+        } catch {
+            queueAction(type: "unsubscribe_feed", articleId: feedId, payload: EmptyPayload())
+            throw error
         }
     }
 
