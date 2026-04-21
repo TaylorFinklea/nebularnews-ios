@@ -145,6 +145,13 @@ struct CompanionArticleDetailView: View {
                         }
                     }
 
+                    if appState.syncManager?.hasPendingAction(forResource: articleId) == true {
+                        Label("Changes will sync when online", systemImage: "icloud.slash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 4)
+                    }
+
                     TagsSection(
                         isEnabled: appState.features?.tags == true,
                         tags: payload.tags,

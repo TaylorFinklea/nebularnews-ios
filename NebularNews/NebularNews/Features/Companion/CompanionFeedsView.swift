@@ -95,6 +95,12 @@ struct CompanionFeedsView: View {
                                 .font(.caption2)
                                 .foregroundStyle(.blue)
                         }
+
+                        if appState.syncManager?.hasPendingAction(forResource: feed.id) == true {
+                            Label("Syncing…", systemImage: "icloud.slash")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(.vertical, 4)
@@ -111,7 +117,13 @@ struct CompanionFeedsView: View {
                         Task {
                             let newPaused = !(feed.paused ?? false)
                             do {
-                                try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                if let sync = appState.syncManager {
+                                    try await sync.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                } else {
+                                    try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                }
+                            } catch SyncManagerError.queuedOffline {
+                                // Queued — UI will reflect once replay succeeds.
                             } catch {
                                 logger.error("Failed to update paused state for feed \(feed.id): \(error.localizedDescription)")
                             }
@@ -132,7 +144,13 @@ struct CompanionFeedsView: View {
                         Task {
                             let newPaused = !(feed.paused ?? false)
                             do {
-                                try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                if let sync = appState.syncManager {
+                                    try await sync.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                } else {
+                                    try await appState.supabase.updateFeedSettings(feedId: feed.id, paused: newPaused)
+                                }
+                            } catch SyncManagerError.queuedOffline {
+                                // Queued — UI will reflect once replay succeeds.
                             } catch {
                                 logger.error("Failed to update paused state for feed \(feed.id): \(error.localizedDescription)")
                             }
@@ -532,12 +550,27 @@ private struct FeedSettingsSheet: View {
         defer { isSaving = false }
 
         let maxPerDay = Int(maxArticlesPerDay) ?? 0
-        try? await appState.supabase.updateFeedSettings(
-            feedId: feed.id,
-            paused: paused,
-            maxArticlesPerDay: maxPerDay,
-            minScore: minScore
-        )
+        do {
+            if let sync = appState.syncManager {
+                try await sync.updateFeedSettings(
+                    feedId: feed.id,
+                    paused: paused,
+                    maxArticlesPerDay: maxPerDay,
+                    minScore: minScore
+                )
+            } else {
+                try await appState.supabase.updateFeedSettings(
+                    feedId: feed.id,
+                    paused: paused,
+                    maxArticlesPerDay: maxPerDay,
+                    minScore: minScore
+                )
+            }
+        } catch SyncManagerError.queuedOffline {
+            // Queued for replay.
+        } catch {
+            // Best-effort — surfacing an alert here would break the dismiss flow.
+        }
 
         if scrapeMode != (feed.scrapeMode ?? "rss_only") {
             try? await appState.supabase.updateScrapeMode(feedId: feed.id, scrapeMode: scrapeMode)

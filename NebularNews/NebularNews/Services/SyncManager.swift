@@ -72,6 +72,20 @@ final class SyncManager {
         fetchDeadLetterActions().count
     }
 
+    /// Whether any pending action targets a given resource id. Callers use this
+    /// to show a "syncing" indicator next to affected rows. For feed mutations
+    /// `resourceId` is the feed id; for article mutations it's the article id.
+    func hasPendingAction(forResource resourceId: String) -> Bool {
+        let ceiling = maxRetries
+        var descriptor = FetchDescriptor<PendingAction>(
+            predicate: #Predicate<PendingAction> {
+                $0.articleId == resourceId && $0.retryCount < ceiling
+            }
+        )
+        descriptor.fetchLimit = 1
+        return (try? modelContext.fetchCount(descriptor)) ?? 0 > 0
+    }
+
     /// Max retries before a queued action moves to the dead-letter state.
     private let maxRetries = 10
 
