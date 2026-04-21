@@ -86,13 +86,43 @@
 - [ ] Multi-step planner mode using extended thinking / reasoning models
 - [ ] Voice input → tool call via SiriKit / AppIntents
 
+## M12: Offline Mutation Queue + AI Tool-Call Bug Fixes — Shipped (needs device verification)
+
+**Track A — Offline Queue (iOS):**
+- [x] SyncManager extended to feed mutations (feed_settings / subscribe_feed / unsubscribe_feed)
+- [x] Max retries 5 → 10
+- [x] Dead-letter state with retry/discard helpers
+- [x] Post-sync `WidgetCenter.reloadAllTimelines()`
+- [x] `hasPendingAction(forResource:)` helper + "Syncing…" indicators on feed rows and article detail
+- [x] CompanionFeedsView pause/resume + Feed Settings save sheet route through SyncManager
+- [x] Backend If-Match scaffolding on PATCH /feeds/:id/settings with ETag in success response
+- [ ] **Device test**: Airplane Mode → tag, mark read, pause feed → re-enable network → confirm replay within 5s
+- [ ] **Device test**: same flow but force-quit before re-enabling network → confirm persistence
+- [ ] **Device test**: widget reflects new unread/saved counts within 15s of sync without app relaunch
+
+**Track B — AI Tool-Call Fixes (sprint-absorbed):**
+- [x] FK guards in mark_articles_read / pause_feed / set_feed_max_per_day
+- [x] undo_set_feed_max_per_day added to UNDO_TOOL_NAMES
+- [x] Full error context logged to debug_log scope `tool-error:*`
+- [x] /admin/tool-call-stats: thrown_errors + logging_gap columns
+- [ ] **Manual test**: ask sparkle "pause the feed called 'nonexistent'" → red chip "Couldn't find feed", debug_log captures the call
+- [ ] **Manual test**: open Admin → Tool Calls → confirm new columns render, verify pause_feed/set_feed_max_per_day show 0 logging gap after a real call
+
+## M12 Deferred / Stretch (Tier 2)
+
+- [ ] Queue inspection UI in Settings → Advanced (pending list with age, retry count, last error; manual retry/discard)
+- [ ] Sync conflict resolver UI when 412 returns — sheet with Keep server / Apply mine / Discard
+- [ ] Tool-call failure admin alerting (red badge if 24h success rate < 80%)
+- [ ] iOS If-Match capture+send (backend scaffolding shipped, client wiring deferred)
+
 ## Future Milestones
 
-- **M12**: TBD — next major theme to be scoped (candidates: watchOS app, RevenueCat/receipt validation, timezone-aware briefs, offline mutation queue for tags/saves)
+- **M13** candidates: timezone-aware briefs (cron + iOS settings), watchOS app, RevenueCat/receipt validation
+- **M10 deferred polish** (Sonnet-tier backlog): AddFeedSheet popover on iPad regular, AI FAB anchor, post-mutation widget refresh, APNs Live Activity push for scheduled briefs
 
 ## Deferred
 
 - [ ] RevenueCat migration (if StoreKit complexity grows)
 - [ ] Apple App Store Server API for receipt validation
 - [ ] User timezone support for scheduled briefs (currently UTC)
-- [ ] AI assistant direct actions (tool-calling to filter articles, navigate, apply tags)
+- [ ] OpenAI native tool-call streaming (currently buffered fallback)
