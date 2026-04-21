@@ -16,6 +16,7 @@ enum WidgetDataWriter {
     // UserDefaults keys — must match the widget's WidgetData constants
     private static let statsKey = "widget_stats"
     private static let topArticlesKey = "widget_top_articles"
+    private static let briefKey = "widget_brief"
     private static let lastUpdatedKey = "widget_last_updated"
 
     private static var sharedDefaults: UserDefaults? {
@@ -68,13 +69,34 @@ enum WidgetDataWriter {
         WidgetCenter.shared.reloadTimelines(ofKind: "ReadingQueueWidget")
     }
 
+    // MARK: - News Brief
+
+    /// Write the latest news brief for the brief widget.
+    static func updateBrief(_ brief: BriefWidgetData?) {
+        guard let defaults = sharedDefaults else {
+            logger.warning("Could not open shared UserDefaults suite")
+            return
+        }
+
+        if let brief, let data = try? JSONEncoder().encode(brief) {
+            defaults.set(data, forKey: briefKey)
+            defaults.set(Date().timeIntervalSince1970, forKey: lastUpdatedKey)
+            logger.debug("Widget brief updated: \(brief.bullets.count) bullets")
+        } else {
+            defaults.removeObject(forKey: briefKey)
+        }
+
+        WidgetCenter.shared.reloadTimelines(ofKind: "NewsBriefWidget")
+    }
+
     // MARK: - Convenience
 
-    /// Write both stats and articles from a today payload.
+    /// Write stats, articles, and brief from a today payload.
     static func updateFromToday(
         stats: CompanionTodayStats,
         hero: CompanionArticleListItem?,
-        upNext: [CompanionArticleListItem]
+        upNext: [CompanionArticleListItem],
+        newsBrief: CompanionNewsBrief? = nil
     ) {
         // Stats
         updateStats(
@@ -105,7 +127,29 @@ enum WidgetDataWriter {
         }
 
         updateTopArticles(widgetArticles)
+
+        // Brief (optional — absent when today payload has no persisted brief).
+        if let newsBrief, newsBrief.state == "done", !newsBrief.bullets.isEmpty {
+            let briefData = BriefWidgetData(
+                title: newsBrief.title,
+                editionLabel: newsBrief.editionLabel,
+                generatedAt: newsBrief.generatedAt.map { Double($0) / 1000 },
+                bullets: newsBrief.bullets.map(\.text)
+            )
+            updateBrief(briefData)
+        } else {
+            updateBrief(nil)
+        }
     }
+}
+
+/// Lightweight Codable for the brief widget. Must encode to the same shape as
+/// the widget's `WidgetBrief`.
+struct BriefWidgetData: Codable {
+    let title: String
+    let editionLabel: String
+    let generatedAt: Double?
+    let bullets: [String]
 }
 
 /// Lightweight Codable struct for passing article data to widgets.

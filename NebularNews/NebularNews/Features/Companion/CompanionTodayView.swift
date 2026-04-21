@@ -225,10 +225,17 @@ struct CompanionTodayView: View {
         do {
             let brief = try await appState.supabase.generateNewsBrief()
             if let brief {
-                payload = CompanionTodayPayload(
+                let newPayload = CompanionTodayPayload(
                     hero: payload?.hero,
                     upNext: payload?.upNext ?? [],
                     stats: payload?.stats ?? CompanionTodayStats(unreadTotal: 0, newToday: 0, highFitUnread: 0),
+                    newsBrief: brief
+                )
+                payload = newPayload
+                WidgetDataWriter.updateFromToday(
+                    stats: newPayload.stats,
+                    hero: newPayload.hero,
+                    upNext: newPayload.upNext,
                     newsBrief: brief
                 )
                 #if os(iOS)
@@ -283,7 +290,8 @@ struct CompanionTodayView: View {
             WidgetDataWriter.updateFromToday(
                 stats: cappedResult.stats,
                 hero: cappedResult.hero,
-                upNext: cappedResult.upNext
+                upNext: cappedResult.upNext,
+                newsBrief: cappedResult.newsBrief
             )
             pushAssistantContext()
         } catch {

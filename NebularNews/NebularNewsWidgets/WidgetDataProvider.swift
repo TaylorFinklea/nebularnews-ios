@@ -33,6 +33,17 @@ enum WidgetDataProvider {
         return Array(articles.prefix(limit))
     }
 
+    // MARK: - News Brief
+
+    static func loadBrief() -> WidgetBrief? {
+        guard let defaults = sharedDefaults,
+              let data = defaults.data(forKey: WidgetData.briefKey),
+              let brief = try? JSONDecoder().decode(WidgetBrief.self, from: data) else {
+            return nil
+        }
+        return brief
+    }
+
     // MARK: - Freshness
 
     static func lastUpdated() -> Date? {

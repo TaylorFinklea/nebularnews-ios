@@ -129,7 +129,8 @@ struct DashboardView: View {
             WidgetDataWriter.updateFromToday(
                 stats: today.stats,
                 hero: today.hero,
-                upNext: today.upNext
+                upNext: today.upNext,
+                newsBrief: today.newsBrief
             )
         } catch {
             errorMessage = error.localizedDescription

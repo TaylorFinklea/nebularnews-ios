@@ -7,6 +7,7 @@ struct NebularNewsWidgetsBundle: WidgetBundle {
         StatsWidget()
         TopArticleWidget()
         ReadingQueueWidget()
+        NewsBriefWidget()
         #if os(iOS)
         BriefLiveActivity()
         #endif

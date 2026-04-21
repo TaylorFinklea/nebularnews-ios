@@ -68,7 +68,8 @@ enum BackgroundTaskManager {
                 WidgetDataWriter.updateFromToday(
                     stats: today.stats,
                     hero: today.hero,
-                    upNext: today.upNext
+                    upNext: today.upNext,
+                    newsBrief: today.newsBrief
                 )
             }
             if let articles = try? await supabase.fetchArticles() {

@@ -12,6 +12,7 @@ enum WidgetData {
     // UserDefaults keys
     static let statsKey = "widget_stats"
     static let topArticlesKey = "widget_top_articles"
+    static let briefKey = "widget_brief"
     static let lastUpdatedKey = "widget_last_updated"
 }
 
@@ -27,4 +28,11 @@ struct WidgetArticle: Codable, Identifiable {
     let score: Int?
     let feedName: String?
     let excerpt: String?
+}
+
+struct WidgetBrief: Codable {
+    let title: String          // e.g. "Morning Brief"
+    let editionLabel: String   // "Morning" or "Evening"
+    let generatedAt: Double?   // epoch seconds
+    let bullets: [String]      // pre-flattened bullet text; widget shouldn't parse sources
 }
