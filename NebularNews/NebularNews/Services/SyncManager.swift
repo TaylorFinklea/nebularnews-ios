@@ -26,6 +26,10 @@ struct TagPayload: Codable {
     let tagId: String?
 }
 
+struct ReadingPositionPayload: Codable {
+    let percent: Int
+}
+
 struct FeedSettingsPayload: Codable {
     let paused: Bool?
     let maxArticlesPerDay: Int?
@@ -236,6 +240,9 @@ final class SyncManager {
             _ = try await supabase.addFeed(url: payload.url, scrapeMode: payload.scrapeMode)
         case "unsubscribe_feed":
             try await supabase.deleteFeed(id: action.articleId)
+        case "reading_position":
+            let payload = try JSONDecoder().decode(ReadingPositionPayload.self, from: Data(action.payload.utf8))
+            try await supabase.updateReadingPosition(articleId: action.articleId, percent: payload.percent)
         default:
             logger.warning("Unknown action type: \(action.actionType)")
         }
@@ -359,6 +366,23 @@ final class SyncManager {
         } catch {
             queueAction(type: "subscribe_feed", articleId: url, payload: payload)
             throw error
+        }
+    }
+
+    /// Record reading position (0-100) for an article. Non-throwing — last
+    /// writer wins and a dropped position update isn't user-visible. Coalesces
+    /// through the queue on offline/failure like other mutations.
+    func setReadingPosition(articleId: String, percent: Int) async {
+        let clamped = max(0, min(100, percent))
+        let payload = ReadingPositionPayload(percent: clamped)
+        if isOffline {
+            queueAction(type: "reading_position", articleId: articleId, payload: payload)
+            return
+        }
+        do {
+            try await supabase.updateReadingPosition(articleId: articleId, percent: clamped)
+        } catch {
+            queueAction(type: "reading_position", articleId: articleId, payload: payload)
         }
     }
 

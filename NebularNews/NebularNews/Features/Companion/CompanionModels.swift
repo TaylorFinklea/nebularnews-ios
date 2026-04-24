@@ -340,6 +340,16 @@ struct CompanionTodayPayload: Codable {
     let upNext: [CompanionArticleListItem]
     let stats: CompanionTodayStats
     let newsBrief: CompanionNewsBrief?
+    let resume: CompanionResumeReading?
+}
+
+struct CompanionResumeReading: Codable {
+    let articleId: String
+    let title: String?
+    let canonicalUrl: String?
+    let imageUrl: String?
+    let positionPercent: Int
+    let updatedAt: Int
 }
 
 // MARK: - Brief history

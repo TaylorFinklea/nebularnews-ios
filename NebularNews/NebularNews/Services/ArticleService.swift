@@ -81,6 +81,19 @@ struct ArticleService: Sendable {
         )
     }
 
+    func updateReadingPosition(articleId: String, percent: Int) async throws {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+
+        struct Body: Encodable {
+            let percent: Int
+        }
+        try await api.requestVoid(
+            method: "POST",
+            path: "api/articles/\(articleId)/reading-position",
+            body: Body(percent: percent)
+        )
+    }
+
     func saveArticle(id: String, saved: Bool) async throws -> SaveResponse {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 

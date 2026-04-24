@@ -36,6 +36,9 @@ struct CompanionArticleDetailView: View {
     @State private var payload: CompanionArticleDetailPayload?
     @State private var isLoading = false
     @State private var errorMessage = ""
+    @State private var currentPositionPercent: Int = 0
+    @State private var lastPushedPercent: Int = -1
+    @State private var positionDebounceTask: Task<Void, Never>?
     @State private var pendingTagName = ""
     @State private var savingRead = false
     @State private var savingTag = false
@@ -212,6 +215,17 @@ struct CompanionArticleDetailView: View {
                 #else
                 .listStyle(.sidebar)
                 #endif
+                .onScrollGeometryChange(for: Int.self) { geometry in
+                    // Compute percent of scrollable range consumed. Clamped to 0-100.
+                    let offset = max(0, geometry.contentOffset.y)
+                    let scrollable = max(1, geometry.contentSize.height - geometry.containerSize.height)
+                    return max(0, min(100, Int((offset / scrollable) * 100)))
+                } action: { _, newPercent in
+                    onScrollPositionChanged(newPercent)
+                }
+                .onDisappear {
+                    flushReadingPositionIfNeeded()
+                }
                 .navigationTitle("Article")
                 .inlineNavigationBarTitle()
                 .refreshable { await loadArticle() }
@@ -409,6 +423,39 @@ struct CompanionArticleDetailView: View {
                 contentExcerpt: excerpt
             )
         ))
+    }
+
+    /// Called on every scroll geometry change. Tracks the current percent
+    /// locally and debounces the server write so we don't flood the queue
+    /// during fast scrolling.
+    private func onScrollPositionChanged(_ percent: Int) {
+        currentPositionPercent = percent
+        positionDebounceTask?.cancel()
+        positionDebounceTask = Task { [articleId] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            await pushReadingPositionIfChanged(articleId: articleId, percent: percent)
+        }
+    }
+
+    /// Flush any pending write on view disappear so the last-known position
+    /// is captured even if the debounce timer hasn't fired yet.
+    private func flushReadingPositionIfNeeded() {
+        positionDebounceTask?.cancel()
+        positionDebounceTask = nil
+        let final = currentPositionPercent
+        let target = articleId
+        Task {
+            await pushReadingPositionIfChanged(articleId: target, percent: final)
+        }
+    }
+
+    private func pushReadingPositionIfChanged(articleId: String, percent: Int) async {
+        // Skip trivial deltas and duplicates.
+        if percent == lastPushedPercent { return }
+        if abs(percent - lastPushedPercent) < 2 && percent != 0 && percent != 100 { return }
+        lastPushedPercent = percent
+        await appState.syncManager?.setReadingPosition(articleId: articleId, percent: percent)
     }
 
     private func loadArticle() async {

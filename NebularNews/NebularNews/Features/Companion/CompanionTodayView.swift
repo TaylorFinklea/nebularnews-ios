@@ -62,6 +62,15 @@ struct CompanionTodayView: View {
                         .buttonStyle(.plain)
                         .padding(.horizontal)
 
+                        // Resume reading — shown when there's an in-progress article.
+                        if let resume = payload.resume {
+                            NavigationLink(destination: CompanionArticleDetailView(articleId: resume.articleId)) {
+                                ResumeReadingCard(resume: resume)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
+                        }
+
                         // Hero card
                         if let hero = payload.hero {
                             NavigationLink(destination: CompanionArticleDetailView(articleId: hero.id)) {
@@ -254,7 +263,8 @@ struct CompanionTodayView: View {
                     hero: payload?.hero,
                     upNext: payload?.upNext ?? [],
                     stats: payload?.stats ?? CompanionTodayStats(unreadTotal: 0, newToday: 0, highFitUnread: 0),
-                    newsBrief: brief
+                    newsBrief: brief,
+                    resume: payload?.resume
                 )
                 payload = newPayload
                 WidgetDataWriter.updateFromToday(
@@ -312,7 +322,8 @@ struct CompanionTodayView: View {
                 hero: result.hero,
                 upNext: cappedUpNext,
                 stats: result.stats,
-                newsBrief: result.newsBrief
+                newsBrief: result.newsBrief,
+                resume: result.resume
             )
             payload = cappedResult
             errorMessage = ""

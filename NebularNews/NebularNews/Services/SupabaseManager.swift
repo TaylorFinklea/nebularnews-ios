@@ -226,6 +226,10 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.generateNewsBrief()
     }
 
+    func updateReadingPosition(articleId: String, percent: Int) async throws {
+        try await articleService.updateReadingPosition(articleId: articleId, percent: percent)
+    }
+
     func fetchBriefHistory(before: Int? = nil, limit: Int = 20) async throws -> CompanionBriefHistoryPayload {
         try await enrichmentService.fetchBriefHistory(before: before, limit: limit)
     }
