@@ -1,3 +1,33 @@
+# Current State (2026-04-24)
+
+## M17: Content Coverage Overhaul + SvelteKit Admin Web — Shipped
+
+### Phase A — Backend content coverage (Workers)
+
+- **Migration 0015** applied to production D1: added `articles.scrape_retry_count` (INTEGER default 0), `articles.next_scrape_attempt_at` (INTEGER nullable), partial index on those for the retry hot path, and a one-shot bulk `UPDATE feeds SET scrape_mode = 'auto_fetch_on_empty' WHERE scrape_mode = 'rss_only'` (574 rows flipped).
+- **New hourly cron** `src/cron/retry-empty-articles.ts`: scans articles with empty/<50-word bodies whose feed permits scraping, calls `scrapeAndPersist()` via Steel → Browserless → Readability, backs off exponentially (15m, 30m, 1h, 2h, 4h) up to 5 attempts, then gives up so permanently-blocked URLs don't burn provider cost.
+- **Shared `scrapeAndPersist` helper** in `src/lib/scraper.ts` used by the new cron, admin rescrape route, and ready for future reuse by the existing on-demand fetch-content path.
+- **Feed default flipped**: `src/routes/feeds.ts` POST /feeds and OPML import now insert `scrape_mode = 'auto_fetch_on_empty'` explicitly (schema default stays `rss_only` because SQLite can't change column defaults without a table rebuild).
+- **New admin endpoints**: `PATCH /admin/feeds/:feedId` (edit scrape_mode, disabled, title), `POST /admin/articles/:id/rescrape` (reset counters + synchronous scrape), `GET /admin/articles` (paginated + filterable), `GET /admin/briefs` (cross-user recent briefs with user_email JOIN), `POST /admin/briefs/generate-for-user` (bypass timezone cron for diagnostics).
+- Deployed: version `8e381b70-1f8c-43db-9b2d-fef8db17589c`. Commits `9d7a361` (Phase A) + `5ab581b` (web auth handoff).
+
+### Phase B — SvelteKit admin web
+
+- **New sibling repo** at `/Users/tfinklea/git/nebularnews-web`. SvelteKit 2 + Svelte 5 runes + Tailwind v4 + `@sveltejs/adapter-cloudflare`.
+- **Auth model**: Bearer-token, matching iOS. New backend endpoint `GET /api/auth/web-handoff` reads the better-auth session cookie on api.nebularnews.com and redirects to an allowlisted web callback with `?token=<token>`. Web sets its own httpOnly cookie `nn_session` and attaches Bearer on every API call. iOS untouched.
+- **All admin pages rendered**: Dashboard, Feeds (list + per-feed edit + rescrape), Articles (filterable list + detail with rescrape), Users (list + detail + grant/revoke admin + trigger brief), AI usage (tokens + tool-call stats), Content moderation (recent articles), Briefs (cross-user list + user filter), Health (pull runs + scraping stats).
+- **Deployed** to `https://nebularnews-admin.pages.dev` on Cloudflare Pages project `nebularnews-admin`. Custom domain `admin.nebularnews.com` pending manual DNS + Apple Services ID setup per `APPLE_SETUP.md` in the repo.
+- **Dev bypass**: `DEV_BYPASS_ENABLED=true` in `.env` lets you paste a session.token row from D1 straight into the sign-in page. Disabled on production.
+- Commit `87aae62` (initial scaffold; full tree).
+
+### Outstanding manual for M17 Phase B
+- Apple Services ID (`com.nebularnews.web`) + Return URL + domain verification file.
+- APPLE_SERVICES_ID + APPLE_CLIENT_SECRET_WEB secrets in Wrangler.
+- Verify better-auth Apple provider can accept multi-audience (App ID + Services ID); may need config adjustment.
+- DNS CNAME for `admin.nebularnews.com` → `nebularnews-admin.pages.dev` in CF dashboard.
+
+---
+
 # Current State (2026-04-20)
 
 ## Architecture

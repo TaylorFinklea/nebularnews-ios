@@ -1,3 +1,29 @@
+# Next Steps (2026-04-24)
+
+## M17 manual follow-ups (unblock admin web)
+
+- [ ] Apple Services ID `com.nebularnews.web` (dev portal) + Return URL `https://api.nebularnews.com/api/auth/callback/apple` + `admin.nebularnews.com` domain verification — follow `nebularnews-web/APPLE_SETUP.md`.
+- [ ] Host Apple domain-verification file at `admin.nebularnews.com/.well-known/apple-developer-domain-association.txt` via SvelteKit `static/`.
+- [ ] Mint web client-secret JWT with the existing `.p8` (key id `Z4D9B5P5F6`) and set it as Wrangler secret `APPLE_CLIENT_SECRET_WEB` (prod env).
+- [ ] `wrangler secret put APPLE_SERVICES_ID --env production` → `com.nebularnews.web`.
+- [ ] Update `src/lib/auth.ts` to hand better-auth a multi-audience Apple clientId once the real flow is ready to test.
+- [ ] CF dashboard → Pages → `nebularnews-admin` → Custom domain → add `admin.nebularnews.com`.
+- [ ] First real end-to-end sign-in test on the custom domain; turn off `DEV_BYPASS_ENABLED` for prod.
+
+## M17 Phase A device verification
+
+- [ ] Watch Steel/Browserless costs for the first 24–48h post-deploy — 574 feeds just flipped from rss_only to auto_fetch_on_empty.
+- [ ] Spot-check iOS: open an article that was empty yesterday, confirm it now has content after the retry cron picked it up.
+- [ ] Admin web → Feeds → sanity-check the `scrape_mode` column for high-subscriber feeds.
+- [ ] Admin web → Articles → `Empty only` filter → confirm the retry cron is draining the backlog over time.
+
+## Phase C candidates (consumer web reader)
+
+- `app.nebularnews.com` SvelteKit reader: Today, article detail, brief history, sparkle chat. Share components with admin where it makes sense.
+- CORS tightening on the Workers API — currently `*`; lock to admin + app + native scheme before consumer launch.
+
+---
+
 # Next Steps (2026-04-18)
 
 ## Test M9 Deep Fetch (in progress)

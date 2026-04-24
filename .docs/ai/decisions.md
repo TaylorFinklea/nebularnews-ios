@@ -94,6 +94,32 @@
 
 **Consequences**: Each repo has its own `.docs/ai/` tracked by git. Global instructions define the workflow once. Repo CLAUDE.md files only contain project-specific guidance.
 
+## ADR-012: Flip Default Scrape Mode + Retry Loop (2026-04-24)
+
+**Status**: Implemented (M17 Phase A)
+
+**Context**: Many articles showed empty content in iOS because most historical feeds had `scrape_mode = 'rss_only'` (the legacy default). Feeds whose RSS items carried link-only or excerpt-only bodies never triggered Steel/Browserless extraction, and there was no retry mechanism for articles that failed to scrape on first attempt.
+
+**Decision**: Flip defaults + add a background retry loop.
+1. Migration 0015 bulk-updates `rss_only` → `auto_fetch_on_empty` (574 feeds touched in prod). The column default in the initial schema is still `rss_only`; every insert path (`src/routes/feeds.ts`, OPML import) now passes `auto_fetch_on_empty` explicitly.
+2. New `articles.scrape_retry_count` + `articles.next_scrape_attempt_at` columns track background retry budget, separate from `fetch_attempt_count` which serves user-initiated fetches.
+3. New hourly cron `retry-empty-articles` scans empty articles, calls shared `scrapeAndPersist()` helper, on failure increments retry count with exponential backoff (15m, 30m, 1h, 2h, 4h, capped at 24h), gives up after 5 attempts.
+4. Admin web surfaces per-feed scrape mode edits, per-article rescrape button, and brief generation for a specific user.
+
+**Consequences**: Articles with thin RSS bodies are automatically deep-fetched over time. Steel/Browserless cost scales with empty-body article volume (capped at ~50/hour by the cron batch size). Permanently-blocked sources stop retrying after 5 attempts; admin can pause those feeds via the web UI.
+
+## ADR-013: SvelteKit Admin Web via Token Handoff (2026-04-24)
+
+**Status**: Implemented (M17 Phase B)
+
+**Context**: All admin observability was SQL-direct in D1 Studio. No moderator could diagnose feed failures without shelling into wrangler. The plan also called out a future consumer web reader.
+
+**Decision**: Stand up a sibling repo `nebularnews-web` (SvelteKit 2 + Svelte 5 runes + Tailwind v4 + `@sveltejs/adapter-cloudflare`). Reuse the iOS Bearer-token auth model instead of enabling better-auth cross-subdomain cookies — a new `GET /api/auth/web-handoff` endpoint on the Workers API reads the session cookie from the api.nebularnews.com origin, looks up the session token in the `session` table, and redirects the browser to an allowlisted web callback with `?token=<token>`. The web app plants that in its own httpOnly cookie. iOS is unchanged.
+
+**Rationale**: Decouples web's cookie flow from iOS's bearer flow (no cookie domain gymnastics, no CORS-with-credentials dance). Allowlist on the handoff prevents open-redirect abuse. Admin web lives at `admin.nebularnews.com` (Cloudflare Pages project `nebularnews-admin`). Consumer reader at `app.nebularnews.com` slots into the same app later under `/app` or a new domain.
+
+**Consequences**: Apple Sign In for Web requires a separate Services ID (`com.nebularnews.web`) and a fresh client-secret JWT; documented in `nebularnews-web/APPLE_SETUP.md`. Better-auth may need its Apple provider to accept multiple audiences (App ID for native, Services ID for web) — verified during first real sign-in test. A dev-bypass (`DEV_BYPASS_ENABLED=true` + paste session token) lets development proceed before Apple setup completes.
+
 ## ADR-011: Unified Roadmap with Two-Tier Backlog (2026-04-04)
 
 **Status**: Implemented
