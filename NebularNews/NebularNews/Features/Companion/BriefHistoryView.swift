@@ -11,6 +11,7 @@ struct BriefHistoryView: View {
     @State private var isLoading = false
     @State private var isLoadingMore = false
     @State private var errorMessage: String?
+    @State private var seenIds: Set<String> = SeenBriefStore.load()
 
     var body: some View {
         NavigationStack {
@@ -48,6 +49,7 @@ struct BriefHistoryView: View {
             }
             .refreshable { await reload() }
             .task { await reload() }
+            .onAppear { seenIds = SeenBriefStore.load() }
             .overlay {
                 if isLoading && briefs.isEmpty {
                     ProgressView()
@@ -78,7 +80,14 @@ struct BriefHistoryView: View {
     }
 
     private func row(brief: CompanionBriefSummary) -> some View {
-        HStack(alignment: .top, spacing: 12) {
+        let isUnread = !seenIds.contains(brief.id)
+        return HStack(alignment: .top, spacing: 10) {
+            // Unread dot — 6pt leading-edge indicator, reserves space even when read so
+            // rows don't jump when state flips.
+            Circle()
+                .fill(isUnread ? Color.accentColor : Color.clear)
+                .frame(width: 6, height: 6)
+                .padding(.top, 8)
             Image(systemName: iconName(for: brief.editionKind))
                 .font(.title3)
                 .foregroundStyle(iconColor(for: brief.editionKind))
@@ -86,7 +95,7 @@ struct BriefHistoryView: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(kindLabel(brief.editionKind))
-                        .font(.subheadline.weight(.semibold))
+                        .font(.subheadline.weight(isUnread ? .bold : .semibold))
                     Spacer()
                     Text(timeLabel(brief.generatedAt))
                         .font(.caption)

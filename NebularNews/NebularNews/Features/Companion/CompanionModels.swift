@@ -49,6 +49,7 @@ struct CompanionNewsBrief: Codable {
         var id: String { text }
     }
 
+    let id: String?
     let state: String
     let title: String
     let editionLabel: String

@@ -31,6 +31,7 @@ struct WidgetArticle: Codable, Identifiable {
 }
 
 struct WidgetBrief: Codable {
+    let id: String?            // brief edition id; absent on older cached data
     let title: String          // e.g. "Morning Brief"
     let editionLabel: String   // "Morning" or "Evening"
     let generatedAt: Double?   // epoch seconds

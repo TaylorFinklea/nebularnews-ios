@@ -263,6 +263,13 @@ struct CompanionTodayView: View {
                     upNext: newPayload.upNext,
                     newsBrief: brief
                 )
+                // Auto-open the generated brief in the detail view when the
+                // generation was user-initiated ("Preview next brief" or the
+                // Generate button). The brief id is present on the response
+                // since backend now returns it from /brief/generate.
+                if let briefId = brief.id {
+                    deepLinkRouter.pendingBriefId = briefId
+                }
                 #if os(iOS)
                 await BriefLiveActivityController.finish(
                     activity: activity,

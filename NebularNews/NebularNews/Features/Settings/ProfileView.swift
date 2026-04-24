@@ -238,6 +238,12 @@ struct ProfileView: View {
                             value: scoreCutoffBinding(settings),
                             in: 0...10
                         )
+                        Button {
+                            appState.pendingBriefGeneration = true
+                            dismiss()
+                        } label: {
+                            Label("Preview next brief", systemImage: "sparkles")
+                        }
                     }
                 } header: {
                     Label("Notifications", systemImage: "bell")

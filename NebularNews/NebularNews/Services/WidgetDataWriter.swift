@@ -131,6 +131,7 @@ enum WidgetDataWriter {
         // Brief (optional — absent when today payload has no persisted brief).
         if let newsBrief, newsBrief.state == "done", !newsBrief.bullets.isEmpty {
             let briefData = BriefWidgetData(
+                id: newsBrief.id,
                 title: newsBrief.title,
                 editionLabel: newsBrief.editionLabel,
                 generatedAt: newsBrief.generatedAt.map { Double($0) / 1000 },
@@ -146,6 +147,7 @@ enum WidgetDataWriter {
 /// Lightweight Codable for the brief widget. Must encode to the same shape as
 /// the widget's `WidgetBrief`.
 struct BriefWidgetData: Codable {
+    let id: String?
     let title: String
     let editionLabel: String
     let generatedAt: Double?

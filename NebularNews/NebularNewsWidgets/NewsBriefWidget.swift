@@ -15,6 +15,7 @@ struct NewsBriefProvider: TimelineProvider {
         NewsBriefEntry(
             date: .now,
             brief: WidgetBrief(
+                id: nil,
                 title: "Morning Brief",
                 editionLabel: "Morning",
                 generatedAt: Date().timeIntervalSince1970,
@@ -58,7 +59,14 @@ struct NewsBriefWidgetView: View {
             }
         }
         .containerBackground(.fill.tertiary, for: .widget)
-        .widgetURL(URL(string: "nebularnews://today"))
+        .widgetURL(briefDeepLinkURL)
+    }
+
+    private var briefDeepLinkURL: URL? {
+        if let id = entry.brief?.id, !id.isEmpty {
+            return URL(string: "nebularnews://brief/\(id)")
+        }
+        return URL(string: "nebularnews://today")
     }
 
     private var accessoryRectangularBody: some View {
@@ -157,6 +165,7 @@ struct NewsBriefWidget: Widget {
     NewsBriefEntry(
         date: .now,
         brief: WidgetBrief(
+            id: "preview-brief",
             title: "Morning Brief",
             editionLabel: "Morning",
             generatedAt: Date().timeIntervalSince1970,

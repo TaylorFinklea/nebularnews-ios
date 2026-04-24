@@ -100,6 +100,12 @@ struct NebularNewsApp: App {
             .onOpenURL { url in
                 deepLinkRouter.handle(url)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .openBriefFromNotification)) { notification in
+                if let briefId = notification.userInfo?["briefId"] as? String,
+                   let url = URL(string: "nebularnews://brief/\(briefId)") {
+                    deepLinkRouter.handle(url)
+                }
+            }
             .task {
                 await appState.loadSession()
                 if appState.hasSession {

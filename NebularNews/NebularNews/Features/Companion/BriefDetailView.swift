@@ -53,6 +53,9 @@ struct BriefDetailView: View {
         .task(id: briefId) {
             await loadDetail()
         }
+        .onAppear {
+            SeenBriefStore.markSeen(briefId)
+        }
     }
 
     // MARK: - Sections

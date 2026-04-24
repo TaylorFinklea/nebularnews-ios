@@ -99,6 +99,14 @@ final class NotificationManager: NSObject, UIApplicationDelegate, UNUserNotifica
                 object: nil,
                 userInfo: ["articleId": articleId]
             )
+        } else if let type = userInfo["type"] as? String, type == "brief",
+                  let briefId = userInfo["id"] as? String,
+                  !briefId.isEmpty {
+            NotificationCenter.default.post(
+                name: .openBriefFromNotification,
+                object: nil,
+                userInfo: ["briefId": briefId]
+            )
         }
         completionHandler()
     }
@@ -116,4 +124,5 @@ final class NotificationManager: NSObject {
 
 extension Notification.Name {
     static let openArticleFromNotification = Notification.Name("openArticleFromNotification")
+    static let openBriefFromNotification = Notification.Name("openBriefFromNotification")
 }

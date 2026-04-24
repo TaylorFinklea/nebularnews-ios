@@ -108,6 +108,12 @@ struct SettingsView: View {
                             .multilineTextAlignment(.trailing)
                             .frame(width: 70)
                     }
+                    Button {
+                        appState.pendingBriefGeneration = true
+                        dismiss()
+                    } label: {
+                        Label("Preview next brief", systemImage: "sparkles")
+                    }
                 } header: {
                     Label("News Brief", systemImage: "newspaper")
                 } footer: {
