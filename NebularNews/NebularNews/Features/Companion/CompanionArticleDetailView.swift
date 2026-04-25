@@ -39,6 +39,15 @@ struct CompanionArticleDetailView: View {
     @State private var currentPositionPercent: Int = 0
     @State private var lastPushedPercent: Int = -1
     @State private var positionDebounceTask: Task<Void, Never>?
+    // M16 Tier 2 — scroll restoration. We auto-restore to the user's last
+    // known position when they reopen an article. `hasRestoredScroll` is a
+    // one-shot guard so the restore only happens on initial appearance, not
+    // on every layout pass. `isRestoring` brackets the proxy.scrollTo call
+    // so the geometry change handler can suppress the bogus "I scrolled to
+    // X" push that would otherwise overwrite the user's saved position
+    // with the anchor-snapped position.
+    @State private var hasRestoredScroll = false
+    @State private var isRestoring = false
     @State private var pendingTagName = ""
     @State private var savingRead = false
     @State private var savingTag = false
@@ -61,6 +70,7 @@ struct CompanionArticleDetailView: View {
             if isLoading && payload == nil {
                 ProgressView("Loading article…")
             } else if let payload {
+                ScrollViewReader { proxy in
                 List {
                     if appState.syncManager?.isOffline == true {
                         Section {
@@ -112,6 +122,7 @@ struct CompanionArticleDetailView: View {
                     ArticleBodyView(article: payload.article) {
                         Task { await fetchContent() }
                     }
+                    .id(scrollAnchorBody)
 
                     // Highlights
                     if let highlights = payload.highlights, !highlights.isEmpty {
@@ -134,6 +145,7 @@ struct CompanionArticleDetailView: View {
                             Task { await deleteAnnotation() }
                         }
                     )
+                    .id(scrollAnchorAnnotation)
 
                     // Sources
                     if !payload.sources.isEmpty {
@@ -172,6 +184,7 @@ struct CompanionArticleDetailView: View {
                             Task { await acceptTagSuggestion(suggestion) }
                         }
                     )
+                    .id(scrollAnchorTags)
 
                     // Feedback history
                     if !payload.feedback.isEmpty {
@@ -313,6 +326,10 @@ struct CompanionArticleDetailView: View {
                 } message: {
                     Text("Copy text from the article, then paste it here to highlight.")
                 }
+                .task(id: payload.readPositionPercent ?? 0) {
+                    restoreScrollIfNeeded(proxy: proxy, percent: payload.readPositionPercent)
+                }
+                } // ScrollViewReader
             } else {
                 VStack(spacing: 20) {
                     ContentUnavailableView(
@@ -430,11 +447,65 @@ struct CompanionArticleDetailView: View {
     /// during fast scrolling.
     private func onScrollPositionChanged(_ percent: Int) {
         currentPositionPercent = percent
+        // While we're programmatically restoring the user's saved position,
+        // the geometry change handler will fire with the post-scroll percent
+        // (typically lower than the saved one because we anchor-scroll to
+        // the nearest section, not the exact pixel offset). Skip the
+        // debounced push for that bounce so we don't overwrite the saved
+        // value with the anchor-snapped one. Take whatever the post-scroll
+        // value is as the new baseline so subsequent natural scrolls only
+        // push when the user actually moves further.
+        if isRestoring {
+            lastPushedPercent = percent
+            return
+        }
         positionDebounceTask?.cancel()
         positionDebounceTask = Task { [articleId] in
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             await pushReadingPositionIfChanged(articleId: articleId, percent: percent)
+        }
+    }
+
+    // MARK: - Scroll restoration (M16 Tier 2)
+    //
+    // Section IDs we attach to the List rows. Using opaque string constants
+    // makes it obvious at the call site that these aren't user-facing.
+    private var scrollAnchorBody: String { "anchor-body" }
+    private var scrollAnchorTags: String { "anchor-tags" }
+    private var scrollAnchorAnnotation: String { "anchor-annotation" }
+
+    /// Pick the closest anchor for the saved scroll percent and ask the
+    /// ScrollViewReader proxy to scroll to it. We can't ask List for an
+    /// exact-pixel offset (no SwiftUI API for that) but jumping to the
+    /// nearest meaningful section beats opening every article at the top.
+    ///
+    /// One-shot via `hasRestoredScroll` so a re-render mid-session (e.g.
+    /// after a tag mutation) doesn't yank the user back.
+    private func restoreScrollIfNeeded(proxy: ScrollViewProxy, percent: Int?) {
+        guard !hasRestoredScroll, let percent, percent > 15 else { return }
+        hasRestoredScroll = true
+        let target: String
+        if percent >= 80 {
+            target = scrollAnchorAnnotation
+        } else if percent >= 50 {
+            target = scrollAnchorTags
+        } else {
+            target = scrollAnchorBody
+        }
+        // Wait one runloop tick so the rows have laid out before we ask the
+        // proxy to find the target. ScrollViewProxy.scrollTo silently no-ops
+        // on a missing id, which is hard to debug.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(100))
+            isRestoring = true
+            withAnimation(.easeInOut(duration: 0.25)) {
+                proxy.scrollTo(target, anchor: .top)
+            }
+            // Hold the suppression for ~1.5s so the geometry change settled
+            // by then can be absorbed without triggering a push.
+            try? await Task.sleep(for: .milliseconds(1500))
+            isRestoring = false
         }
     }
 

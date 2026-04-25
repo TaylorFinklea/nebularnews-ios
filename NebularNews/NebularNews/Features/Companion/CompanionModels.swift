@@ -112,6 +112,10 @@ struct CompanionArticleDetailPayload: Codable {
     let tagSuggestions: [CompanionTagSuggestion]
     var highlights: [CompanionHighlight]?
     var annotation: CompanionAnnotation?
+    // Last-known scroll percent for the current user, populated by the
+    // server from article_read_state. Used by CompanionArticleDetailView to
+    // auto-restore scroll on reopen (M16 Tier 2). Nil = nothing to restore.
+    var readPositionPercent: Int?
 }
 
 struct CompanionArticle: Codable {
