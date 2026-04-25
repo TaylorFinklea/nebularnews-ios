@@ -30,5 +30,8 @@ Package.resolved
 .claude/worktrees/
 .claude/settings.local.json
 
+# Playwright MCP debug artifacts (snapshots, console logs)
+.playwright-mcp/
+
 # CocoaPods (just in case)
 Pods/
