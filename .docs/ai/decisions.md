@@ -1,5 +1,29 @@
 # Architecture Decision Records
 
+## ADR-014: Quarantine permanent-failure articles (2026-04-26)
+
+**Status**: Implemented (design-wait session)
+
+**Context**: Chunks 2 and 4 produced two failure modes for articles that could never be successfully scraped: structurally unsupported content (PDFs, JSON-only HN entries) caught by `sniffContentType`, and articles that exhausted their 5-attempt retry budget without ever clearing the quality bar. Both kept reappearing in user feeds with empty content because there was no terminal state.
+
+**Decision**: Add `articles.quarantined_at` (nullable INTEGER unix-ms). `scrapeAndPersist` writes it on `QUARANTINE_METHODS` (currently just `unsupported_content_type`). The retry cron writes it when `scrape_retry_count` reaches `MAX_RETRIES`. User-facing endpoints (`/articles`, `/today`, resume card) filter `quarantined_at IS NULL` by default. Admin can opt back in with `?include_quarantined=true|only` and clear via `POST /admin/articles/:id/unquarantine`.
+
+**Rationale**: Hiding from feeds is the right user-facing default; "delete" would lose the URL+metadata if a feed serves a transient HTML response that triggers our heuristics. Re-scrape implicitly clears the flag — admin doesn't need to remember a separate unquarantine step. A partial index (`idx_articles_active`) keeps the default-case query cheap.
+
+**Consequences**: One-time backfill quarantined 151 of 1777 articles (8.5%) with retry budget exhausted and no content. Admins can correct misclassifications in the web UI. Future PDF-mode-aware scraping (e.g. text extraction) would un-quarantine those articles automatically on rescrape.
+
+## ADR-015: Self-hosted scrape-provider observability (2026-04-26)
+
+**Status**: Implemented (design-wait session)
+
+**Context**: After chunk 4's quality-based provider escalation shipped, the most likely cost driver became the retry cron flipping Steel ↔ Browserless calls when extraction quality is low. Steel and Browserless both bill per-call; their dashboards exist but checking them manually is reactive. We wanted a way to see usage trends without scraping their billing UIs.
+
+**Decision**: Track every provider call internally. `provider_calls` (per-call log, pruned at 30 days) captures provider, started_at, duration_ms, success, error_class. `provider_usage_daily` (long-lived rollups) holds per-provider per-day call/success/error counts plus p50/p95 duration. Daily cron at 3:30am UTC re-rolls the trailing 7 days (idempotent upsert via PRIMARY KEY). `GET /admin/usage` returns rollup history plus today's running totals computed live. Instrumentation lives at the for-loop level in `scrapeAndExtract`, not inside provider helpers — keeps the helpers pure-fetchers.
+
+**Rationale**: Independent ledger we can correlate with provider invoices; finds drift if their billing differs from our call counts. Error class taxonomy (`timeout` / `http_4xx` / `http_5xx` / `network`) lets us distinguish "tune our timeout" from "their incident" from "our request shape is wrong" — three very different responses. Web UI deferred until design lands; the data starts accumulating immediately.
+
+**Consequences**: Each scrape call writes one extra row to D1 (~80 bytes). At current rates that's <100KB/day. The 30-day prune keeps the hot table bounded. The admin endpoint is rate-limited only by the `is_admin` middleware; consumers will still need backend support to render anything.
+
 ## ADR-001: Migrate D1 to Supabase Postgres (2026-03-27)
 
 **Status**: Superseded by ADR-005

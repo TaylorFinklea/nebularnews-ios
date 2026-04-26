@@ -1,3 +1,33 @@
+# Next Steps (2026-04-26)
+
+## Push Notification Service Extension — in progress
+
+- [x] Backend: `mutable-content: 1` flag + brief payload `bullets` array + lead `image_url` — **(this session)**
+- [ ] User creates NSE target in Xcode (File → New → Target → Notification Service Extension; product name `NebularNewsNotifyService`, bundle id `com.nebularnews.ios.NotifyService`, embed in NebularNews)
+- [ ] Customize generated `NotificationService.swift` — image download with 8s timeout, body rewrite to 2 bullets, graceful fallback in `serviceExtensionTimeWillExpire()`
+- [ ] macOS xcodebuild clean (NSE skipped on macOS destination)
+- [ ] Device verification: install from Xcode → trigger brief via "Preview next brief" → confirm image + 2 bullets land on lock screen
+
+## Design-wait deferred (after design lands)
+
+- Audit-log web UI on the admin (data-only ship today)
+- Provider usage tile on the dashboard (data-only ship today)
+- iOS reading streaks (design-touchy)
+- AI-assistant "navigate to article" TODO (small)
+- Article-type push notifications via NSE (backend doesn't currently emit them)
+
+## Verification work pending device
+
+- Chunk 3 (M16 Tier 2): scroll to mid-article, back out, reopen → confirm auto-scroll lands at saved anchor
+- Provider observability: after first hourly retry cron run post-deploy, `provider_calls` should populate; check `/admin/usage` returns non-empty `today` map
+
+## Watch for next 24-72h
+
+- Quality-based escalation (chunk 4) might be too aggressive at 0.25 threshold — watch `avg_extraction_quality` on dashboard. If many recovered articles flip back to retry-state and burn provider cost, tune downward.
+- 17 articles with `no_readable_content` marker that didn't get backfilled — see if retry cron quarantines them naturally over the next day.
+
+---
+
 # Next Steps (2026-04-24)
 
 ## M17 manual follow-ups (unblock admin web)

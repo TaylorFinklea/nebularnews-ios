@@ -1,3 +1,52 @@
+# Current State (2026-04-26)
+
+## Design-wait session — Shipped
+
+Site-wide design mockups (consumer reader + admin) are in flight. Used the wait to push on plumbing, iOS, reliability, and observability — none design-blocked. Eight commits on backend, two on web, one on iOS, plus a one-time prod data backfill.
+
+### Chunks 1-6 (design-wait mix)
+
+- **Chunk 1** — `GET /admin/articles/:id` endpoint + web rewrite. Article detail page no longer "metadata not in recent list" for old articles. Commits `b78855e` + `4a65c6b`.
+- **Chunk 2** — Scraper guards. New `sniffContentType()` short-circuits PDFs/JSON; linkedom/Readability errors land structured (`unsupported_content_type` / `parse_failed` / `no_readable_content`). Quarantines on permanent failure. Commit `27b774f`.
+- **Chunk 3** — iOS scroll restoration on reopen (M16 Tier 2 finally complete). `ScrollViewReader` + section anchors (body/tags/annotation) selected by saved percent. Race-condition mitigation via `isRestoring` flag. Commits `7d49c7f` + `7f5360e`.
+- **Chunk 4** — Quality-based provider escalation. Recovery requires `wordCount >= 50 AND extraction_quality >= 0.25`; low-quality results flip Steel↔Browserless next attempt. Commit `40aa173`.
+- **Chunk 5** — Vitest scaffold. 13 unit tests (sniffContentType, escalatedProvider, backoffMs). Commit `f03661e`.
+- **Chunk 6** — Admin audit log. Migration 0016 + middleware on POST/PATCH/DELETE via `c.executionCtx.waitUntil`, `GET /admin/audit` endpoint. Web UI deferred. Commit `838b8b5`.
+
+### Quarantine + retroactive backfill
+
+- Migration 0017: `articles.quarantined_at` column + partial index `idx_articles_active`.
+- `scrapeAndPersist` writes `quarantined_at = COALESCE(quarantined_at, ?)` on `QUARANTINE_METHODS`. Retry cron quarantines on `MAX_RETRIES` exhaustion.
+- `/articles`, `/today` (3 queries), `/today` resume card all filter `quarantined_at IS NULL` by default.
+- Admin: `?include_quarantined=true|only` on list, `POST /admin/articles/:id/unquarantine` endpoint. Web detail page shows warning callout + Unquarantine button.
+- One-time backfill quarantined **151 of 1777 articles** (8.5%) with `scrape_retry_count >= 5` and empty content.
+- Backend `e3cdd22`, web `4f982a5`.
+
+### Steel + Browserless cost observability
+
+- Migration 0018: `provider_calls` (per-call log) + `provider_usage_daily` (rollups).
+- `scraper.ts` instrumentation hook in the for-loop captures duration, success, error_class (timeout/http_4xx/http_5xx/network) per call. Decoupled from provider functions to keep them pure.
+- Daily cron at 3:30am UTC re-rolls trailing 7 days into rollup table (idempotent upsert), prunes raw rows older than 30 days.
+- `GET /admin/usage?days=30` returns rollup history + today's running totals computed live.
+- Backend `51752e4`. Web tile deferred until design lands.
+
+### Repo housekeeping
+
+- `TaylorFinklea/nebularnews` was archived on GitHub (pre-rewrite SvelteKit). Unarchived, force-pushed the Workers backend history; old SvelteKit commits still in early history but main is current.
+- Created `TaylorFinklea/nebularnews-web` (was never had a remote). Initially private; user later flipped all three product repos to public.
+
+### Both repos
+
+- `nebularnews`: `51752e4` (HEAD) — pushed
+- `nebularnews-web`: `4f982a5` (HEAD) — pushed
+- `nebularnews-ios`: `7f5360e` (HEAD) — pushed
+
+### Next: Push Notification Service Extension (in progress as of this update)
+
+Brief push notifications get an image preview + 2-bullet body via a new iOS NSE target. Backend payload enrichment (`mutable-content: 1` + `bullets` + `image_url`) is the first deliverable. User creates the Xcode target manually; I customize the generated stub.
+
+---
+
 # Current State (2026-04-24)
 
 ## M17: Content Coverage Overhaul + SvelteKit Admin Web — Shipped
