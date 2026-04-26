@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A21C0F6F2F9EB58C00D99808 /* NebularNewsNotifyService.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A21C0F682F9EB58C00D99808 /* NebularNewsNotifyService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A2B962502F9408E6004DAF08 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2B9624F2F9408E6004DAF08 /* WidgetKit.framework */; };
 		A2B962522F9408E6004DAF08 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2B962512F9408E6004DAF08 /* SwiftUI.framework */; };
@@ -25,6 +26,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 21EF68A28F634A0CBC0E2AACAF2D5350;
 			remoteInfo = NebularNewsWidgets;
+		};
+		A21C0F6D2F9EB58C00D99808 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A2D0B8E72F5A05FB001EB670 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A21C0F672F9EB58C00D99808;
+			remoteInfo = NebularNewsNotifyService;
 		};
 		A2B95BE12F8FA680004DAF08 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -65,6 +73,7 @@
 			files = (
 				A2B95BE32F8FA680004DAF08 /* NebularNewsShareExtension.appex in Embed Foundation Extensions */,
 				A2B962632F9408E8004DAF08 /* NebularNewsWidgetsExtension.appex in Embed Foundation Extensions */,
+				A21C0F6F2F9EB58C00D99808 /* NebularNewsNotifyService.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -72,6 +81,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A21C0F682F9EB58C00D99808 /* NebularNewsNotifyService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NebularNewsNotifyService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NebularNewsShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2B9624E2F9408E6004DAF08 /* NebularNewsWidgetsExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NebularNewsWidgetsExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2B9624F2F9408E6004DAF08 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
@@ -82,6 +92,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A21C0F722F9EB58C00D99808 /* Exceptions for "NebularNewsNotifyService" folder in "NebularNewsNotifyService" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A21C0F672F9EB58C00D99808 /* NebularNewsNotifyService */;
+		};
 		A2B95BE42F8FA680004DAF08 /* Exceptions for "NebularNewsShareExtension" folder in "NebularNewsShareExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -99,6 +116,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		A21C0F692F9EB58C00D99808 /* NebularNewsNotifyService */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A21C0F722F9EB58C00D99808 /* Exceptions for "NebularNewsNotifyService" folder in "NebularNewsNotifyService" target */,
+			);
+			path = NebularNewsNotifyService;
+			sourceTree = "<group>";
+		};
 		A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -133,6 +158,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		A21C0F652F9EB58C00D99808 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A2B95BD62F8FA680004DAF08 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -195,6 +227,7 @@
 				A2D0B9092F5A05FB001EB670 /* NebularNewsUITests */,
 				A2B95BDA2F8FA680004DAF08 /* NebularNewsShareExtension */,
 				A2B962532F9408E6004DAF08 /* NebularNewsWidgets */,
+				A21C0F692F9EB58C00D99808 /* NebularNewsNotifyService */,
 				A2C57C4F2F7C5D7C0058043E /* Frameworks */,
 				A2D0B8F02F5A05FB001EB670 /* Products */,
 			);
@@ -208,6 +241,7 @@
 				A2D0B9062F5A05FB001EB670 /* NebularNewsUITests.xctest */,
 				A2B95BD92F8FA680004DAF08 /* NebularNewsShareExtension.appex */,
 				A2B9624E2F9408E6004DAF08 /* NebularNewsWidgetsExtension.appex */,
+				A21C0F682F9EB58C00D99808 /* NebularNewsNotifyService.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -215,6 +249,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		A21C0F672F9EB58C00D99808 /* NebularNewsNotifyService */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A21C0F732F9EB58C00D99808 /* Build configuration list for PBXNativeTarget "NebularNewsNotifyService" */;
+			buildPhases = (
+				A21C0F642F9EB58C00D99808 /* Sources */,
+				A21C0F652F9EB58C00D99808 /* Frameworks */,
+				A21C0F662F9EB58C00D99808 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A21C0F692F9EB58C00D99808 /* NebularNewsNotifyService */,
+			);
+			name = NebularNewsNotifyService;
+			packageProductDependencies = (
+			);
+			productName = NebularNewsNotifyService;
+			productReference = A21C0F682F9EB58C00D99808 /* NebularNewsNotifyService.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension" */;
@@ -274,6 +330,7 @@
 				2064B138884E4CDCBD053B0E874E1137 /* PBXTargetDependency */,
 				A2B95BE22F8FA680004DAF08 /* PBXTargetDependency */,
 				A2B962622F9408E8004DAF08 /* PBXTargetDependency */,
+				A21C0F6E2F9EB58C00D99808 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A2D0B8F12F5A05FB001EB670 /* NebularNews */,
@@ -346,6 +403,9 @@
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
+					A21C0F672F9EB58C00D99808 = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
 					A2B95BD82F8FA680004DAF08 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
@@ -388,11 +448,19 @@
 				A2D0B9052F5A05FB001EB670 /* NebularNewsUITests */,
 				A2B95BD82F8FA680004DAF08 /* NebularNewsShareExtension */,
 				A2B9624D2F9408E6004DAF08 /* NebularNewsWidgetsExtension */,
+				A21C0F672F9EB58C00D99808 /* NebularNewsNotifyService */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		A21C0F662F9EB58C00D99808 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A2B95BD72F8FA680004DAF08 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -431,6 +499,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A21C0F642F9EB58C00D99808 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A2B95BD52F8FA680004DAF08 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -473,6 +548,11 @@
 			isa = PBXTargetDependency;
 			targetProxy = 5C2FDB12F190473F8F623D8B24608D03 /* PBXContainerItemProxy */;
 		};
+		A21C0F6E2F9EB58C00D99808 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A21C0F672F9EB58C00D99808 /* NebularNewsNotifyService */;
+			targetProxy = A21C0F6D2F9EB58C00D99808 /* PBXContainerItemProxy */;
+		};
 		A2B95BE22F8FA680004DAF08 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = ios;
@@ -497,6 +577,66 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		A21C0F702F9EB58C00D99808 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K7CBQW6MPG;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NebularNewsNotifyService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NebularNewsNotifyService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.ios.NebularNewsNotifyService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A21C0F712F9EB58C00D99808 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = K7CBQW6MPG;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NebularNewsNotifyService/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = NebularNewsNotifyService;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nebularnews.ios.NebularNewsNotifyService;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		A2B95BE62F8FA680004DAF08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -917,6 +1057,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		A21C0F732F9EB58C00D99808 /* Build configuration list for PBXNativeTarget "NebularNewsNotifyService" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A21C0F702F9EB58C00D99808 /* Debug */,
+				A21C0F712F9EB58C00D99808 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A2B95BE52F8FA680004DAF08 /* Build configuration list for PBXNativeTarget "NebularNewsShareExtension" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
