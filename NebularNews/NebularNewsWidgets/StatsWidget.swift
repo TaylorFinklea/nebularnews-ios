@@ -48,6 +48,15 @@ struct StatsWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: StatsEntry
 
+    private var isEmpty: Bool {
+        entry.stats.unreadTotal == 0 && entry.stats.newToday == 0 && entry.stats.highFitUnread == 0
+    }
+
+    private var isStale: Bool {
+        guard let updated = entry.lastUpdated else { return true }
+        return Date().timeIntervalSince(updated) > 3600
+    }
+
     var body: some View {
         Group {
             switch family {
@@ -80,37 +89,58 @@ struct StatsWidgetView: View {
 
     private var homeScreenBody: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 4) {
                 Image(systemName: "sun.max.fill")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.accentColor)
                 Text("Nebular News")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
+                Spacer()
+                if isStale {
+                    Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Data may be stale")
+                }
             }
 
-            Spacer()
+            if isEmpty {
+                Spacer()
+                VStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(Color.accentColor.opacity(0.8))
+                    Text("All caught up!")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                Spacer()
 
-            statRow(
-                icon: "envelope.badge",
-                label: "Unread",
-                value: entry.stats.unreadTotal,
-                color: entry.stats.unreadTotal > 0 ? .blue : .secondary
-            )
+                statRow(
+                    icon: "envelope.badge",
+                    label: "Unread",
+                    value: entry.stats.unreadTotal,
+                    color: entry.stats.unreadTotal > 0 ? Color.accentColor : .secondary
+                )
 
-            statRow(
-                icon: "clock",
-                label: "New",
-                value: entry.stats.newToday,
-                color: entry.stats.newToday > 0 ? .orange : .secondary
-            )
+                statRow(
+                    icon: "clock",
+                    label: "New",
+                    value: entry.stats.newToday,
+                    color: entry.stats.newToday > 0 ? .orange : .secondary
+                )
 
-            statRow(
-                icon: "star.fill",
-                label: "Top",
-                value: entry.stats.highFitUnread,
-                color: entry.stats.highFitUnread > 0 ? .green : .secondary
-            )
+                statRow(
+                    icon: "star.fill",
+                    label: "Top",
+                    value: entry.stats.highFitUnread,
+                    color: entry.stats.highFitUnread > 0 ? .green : .secondary
+                )
+            }
         }
     }
 

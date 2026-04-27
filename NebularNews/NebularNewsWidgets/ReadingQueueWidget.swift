@@ -53,6 +53,11 @@ struct ReadingQueueWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: ReadingQueueEntry
 
+    private var isStale: Bool {
+        guard let updated = entry.lastUpdated else { return true }
+        return Date().timeIntervalSince(updated) > 3600
+    }
+
     var body: some View {
         Group {
             switch family {
@@ -73,7 +78,7 @@ struct ReadingQueueWidgetView: View {
         Group {
             if let top = entry.articles.first {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Up next · \(entry.articles.count)")
+                    Text("Up next \u{00B7} \(entry.articles.count)")
                         .font(.caption2)
                         .widgetAccentable()
                     Text(top.title)
@@ -85,9 +90,17 @@ struct ReadingQueueWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .widgetURL(URL(string: "nebularnews://article/\(top.id)"))
             } else {
-                Text("Queue is empty")
-                    .font(.caption)
-                    .widgetURL(URL(string: "nebularnews://today"))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Reading Queue")
+                        .font(.caption2)
+                        .widgetAccentable()
+                    Text("Queue is empty")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .widgetURL(URL(string: "nebularnews://today"))
             }
         }
     }
@@ -95,15 +108,20 @@ struct ReadingQueueWidgetView: View {
     private var articleList: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 4) {
                 Image(systemName: "list.bullet")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.accentColor)
                 Text("Reading Queue")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
                 Spacer()
-                if let updated = entry.lastUpdated {
+                if isStale {
+                    Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Data may be stale")
+                } else if let updated = entry.lastUpdated {
                     Text(updated, style: .relative)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -117,7 +135,11 @@ struct ReadingQueueWidgetView: View {
                     Divider()
                         .padding(.vertical, 2)
                 }
-                Link(destination: URL(string: "nebularnews://article/\(article.id)")!) {
+                if let url = URL(string: "nebularnews://article/\(article.id)") {
+                    Link(destination: url) {
+                        articleRow(article)
+                    }
+                } else {
                     articleRow(article)
                 }
             }
@@ -163,9 +185,9 @@ struct ReadingQueueWidgetView: View {
 
     private var emptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "newspaper")
+            Image(systemName: "list.bullet.rectangle")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.accentColor.opacity(0.6))
             Text("No articles yet")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

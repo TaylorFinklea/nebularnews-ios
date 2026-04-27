@@ -55,6 +55,11 @@ struct TopArticleWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: TopArticleEntry
 
+    private var isStale: Bool {
+        guard let updated = entry.lastUpdated else { return true }
+        return Date().timeIntervalSince(updated) > 3600
+    }
+
     var body: some View {
         Group {
             switch family {
@@ -91,9 +96,17 @@ struct TopArticleWidgetView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .widgetURL(URL(string: "nebularnews://article/\(article.id)"))
             } else {
-                Text("No top article")
-                    .font(.caption)
-                    .widgetURL(URL(string: "nebularnews://today"))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Top Article")
+                        .font(.caption2)
+                        .widgetAccentable()
+                    Text("No articles yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .widgetURL(URL(string: "nebularnews://today"))
             }
         }
     }
@@ -125,6 +138,12 @@ struct TopArticleWidgetView: View {
                         .lineLimit(1)
                 }
                 Spacer()
+                if isStale {
+                    Image(systemName: "exclamationmark.arrow.triangle.2.circlepath")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityLabel("Data may be stale")
+                }
             }
 
             // Title
@@ -150,7 +169,7 @@ struct TopArticleWidgetView: View {
         VStack(spacing: 8) {
             Image(systemName: "newspaper")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.accentColor.opacity(0.6))
             Text("No articles yet")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -168,7 +187,7 @@ struct TopArticleWidgetView: View {
             .monospacedDigit()
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(scoreColor(score).opacity(0.2), in: Capsule())
+            .background(scoreColor(score).opacity(0.18), in: Capsule())
             .foregroundStyle(scoreColor(score))
     }
 

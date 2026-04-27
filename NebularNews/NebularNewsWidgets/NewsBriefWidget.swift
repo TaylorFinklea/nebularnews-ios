@@ -47,6 +47,30 @@ struct NewsBriefWidgetView: View {
     @Environment(\.widgetFamily) private var family
     var entry: NewsBriefEntry
 
+    private var containerBackground: some ShapeStyle {
+        if family == .systemLarge {
+            return AnyShapeStyle(
+                LinearGradient(
+                    colors: [
+                        Color.accentColor.opacity(0.10),
+                        Color.accentColor.opacity(0.04),
+                        Color.clear
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+        }
+        return AnyShapeStyle(.fill.tertiary)
+    }
+
+    private var briefDeepLinkURL: URL? {
+        if let id = entry.brief?.id, !id.isEmpty {
+            return URL(string: "nebularnews://brief/\(id)")
+        }
+        return URL(string: "nebularnews://today")
+    }
+
     var body: some View {
         Group {
             switch family {
@@ -58,15 +82,8 @@ struct NewsBriefWidgetView: View {
                 homeScreenBody(maxBullets: 6)
             }
         }
-        .containerBackground(.fill.tertiary, for: .widget)
+        .containerBackground(containerBackground, for: .widget)
         .widgetURL(briefDeepLinkURL)
-    }
-
-    private var briefDeepLinkURL: URL? {
-        if let id = entry.brief?.id, !id.isEmpty {
-            return URL(string: "nebularnews://brief/\(id)")
-        }
-        return URL(string: "nebularnews://today")
     }
 
     private var accessoryRectangularBody: some View {
@@ -83,18 +100,25 @@ struct NewsBriefWidgetView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text("No brief yet")
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("News Brief")
+                        .font(.caption2)
+                        .widgetAccentable()
+                    Text("No brief yet")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     private func homeScreenBody(maxBullets: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            HStack(spacing: 4) {
                 Image(systemName: "newspaper")
                     .font(.caption)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Color.accentColor)
                 Text(entry.brief?.title ?? "News Brief")
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
@@ -110,9 +134,10 @@ struct NewsBriefWidgetView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(bullets.prefix(maxBullets).enumerated()), id: \.offset) { _, text in
                         HStack(alignment: .top, spacing: 6) {
-                            Text("•")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Circle()
+                                .fill(Color.accentColor.opacity(0.5))
+                                .frame(width: 5, height: 5)
+                                .padding(.top, 4)
                             Text(text)
                                 .font(.caption)
                                 .foregroundStyle(.primary)
@@ -125,7 +150,7 @@ struct NewsBriefWidgetView: View {
                     Spacer()
                     Image(systemName: "newspaper")
                         .font(.title2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.accentColor.opacity(0.5))
                     Text("Open the app to generate a brief")
                         .font(.caption)
                         .foregroundStyle(.secondary)
