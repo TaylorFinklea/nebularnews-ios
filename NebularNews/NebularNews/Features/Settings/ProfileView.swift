@@ -320,6 +320,11 @@ struct ProfileView: View {
                 } label: {
                     Label("Chat History", systemImage: "bubble.left.and.text.bubble.right")
                 }
+                NavigationLink {
+                    ManageSuppressionsView()
+                } label: {
+                    Label("Manage Suppressions", systemImage: "eye.slash")
+                }
             } header: {
                 Label("AI Assistant", systemImage: "sparkles")
             }

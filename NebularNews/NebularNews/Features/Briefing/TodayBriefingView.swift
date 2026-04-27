@@ -58,6 +58,7 @@ struct TodayBriefingView: View {
             }
             dismissService?.cleanup()
             await loadThread()
+            await refreshIfStale()
         }
         .sheet(item: $dismissContext) { ctx in
             DismissDurationSheet(
@@ -76,6 +77,10 @@ struct TodayBriefingView: View {
 
     // MARK: - Loading
 
+    /// 12 hours in milliseconds. Briefs older than this auto-refresh on
+    /// Today tab open so the user never sees a stale seed.
+    private static let staleBriefThresholdMs: Int = 12 * 60 * 60 * 1000
+
     private func loadThread() async {
         guard !isLoading else { return }
         isLoading = true
@@ -90,6 +95,33 @@ struct TodayBriefingView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// Called once per view appearance. If the seeded brief is older than
+    /// the staleness threshold, regenerates in the background and re-loads
+    /// the thread. Idempotent — running the same check twice during one
+    /// open is harmless because regenerateBrief() blocks on the same
+    /// request the cron would otherwise issue.
+    private func refreshIfStale() async {
+        guard !isLoading else { return }
+        let seed = messages.first(where: { $0.kind == "brief_seed" })
+        let nowMs = Int(Date().timeIntervalSince1970 * 1000)
+
+        // Parse generated_at out of the seed JSON; missing seed counts as
+        // "stale" so first-time users automatically get a fresh brief.
+        let generatedAt: Int? = {
+            guard let seed, let brief = SeededBrief.parse(content: seed.content) else { return nil }
+            return brief.generatedAt
+        }()
+
+        let stale: Bool
+        if let generatedAt {
+            stale = nowMs - generatedAt > Self.staleBriefThresholdMs
+        } else {
+            stale = true
+        }
+        guard stale else { return }
+        await refresh()
     }
 
     private func refresh() async {
@@ -230,11 +262,11 @@ struct TodayBriefingView: View {
     private func handleBulletAction(_ action: BriefMessageView.BulletAction) {
         switch action {
         case .save(let articleIds):
-            Task { await runServerTool(name: "save_articles", args: ["article_ids": articleIds]) }
+            Task { await execSave(articleIds: articleIds) }
         case .reactUp(let articleIds):
-            Task { await runServerTool(name: "react_to_articles", args: ["article_ids": articleIds, "value": 1]) }
+            Task { await execReact(articleIds: articleIds, value: 1) }
         case .reactDown(let articleIds):
-            Task { await runServerTool(name: "react_to_articles", args: ["article_ids": articleIds, "value": -1]) }
+            Task { await execReact(articleIds: articleIds, value: -1) }
         case .dismiss(let signature, let articleIds):
             dismissContext = DismissContext(signature: signature, articleIds: articleIds)
         case .tellMeMore(let prompt):
@@ -246,41 +278,94 @@ struct TodayBriefingView: View {
         }
     }
 
-    /// Posts a synthetic user turn to /chat/assistant so the AI registers
-    /// the action and emits the appropriate undo chip into the thread.
-    /// Simpler than wiring a separate "execute server tool" endpoint.
-    private func runServerTool(name: String, args: [String: Any]) async {
-        // For first version we just append a user-message describing the
-        // intent. The AI then calls the relevant tool. This keeps the
-        // round-trip in one well-tested path. A future optimization could
-        // call the tool directly via a new /chat/exec-tool endpoint to skip
-        // the intent-recognition step.
-        guard let threadId = thread?.id else { return }
-        let prompt = synthesizePrompt(for: name, args: args)
-        let context = AIPageContext(
-            pageType: "today_brief",
-            pageLabel: "Today brief",
-            briefSummary: messages.first(where: { $0.kind == "brief_seed" })?.content
-        )
-        coordinator.currentContext = context
-        coordinator.currentThreadId = threadId
-        await coordinator.sendMessage(prompt)
-        await loadThread()
+    // POST /chat/exec-tool with a typed body. Two helpers (save, react) so
+    // we don't need a generic [String: Any] container — args are statically
+    // known per action and the server validates the tool name anyway.
+
+    private struct SaveBody: Encodable {
+        let tool: String = "save_articles"
+        let args: Args
+        struct Args: Encodable { let article_ids: [String] }
     }
 
-    private func synthesizePrompt(for tool: String, args: [String: Any]) -> String {
-        switch tool {
-        case "save_articles":
-            if let ids = args["article_ids"] as? [String] {
-                return "Save these articles to my reading list: \(ids.joined(separator: ", "))"
-            }
-        case "react_to_articles":
-            let value = args["value"] as? Int ?? 1
-            if let ids = args["article_ids"] as? [String] {
-                return "Mark a \(value > 0 ? "👍 like" : "👎 dislike") on these articles: \(ids.joined(separator: ", "))"
-            }
-        default: break
-        }
-        return "Run tool \(tool)"
+    private struct ReactBody: Encodable {
+        let tool: String = "react_to_articles"
+        let args: Args
+        struct Args: Encodable { let article_ids: [String]; let value: Int }
     }
+
+    /// Tool result envelope. The undo spec is intentionally generic over
+    /// the args: undo_save_articles and undo_react_to_articles both take
+    /// `{ article_ids: [String] }`, so a single decoder shape suffices.
+    private struct ExecToolResult: Decodable {
+        let summary: String
+        let succeeded: Bool
+        let undo: UndoSpec?
+
+        struct UndoSpec: Decodable {
+            let tool: String
+            let args: ArticleIdsArgs
+        }
+
+        struct ArticleIdsArgs: Codable {
+            let article_ids: [String]
+        }
+    }
+
+    private func execSave(articleIds: [String]) async {
+        let body = SaveBody(args: .init(article_ids: articleIds))
+        await postExecTool(label: "Save", body: body)
+    }
+
+    private func execReact(articleIds: [String], value: Int) async {
+        let body = ReactBody(args: .init(article_ids: articleIds, value: value))
+        await postExecTool(label: value > 0 ? "Like" : "Dislike", body: body)
+    }
+
+    /// Posts an exec-tool body, decodes the result, appends a chip into the
+    /// thread for visual confirmation. `label` is only used for the error
+    /// message when something goes wrong — succeess summaries come from the
+    /// server.
+    private func postExecTool<B: Encodable>(label: String, body: B) async {
+        do {
+            let result: ExecToolResult = try await APIClient.shared.request(
+                method: "POST",
+                path: "api/chat/exec-tool",
+                body: body
+            )
+            appendToolChip(name: label, summary: result.summary, succeeded: result.succeeded, undo: result.undo)
+        } catch {
+            errorMessage = "Could not \(label.lowercased()): \(error.localizedDescription)"
+        }
+    }
+
+    /// Appends a one-off tool_result message into the local thread cache so
+    /// the user sees the chip without a thread reload. Server already wrote
+    /// the actual mutation — the message here is purely UI feedback.
+    private func appendToolChip(name: String, summary: String, succeeded: Bool, undo: ExecToolResult.UndoSpec?) {
+        let undoBlob: String? = {
+            guard let undo, let data = try? JSONEncoder().encode(undo.args) else { return nil }
+            return data.base64EncodedString()
+        }()
+        let marker = AssistantMessageParser.toolMarker(
+            name: name,
+            summary: summary,
+            succeeded: succeeded,
+            undoTool: undo?.tool,
+            undoArgsB64: undoBlob
+        )
+        let msg = CompanionChatMessage(
+            id: UUID().uuidString,
+            threadId: thread?.id ?? "",
+            role: "assistant",
+            content: marker,
+            tokenCount: nil,
+            provider: nil,
+            model: nil,
+            createdAt: Int(Date().timeIntervalSince1970),
+            messageKind: "tool_result"
+        )
+        messages.append(msg)
+    }
+
 }
