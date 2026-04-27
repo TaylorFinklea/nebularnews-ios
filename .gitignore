@@ -30,6 +30,12 @@ Package.resolved
 .claude/worktrees/
 .claude/settings.local.json
 
+# Apple secrets — never commit. Real keys live in ~/.appstoreconnect/
+# and ~/Library/Keychains. release.sh references them by absolute path.
+*.p8
+AuthKey_*.p8
+**/AuthKey_*.p8
+
 # Playwright MCP debug artifacts (snapshots, console logs)
 .playwright-mcp/
 

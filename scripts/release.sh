@@ -113,8 +113,8 @@ EXPORT_CMD=(
   -allowProvisioningUpdates
 )
 
-ASC_KEY_PATH="${ASC_API_KEY_PATH:-$HOME/.appstoreconnect/AuthKey_7L49JA73Z7.p8}"
-ASC_KEY_ID="${ASC_API_KEY_ID:-7L49JA73Z7}"
+ASC_KEY_PATH="${ASC_API_KEY_PATH:-$HOME/.appstoreconnect/AuthKey_J79935N6P6.p8}"
+ASC_KEY_ID="${ASC_API_KEY_ID:-J79935N6P6}"
 ASC_ISSUER="${ASC_API_ISSUER_ID:-fe27785a-1413-46ff-bd82-111de0da024f}"
 
 if [ -f "$ASC_KEY_PATH" ]; then
