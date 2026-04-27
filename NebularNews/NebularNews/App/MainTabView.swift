@@ -11,7 +11,10 @@ struct MainTabView: View {
     @State private var showSettings = false
 
     enum RootSection: String, CaseIterable {
-        case today, articles, discover, library
+        // M18 dropped 'articles' (the firehose) in favor of the chat-first
+        // briefing surface as Today. Keep the case names stable so deep
+        // links and AI tool calls (`navigate_to_tab`) keep routing.
+        case today, discover, library
     }
 
     @State private var selectedTab: RootSection? = .today
@@ -54,9 +57,7 @@ struct MainTabView: View {
         } detail: {
             switch selectedTab ?? .today {
             case .today:
-                CompanionTodayView(showSettings: $showSettings)
-            case .articles:
-                CompanionArticlesView(showSettings: $showSettings)
+                TodayBriefingView()
             case .discover:
                 CompanionDiscoverView(showSettings: $showSettings)
             case .library:
@@ -72,11 +73,7 @@ struct MainTabView: View {
     private var tabViewBody: some View {
         TabView {
             Tab("Today", systemImage: "sun.max") {
-                CompanionTodayView(showSettings: $showSettings)
-            }
-
-            Tab("Articles", systemImage: "doc.text") {
-                CompanionArticlesView(showSettings: $showSettings)
+                TodayBriefingView()
             }
 
             Tab("Discover", systemImage: "safari") {
@@ -89,6 +86,9 @@ struct MainTabView: View {
             .badge(companionSavedCount)
         }
         .tint(.accent)
+        // The chat-first Today tab has its own input bar; the floating
+        // AI overlay still appears on Discover / Library so users can
+        // ask follow-ups while browsing those surfaces.
         .overlay { AIAssistantOverlay() }
     }
     #endif
@@ -97,9 +97,6 @@ struct MainTabView: View {
         List(selection: $selectedTab) {
             NavigationLink(value: RootSection.today) {
                 Label("Today", systemImage: "sun.max")
-            }
-            NavigationLink(value: RootSection.articles) {
-                Label("Articles", systemImage: "doc.text")
             }
             NavigationLink(value: RootSection.discover) {
                 Label("Discover", systemImage: "safari")

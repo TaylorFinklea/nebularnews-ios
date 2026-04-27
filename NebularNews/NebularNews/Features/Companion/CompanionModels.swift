@@ -479,6 +479,12 @@ struct CompanionChatMessage: Codable, Identifiable {
     let provider: String?
     let model: String?
     let createdAt: Int
+    // Backend migration 0019. Defaults to 'text' when absent so older
+    // captured payloads still decode. Recognized values:
+    //   text | brief_seed | tool_result | system_note
+    var messageKind: String?
+
+    var kind: String { messageKind ?? "text" }
 }
 
 struct CompanionChatPayload: Codable {

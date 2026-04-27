@@ -41,7 +41,7 @@ struct NebularNewsApp: App {
 
         // Separate SwiftData container for the Supabase cache layer + offline queue
         do {
-            let cacheSchema = Schema([CachedArticle.self, CachedFeed.self, PendingAction.self])
+            let cacheSchema = Schema([CachedArticle.self, CachedFeed.self, PendingAction.self, DismissedTopic.self])
             let cacheConfig = ModelConfiguration(
                 "Cache",
                 schema: cacheSchema,
@@ -55,7 +55,7 @@ struct NebularNewsApp: App {
             appLogger.error("Cache ModelContainer creation failed: \(error, privacy: .public)")
             // Fall back to in-memory cache
             do {
-                let cacheSchema = Schema([CachedArticle.self, CachedFeed.self, PendingAction.self])
+                let cacheSchema = Schema([CachedArticle.self, CachedFeed.self, PendingAction.self, DismissedTopic.self])
                 let cacheConfig = ModelConfiguration(
                     schema: cacheSchema,
                     isStoredInMemoryOnly: true,
