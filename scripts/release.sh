@@ -3,9 +3,15 @@ set -euo pipefail
 
 # ============================================================
 # NebularNews — Automated Archive + TestFlight Upload
-# Usage: ./scripts/release.sh [--minor | --patch]
-#   --patch  bump patch version (2.0.1 → 2.0.2)  [default]
-#   --minor  bump minor version (2.0.1 → 2.1.0)
+# Usage: ./scripts/release.sh [--build | --patch | --minor]
+#   --build  bump only the build number (1.0.1 (12) → 1.0.1 (13))  [default]
+#   --patch  bump patch version (1.0.1 → 1.0.2) — Apple App Store review trigger
+#   --minor  bump minor version (1.0.1 → 1.1.0) — Apple App Store review trigger
+#
+# IMPORTANT: marketing-version bumps (--patch / --minor) require a new App Store
+# review at app submission time. For TestFlight iteration during development,
+# stick with --build (the default). Only use --patch/--minor when you're ready
+# to ship a release that the user has explicitly asked for.
 #
 # Non-interactive auth (for CI/agents):
 #   ASC_API_KEY_PATH   — path to .p8 key file
@@ -30,12 +36,13 @@ fail() { echo -e "${RED}✘ $1${NC}"; exit 1; }
 # ============================================================
 # Parse flags
 # ============================================================
-BUMP_TYPE="patch"
+BUMP_TYPE="build"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --minor) BUMP_TYPE="minor"; shift ;;
     --patch) BUMP_TYPE="patch"; shift ;;
-    *) fail "Unknown flag: $1. Use --patch or --minor." ;;
+    --build) BUMP_TYPE="build"; shift ;;
+    *) fail "Unknown flag: $1. Use --build, --patch, or --minor." ;;
   esac
 done
 
@@ -52,20 +59,27 @@ OLD_VERSION=$(grep -m1 'MARKETING_VERSION = ' NebularNews.xcodeproj/project.pbxp
 NEW_BUILD=$((OLD_BUILD + 1))
 agvtool new-version -all "$NEW_BUILD" > /dev/null
 
-IFS='.' read -ra PARTS <<< "$OLD_VERSION"
-MAJOR="${PARTS[0]:-2}"
-MINOR="${PARTS[1]:-0}"
-PATCH="${PARTS[2]:-0}"
-
-if [ "$BUMP_TYPE" = "minor" ]; then
-  NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+if [ "$BUMP_TYPE" = "build" ]; then
+  # Default path: leave the marketing version alone. TestFlight build-only
+  # uploads stay under the same App Store record and avoid triggering Apple
+  # review.
+  NEW_VERSION="$OLD_VERSION"
+  echo "  Version: $OLD_VERSION (unchanged) — build $OLD_BUILD → $NEW_BUILD"
 else
-  NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+  IFS='.' read -ra PARTS <<< "$OLD_VERSION"
+  MAJOR="${PARTS[0]:-2}"
+  MINOR="${PARTS[1]:-0}"
+  PATCH="${PARTS[2]:-0}"
+
+  if [ "$BUMP_TYPE" = "minor" ]; then
+    NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+  else
+    NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+  fi
+
+  agvtool new-marketing-version "$NEW_VERSION" > /dev/null
+  echo "  Version: $OLD_VERSION → $NEW_VERSION (build $NEW_BUILD) — App Store review trigger"
 fi
-
-agvtool new-marketing-version "$NEW_VERSION" > /dev/null
-
-echo "  Version: $OLD_VERSION → $NEW_VERSION (build $NEW_BUILD)"
 
 # ============================================================
 # 2. Resolve SPM packages
