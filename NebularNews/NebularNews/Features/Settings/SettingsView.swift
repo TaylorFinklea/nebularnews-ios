@@ -157,6 +157,31 @@ struct SettingsView: View {
                 Label("About", systemImage: "info.circle")
             }
 
+            // MARK: - Advanced
+            Section {
+                NavigationLink {
+                    AdvancedSettingsView()
+                } label: {
+                    HStack {
+                        Text("Advanced")
+                        Spacer()
+                        // Badge shows dead-letter count only — pending items
+                        // self-resolve and shouldn't create a persistent badge
+                        // on the Settings root.
+                        let deadLetterCount = appState.syncManager?.deadLetterActionCount ?? 0
+                        if deadLetterCount > 0 {
+                            Text("\(deadLetterCount)")
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 3)
+                                .background(Color.red, in: Capsule())
+                        }
+                    }
+                }
+            }
+
             // MARK: - Account
             Section("Account") {
                 Button("Sign Out", role: .destructive) {
