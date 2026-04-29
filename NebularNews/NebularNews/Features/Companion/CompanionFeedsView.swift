@@ -21,6 +21,8 @@ struct CompanionFeedsView: View {
     @State private var showingImport = false
     @State private var deletingFeed: CompanionFeed?
     @State private var editingFeed: CompanionFeed?
+    /// The conflict action currently being presented in the conflict sheet.
+    @State private var conflictAction: PendingAction?
 
     var body: some View {
         List {
@@ -247,6 +249,34 @@ struct CompanionFeedsView: View {
                 Task { await loadFeeds() }
             }
         }
+        .sheet(item: $conflictAction) { action in
+            FeedSettingsConflictSheet(
+                action: action,
+                feedTitle: feeds.first(where: { $0.id == action.articleId })?.title
+            )
+            .onDisappear {
+                // After the conflict sheet dismisses check for more conflicts and reload.
+                checkForPendingConflicts()
+                Task { await loadFeeds() }
+            }
+        }
+        .onAppear { checkForPendingConflicts() }
+        .onChange(of: appState.feedConflicts.pendingFeedIds.count) { checkForPendingConflicts() }
+    }
+
+    /// Pops the first pending conflict feed id and resolves it to a `PendingAction`
+    /// so the conflict sheet can be presented.
+    private func checkForPendingConflicts() {
+        guard conflictAction == nil else { return }
+        guard let sync = appState.syncManager else { return }
+        guard let feedId = appState.feedConflicts.pendingFeedIds.first else { return }
+        let conflicts = sync.fetchConflictedActions()
+        if let action = conflicts.first(where: { $0.articleId == feedId }) {
+            conflictAction = action
+        } else {
+            // Action was already resolved elsewhere — clear the notification.
+            appState.feedConflicts.resolved(feedId: feedId)
+        }
     }
 
     private func feedStatusColor(_ feed: CompanionFeed) -> Color {
@@ -432,6 +462,12 @@ private struct FeedSettingsSheet: View {
     @State private var feedType: String
     @State private var isSaving = false
 
+    /// ETag captured at sheet-open time, computed from the feed's current
+    /// subscription values. Sent as `If-Match` on save to detect concurrent
+    /// edits by another device. Per spec, we do NOT re-fetch on save — if the
+    /// etag is stale the server 412s and the conflict sheet handles it.
+    @State private var capturedEtag: String
+
     init(feed: CompanionFeed, onSave: @escaping () -> Void) {
         self.feed = feed
         self.onSave = onSave
@@ -441,6 +477,9 @@ private struct FeedSettingsSheet: View {
         _scrapeMode = State(initialValue: feed.scrapeMode ?? "rss_only")
         _scrapeProvider = State(initialValue: feed.scrapeProvider ?? "")
         _feedType = State(initialValue: feed.feedType ?? "standard")
+        // Compute ETag from the source feed values, not the displayed @State values,
+        // so we capture what the server currently has (before the user edits).
+        _capturedEtag = State(initialValue: feed.settingsEtag)
     }
 
     var body: some View {
@@ -556,18 +595,36 @@ private struct FeedSettingsSheet: View {
                     feedId: feed.id,
                     paused: paused,
                     maxArticlesPerDay: maxPerDay,
-                    minScore: minScore
+                    minScore: minScore,
+                    ifMatch: capturedEtag
                 )
             } else {
-                try await appState.supabase.updateFeedSettings(
+                _ = try await appState.supabase.updateFeedSettings(
                     feedId: feed.id,
                     paused: paused,
                     maxArticlesPerDay: maxPerDay,
-                    minScore: minScore
+                    minScore: minScore,
+                    ifMatch: capturedEtag
                 )
             }
         } catch SyncManagerError.queuedOffline {
-            // Queued for replay.
+            // Queued for replay — dismiss normally.
+        } catch let APIError.preconditionFailed(serverEtag, _) {
+            // Live-save path got a 412 — park as conflict and surface the sheet.
+            // The SyncManager queueConflict method handles the queue insertion,
+            // snapshot fetch, and feedConflicts.notify.
+            appState.syncManager?.queueConflict(
+                feedId: feed.id,
+                paused: paused,
+                maxArticlesPerDay: maxPerDay,
+                minScore: minScore,
+                ifMatch: capturedEtag,
+                serverEtag: serverEtag
+            )
+            // Dismiss this sheet; the conflict sheet will present via feedConflicts.
+            onSave()
+            dismiss()
+            return
         } catch {
             // Best-effort — surfacing an alert here would break the dismiss flow.
         }

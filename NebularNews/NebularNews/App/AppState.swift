@@ -3,6 +3,34 @@ import Observation
 import SwiftData
 import NebularNewsKit
 
+// MARK: - Feed Conflict Center
+
+/// In-memory notification hub for feed settings 412 conflicts.
+///
+/// When SyncManager parks a feed_settings action with `state = "conflict"`,
+/// it calls `notify(feedId:)` here. `CompanionFeedsView` observes
+/// `pendingFeedIds` and presents the `FeedSettingsConflictSheet` for the
+/// first matching feed. Sheet calls `resolved(feedId:)` on dismiss.
+///
+/// `totalSeen` is an in-memory debug counter — reset to 0 on app launch.
+/// It is surfaced in Settings → Advanced → Sync queue alongside dead-letter count.
+@Observable
+final class FeedConflictsCenter {
+    private(set) var pendingFeedIds: Set<String> = []
+    private(set) var totalSeen: Int = 0
+
+    func notify(feedId: String) {
+        pendingFeedIds.insert(feedId)
+        totalSeen += 1
+    }
+
+    func resolved(feedId: String) {
+        pendingFeedIds.remove(feedId)
+    }
+}
+
+// MARK: - AppState
+
 @MainActor
 @Observable
 final class AppState {
@@ -28,6 +56,9 @@ final class AppState {
 
     /// Offline action queue and network connectivity monitor.
     private(set) var syncManager: SyncManager?
+
+    /// Feed settings conflict notification hub (412 conflict resolution).
+    let feedConflicts = FeedConflictsCenter()
 
     var containerFallbackReason: ContainerFallbackReason?
 

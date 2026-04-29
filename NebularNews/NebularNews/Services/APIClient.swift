@@ -60,7 +60,7 @@ final class APIClient: @unchecked Sendable {
         body: (any Encodable)? = nil,
         queryItems: [URLQueryItem]? = nil
     ) async throws -> T {
-        let data = try await rawRequest(method: method, path: path, body: body, queryItems: queryItems)
+        let (data, _) = try await rawRequest(method: method, path: path, body: body, queryItems: queryItems)
         let envelope = try decoder.decode(APIEnvelope<T>.self, from: data)
         guard envelope.ok, let resultData = envelope.data else {
             throw APIError.serverError(0, envelope.error?.message ?? "Unknown error")
@@ -70,7 +70,7 @@ final class APIClient: @unchecked Sendable {
 
     /// Fire-and-forget request (no response body needed).
     func requestVoid(method: String = "POST", path: String, body: (any Encodable)? = nil, queryItems: [URLQueryItem]? = nil) async throws {
-        let data = try await rawRequest(method: method, path: path, body: body, queryItems: queryItems)
+        let (data, _) = try await rawRequest(method: method, path: path, body: body, queryItems: queryItems)
         // Just validate the envelope is ok
         let envelope = try decoder.decode(APIEnvelopeBase.self, from: data)
         guard envelope.ok else {
@@ -78,14 +78,49 @@ final class APIClient: @unchecked Sendable {
         }
     }
 
-    /// Raw request that returns the response Data (for cases where the response
-    /// isn't wrapped in an envelope, like OPML export returning plain text).
+    /// Make a request, decode the `data` field from the JSON envelope, and
+    /// return the response headers alongside the decoded value.
+    ///
+    /// Callers that need the `data.etag` from a PATCH response should use this
+    /// overload. Header keys are normalised to lowercase.
+    func requestWithHeaders<T: Decodable>(
+        method: String = "GET",
+        path: String,
+        body: (any Encodable)? = nil,
+        additionalHeaders: [String: String]? = nil
+    ) async throws -> (T, [String: String]) {
+        let (data, httpResponse) = try await rawRequest(
+            method: method, path: path,
+            body: body,
+            additionalHeaders: additionalHeaders
+        )
+        let envelope = try decoder.decode(APIEnvelope<T>.self, from: data)
+        guard envelope.ok, let resultData = envelope.data else {
+            throw APIError.serverError(0, envelope.error?.message ?? "Unknown error")
+        }
+        // Normalise header keys to lowercase for case-insensitive lookup.
+        var headers: [String: String] = [:]
+        for (key, value) in httpResponse.allHeaderFields {
+            if let k = key as? String {
+                headers[k.lowercased()] = value as? String
+            }
+        }
+        return (resultData, headers)
+    }
+
+    /// Raw request that returns the response Data and HTTPURLResponse.
+    ///
+    /// For cases where the response isn't wrapped in an envelope (e.g. OPML
+    /// export returning plain text) callers can destructure the tuple and use
+    /// only the Data element. Existing callers that only needed `Data` can
+    /// ignore the second element.
     func rawRequest(
         method: String = "GET",
         path: String,
         body: (any Encodable)? = nil,
-        queryItems: [URLQueryItem]? = nil
-    ) async throws -> Data {
+        queryItems: [URLQueryItem]? = nil,
+        additionalHeaders: [String: String]? = nil
+    ) async throws -> (Data, HTTPURLResponse) {
         var url = baseURL.appendingPathComponent(path)
         if let queryItems, !queryItems.isEmpty {
             var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
@@ -111,6 +146,13 @@ final class APIClient: @unchecked Sendable {
             request.setValue("openai", forHTTPHeaderField: "x-user-api-provider")
         }
 
+        // Caller-supplied additional headers (e.g. If-Match for feed settings PATCH)
+        if let additionalHeaders {
+            for (key, value) in additionalHeaders {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+
         if let body {
             request.httpBody = try encoder.encode(AnyEncodable(body))
         }
@@ -124,6 +166,17 @@ final class APIClient: @unchecked Sendable {
             throw APIError.unauthorized
         }
 
+        if httpResponse.statusCode == 412 {
+            // Precondition Failed — the If-Match etag was stale.
+            // Decode the error body to extract the current etag so the caller
+            // can park the action and surface a conflict-resolution sheet.
+            if let errorBody = try? decoder.decode(APIErrorResponse.self, from: data),
+               let currentEtag = errorBody.error.currentEtag {
+                throw APIError.preconditionFailed(currentEtag: currentEtag, message: errorBody.error.message)
+            }
+            throw APIError.serverError(412, "Precondition failed")
+        }
+
         if httpResponse.statusCode >= 400 {
             // Try to decode the error envelope
             if let errorBody = try? decoder.decode(APIErrorResponse.self, from: data) {
@@ -132,7 +185,7 @@ final class APIClient: @unchecked Sendable {
             throw APIError.serverError(httpResponse.statusCode, "HTTP \(httpResponse.statusCode)")
         }
 
-        return data
+        return (data, httpResponse)
     }
 }
 
@@ -152,6 +205,9 @@ struct APIEnvelopeBase: Decodable {
 struct APIErrorDetail: Decodable {
     let code: String?
     let message: String
+    /// Present on 412 responses — the server's current ETag for the row.
+    /// Wire key is `current_etag` (snake_case), decoded via `.convertFromSnakeCase`.
+    let currentEtag: String?
 }
 
 struct APIErrorResponse: Decodable {
@@ -164,11 +220,15 @@ struct APIErrorResponse: Decodable {
 enum APIError: LocalizedError {
     case unauthorized
     case serverError(Int, String)
+    /// The server returned 412 Precondition Failed — the `If-Match` etag was stale.
+    /// `currentEtag` is the server's current ETag for the resource.
+    case preconditionFailed(currentEtag: String, message: String)
 
     var errorDescription: String? {
         switch self {
         case .unauthorized: return "Not authenticated"
         case .serverError(_, let msg): return msg
+        case .preconditionFailed(_, let msg): return msg
         }
     }
 }

@@ -34,6 +34,10 @@ struct FeedSettingsPayload: Codable {
     let paused: Bool?
     let maxArticlesPerDay: Int?
     let minScore: Int?
+    /// ETag captured when the save sheet was opened.
+    /// Sent as `If-Match` on execution. Old queued payloads decode with nil
+    /// and behave like a non–If-Match save (last-writer-wins, no 412 guard).
+    let ifMatch: String?
 }
 
 struct SubscribeFeedPayload: Codable {
@@ -141,6 +145,10 @@ final class SyncManager {
                 try await executeAction(action)
                 modelContext.delete(action)
                 anySucceeded = true
+            } catch SyncManagerError.parkedAsConflict {
+                // Action was parked as a conflict — state and snapshot already
+                // written inside executeAction. Skip retryCount bump and delete.
+                continue
             } catch {
                 action.retryCount += 1
                 action.lastError = error.localizedDescription
@@ -162,11 +170,12 @@ final class SyncManager {
         }
     }
 
-    /// Pending = retryCount < maxRetries. Dead-letter actions are excluded.
+    /// Pending = state is "pending" AND retryCount < maxRetries.
+    /// Conflict-parked and dead-letter actions are excluded.
     func fetchPendingActions() -> [PendingAction] {
         let ceiling = maxRetries
         var descriptor = FetchDescriptor<PendingAction>(
-            predicate: #Predicate<PendingAction> { $0.retryCount < ceiling },
+            predicate: #Predicate<PendingAction> { $0.state == "pending" && $0.retryCount < ceiling },
             sortBy: [SortDescriptor(\PendingAction.createdAt, order: .forward)]
         )
         descriptor.fetchLimit = 100
@@ -182,6 +191,22 @@ final class SyncManager {
         )
         descriptor.fetchLimit = 100
         return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Conflicted actions — parked for user resolution.
+    /// The inspector agent and the conflict sheet use this to enumerate pending conflicts.
+    func fetchConflictedActions() -> [PendingAction] {
+        var descriptor = FetchDescriptor<PendingAction>(
+            predicate: #Predicate<PendingAction> { $0.state == "conflict" },
+            sortBy: [SortDescriptor(\PendingAction.createdAt, order: .forward)]
+        )
+        descriptor.fetchLimit = 100
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Number of actions currently parked in conflict state.
+    var conflictedActionCount: Int {
+        fetchConflictedActions().count
     }
 
     /// Reset a dead-letter action's retry count so it gets picked up next sync.
@@ -229,12 +254,42 @@ final class SyncManager {
         case "feed_settings":
             // articleId holds the feed_id for feed-scoped mutations.
             let payload = try JSONDecoder().decode(FeedSettingsPayload.self, from: Data(action.payload.utf8))
-            try await supabase.updateFeedSettings(
-                feedId: action.articleId,
-                paused: payload.paused,
-                maxArticlesPerDay: payload.maxArticlesPerDay,
-                minScore: payload.minScore
-            )
+            do {
+                _ = try await supabase.updateFeedSettings(
+                    feedId: action.articleId,
+                    paused: payload.paused,
+                    maxArticlesPerDay: payload.maxArticlesPerDay,
+                    minScore: payload.minScore,
+                    ifMatch: payload.ifMatch
+                )
+            } catch let APIError.preconditionFailed(currentEtag, _) {
+                // Park the action — do NOT bump retryCount, do NOT delete.
+                action.state = "conflict"
+                action.conflictServerEtag = currentEtag
+                // Server only returns the etag on 412, not the current values.
+                // Best-effort: re-fetch the feed list and snapshot the matching row.
+                if let snap = await fetchFeedSnapshotJSON(feedId: action.articleId) {
+                    action.conflictServerSnapshotJSON = snap
+                }
+                logger.warning("412 conflict on feed_settings for \(action.articleId) — parked for user resolution")
+                appState?.feedConflicts.notify(feedId: action.articleId)
+                save()
+                // Throw a sentinel so the outer loop skips delete and retryCount bump.
+                throw SyncManagerError.parkedAsConflict
+            } catch let APIError.serverError(statusCode, _) where statusCode == 404 {
+                // Feed subscription was deleted before this conflict was resolved.
+                // Drop the action silently — no subscription means nothing to PATCH.
+                logger.debug("feed_settings action for \(action.articleId) got 404 (subscription deleted) — discarding")
+                // Clean up any pending conflict notification for this feed.
+                appState?.feedConflicts.resolved(feedId: action.articleId)
+                // Re-throw so the outer loop's catch branch picks it up, but it will
+                // still increment retryCount. To avoid that we use the parkedAsConflict
+                // sentinel: the outer loop skips retryCount and delete, then we clean up
+                // the action via a second delete call. SwiftData ignores double-deletes.
+                modelContext.delete(action)
+                save()
+                throw SyncManagerError.parkedAsConflict
+            }
         case "subscribe_feed":
             let payload = try JSONDecoder().decode(SubscribeFeedPayload.self, from: Data(action.payload.utf8))
             _ = try await supabase.addFeed(url: payload.url, scrapeMode: payload.scrapeMode)
@@ -335,18 +390,172 @@ final class SyncManager {
     // MARK: - Feed mutations (queue-aware)
 
     /// Update feed settings (paused, cap, min score). Queues on offline/failure.
-    func updateFeedSettings(feedId: String, paused: Bool? = nil, maxArticlesPerDay: Int? = nil, minScore: Int? = nil) async throws {
-        let payload = FeedSettingsPayload(paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+    ///
+    /// `ifMatch` is the ETag computed when the save sheet was opened. When
+    /// provided the PATCH includes `If-Match`; a stale etag causes a 412 which
+    /// the caller receives as `APIError.preconditionFailed`.
+    func updateFeedSettings(
+        feedId: String,
+        paused: Bool? = nil,
+        maxArticlesPerDay: Int? = nil,
+        minScore: Int? = nil,
+        ifMatch: String? = nil
+    ) async throws {
+        let payload = FeedSettingsPayload(
+            paused: paused,
+            maxArticlesPerDay: maxArticlesPerDay,
+            minScore: minScore,
+            ifMatch: ifMatch
+        )
         if isOffline {
             queueAction(type: "feed_settings", articleId: feedId, payload: payload)
             throw SyncManagerError.queuedOffline
         }
         do {
-            try await supabase.updateFeedSettings(feedId: feedId, paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+            _ = try await supabase.updateFeedSettings(
+                feedId: feedId,
+                paused: paused,
+                maxArticlesPerDay: maxArticlesPerDay,
+                minScore: minScore,
+                ifMatch: ifMatch
+            )
         } catch {
             queueAction(type: "feed_settings", articleId: feedId, payload: payload)
             throw error
         }
+    }
+
+    /// Queue a feed_settings action that is already in the conflict state.
+    ///
+    /// Called from the live-save path in `FeedSettingsSheet` when a direct
+    /// PATCH returns 412 (the mutation bypassed the queue). This mirrors the
+    /// park-and-notify logic in `executeAction` for queued 412s.
+    func queueConflict(
+        feedId: String,
+        paused: Bool?,
+        maxArticlesPerDay: Int?,
+        minScore: Int?,
+        ifMatch: String?,
+        serverEtag: String
+    ) {
+        let payload = FeedSettingsPayload(
+            paused: paused,
+            maxArticlesPerDay: maxArticlesPerDay,
+            minScore: minScore,
+            ifMatch: ifMatch
+        )
+        let data = try? JSONEncoder().encode(payload)
+        let json = String(data: data ?? Data(), encoding: .utf8) ?? "{}"
+        let action = PendingAction(actionType: "feed_settings", articleId: feedId, payload: json)
+        action.state = "conflict"
+        action.ifMatchEtag = ifMatch
+        action.conflictServerEtag = serverEtag
+        modelContext.insert(action)
+
+        // Best-effort snapshot (fire and forget)
+        Task {
+            if let snap = await fetchFeedSnapshotJSON(feedId: feedId) {
+                action.conflictServerSnapshotJSON = snap
+                save()
+            }
+        }
+
+        save()
+        appState?.feedConflicts.notify(feedId: feedId)
+        logger.warning("412 conflict on feed_settings for \(feedId) (live-save path) — parked for user resolution")
+    }
+
+    /// Resolve a parked conflict action with the user's chosen resolution.
+    ///
+    /// Rewrites the payload with merged values, sets `If-Match` to the server's
+    /// etag (the value the user saw in the diff sheet), resets `state` to
+    /// "pending" and `retryCount` to 0, then immediately syncs the queue so the
+    /// user sees the change land.
+    func resolveConflict(_ action: PendingAction, with resolution: FeedSettingsResolution) {
+        guard action.state == "conflict", action.actionType == "feed_settings" else {
+            logger.warning("resolveConflict called on non-conflict action \(action.id)")
+            return
+        }
+
+        // Decode existing payload to get the local ("mine") values.
+        guard let existing = try? JSONDecoder().decode(
+            FeedSettingsPayload.self,
+            from: Data(action.payload.utf8)
+        ) else {
+            logger.error("resolveConflict: failed to decode payload for action \(action.id)")
+            return
+        }
+
+        // Decode the server snapshot to get server values.
+        let serverSnap: FeedSettingsPayload? = {
+            guard let json = action.conflictServerSnapshotJSON else { return nil }
+            return try? JSONDecoder().decode(FeedSettingsPayload.self, from: Data(json.utf8))
+        }()
+
+        // Merge: for each field pick server or mine per the resolution.
+        let resolvedPaused: Bool? = {
+            switch resolution.paused {
+            case .server: return serverSnap?.paused ?? existing.paused
+            case .mine: return existing.paused
+            }
+        }()
+        let resolvedMax: Int? = {
+            switch resolution.maxArticlesPerDay {
+            case .server: return serverSnap?.maxArticlesPerDay ?? existing.maxArticlesPerDay
+            case .mine: return existing.maxArticlesPerDay
+            }
+        }()
+        let resolvedMin: Int? = {
+            switch resolution.minScore {
+            case .server: return serverSnap?.minScore ?? existing.minScore
+            case .mine: return existing.minScore
+            }
+        }()
+
+        // The resolved payload sends the server's etag as If-Match — we've now
+        // acknowledged the server state so the next PATCH uses that as the
+        // optimistic concurrency token.
+        let newPayload = FeedSettingsPayload(
+            paused: resolvedPaused,
+            maxArticlesPerDay: resolvedMax,
+            minScore: resolvedMin,
+            ifMatch: action.conflictServerEtag
+        )
+
+        if let data = try? JSONEncoder().encode(newPayload),
+           let json = String(data: data, encoding: .utf8) {
+            action.payload = json
+        }
+
+        action.state = "pending"
+        action.retryCount = 0
+        action.lastError = nil
+        action.conflictServerEtag = nil
+        action.conflictServerSnapshotJSON = nil
+
+        save()
+        appState?.feedConflicts.resolved(feedId: action.articleId)
+
+        // Kick off a sync immediately so the user sees the result.
+        Task { await syncPendingActions() }
+    }
+
+    /// Best-effort snapshot of a feed's current server state as a JSON string.
+    ///
+    /// Re-fetches the feed list and JSON-encodes the matching row as a
+    /// `FeedSettingsPayload`. Returns nil on any failure — the conflict sheet
+    /// falls back to two-button mode when this is nil.
+    private func fetchFeedSnapshotJSON(feedId: String) async -> String? {
+        guard let feeds = try? await supabase.fetchFeeds() else { return nil }
+        guard let feed = feeds.first(where: { $0.id == feedId }) else { return nil }
+        let snap = FeedSettingsPayload(
+            paused: feed.paused,
+            maxArticlesPerDay: feed.maxArticlesPerDay,
+            minScore: feed.minScore,
+            ifMatch: nil
+        )
+        guard let data = try? JSONEncoder().encode(snap) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// Subscribe to a new feed by URL. Queues on offline/failure.
@@ -415,11 +624,15 @@ final class SyncManager {
 
 enum SyncManagerError: LocalizedError {
     case queuedOffline
+    /// The action was parked in conflict state — caller should not delete it.
+    case parkedAsConflict
 
     var errorDescription: String? {
         switch self {
         case .queuedOffline:
             return "Action queued — will sync when back online."
+        case .parkedAsConflict:
+            return "Action parked — waiting for conflict resolution."
         }
     }
 }

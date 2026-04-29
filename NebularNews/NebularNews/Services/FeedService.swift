@@ -37,7 +37,23 @@ struct FeedService: Sendable {
         try await api.requestVoid(method: "DELETE", path: "api/feeds/\(id)")
     }
 
-    func updateFeedSettings(feedId: String, paused: Bool? = nil, maxArticlesPerDay: Int? = nil, minScore: Int? = nil) async throws {
+    /// Update the per-user subscription settings for a feed.
+    ///
+    /// When `ifMatch` is provided the request includes an `If-Match` header.
+    /// If the server's ETag no longer matches (another device raced ahead),
+    /// the server responds 412 and the caller receives `APIError.preconditionFailed`.
+    ///
+    /// On success the server returns `{ ok: true, data: { etag: <newEtag> } }`.
+    /// The returned String? is the new ETag (may be nil on servers that don't
+    /// echo it yet, though the shipped backend always returns it).
+    @discardableResult
+    func updateFeedSettings(
+        feedId: String,
+        paused: Bool? = nil,
+        maxArticlesPerDay: Int? = nil,
+        minScore: Int? = nil,
+        ifMatch: String? = nil
+    ) async throws -> String? {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
         struct Body: Encodable {
@@ -46,11 +62,22 @@ struct FeedService: Sendable {
             let minScore: Int?
         }
 
-        try await api.requestVoid(
+        struct SettingsResponse: Decodable {
+            let etag: String?
+        }
+
+        var headers: [String: String]? = nil
+        if let ifMatch {
+            headers = ["If-Match": ifMatch]
+        }
+
+        let (result, _): (SettingsResponse, [String: String]) = try await api.requestWithHeaders(
             method: "PATCH",
             path: "api/feeds/\(feedId)/settings",
-            body: Body(paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+            body: Body(paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore),
+            additionalHeaders: headers
         )
+        return result.etag
     }
 
     func updateScrapeMode(feedId: String, scrapeMode: String) async throws {

@@ -129,8 +129,21 @@ final class SupabaseManager: Sendable {
         try await feedService.deleteFeed(id: id)
     }
 
-    func updateFeedSettings(feedId: String, paused: Bool? = nil, maxArticlesPerDay: Int? = nil, minScore: Int? = nil) async throws {
-        try await feedService.updateFeedSettings(feedId: feedId, paused: paused, maxArticlesPerDay: maxArticlesPerDay, minScore: minScore)
+    @discardableResult
+    func updateFeedSettings(
+        feedId: String,
+        paused: Bool? = nil,
+        maxArticlesPerDay: Int? = nil,
+        minScore: Int? = nil,
+        ifMatch: String? = nil
+    ) async throws -> String? {
+        try await feedService.updateFeedSettings(
+            feedId: feedId,
+            paused: paused,
+            maxArticlesPerDay: maxArticlesPerDay,
+            minScore: minScore,
+            ifMatch: ifMatch
+        )
     }
 
     func updateScrapeMode(feedId: String, scrapeMode: String) async throws {

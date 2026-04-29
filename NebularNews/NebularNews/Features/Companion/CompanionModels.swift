@@ -252,6 +252,30 @@ struct CompanionFeed: Codable, Identifiable {
     var disabledBool: Bool { disabled == 1 }
 }
 
+extension CompanionFeed {
+    /// ETag derived from the three mutable subscription fields.
+    ///
+    /// Mirrors the server's `subscriptionEtag()` byte-for-byte so that
+    /// `If-Match` comparisons succeed when the row is unchanged.
+    ///
+    /// `paused` defaults to `false` when nil (matching the server INSERT
+    /// default of 0). `minScore` is **not** defaulted — nil means "unset"
+    /// and the server distinguishes that from 0.
+    ///
+    /// NOTE: The save sheet initialises `minScore` as `feed.minScore ?? 0`,
+    /// which collapses nil → 0 on the device side. This means the device may
+    /// send etag `n0` while the server has `n`. The 412 conflict-resolution
+    /// path handles this gracefully. See spec edge case 6 for details.
+    // FIXME: nil minScore vs 0 conflation — see spec edge case 6.
+    var settingsEtag: String {
+        FeedSettingsETag.compute(
+            paused: paused ?? false,
+            maxArticlesPerDay: maxArticlesPerDay,
+            minScore: minScore
+        )
+    }
+}
+
 struct CompanionReactionResponse: Codable {
     let reaction: CompanionReaction
 }
