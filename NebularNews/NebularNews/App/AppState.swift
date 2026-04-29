@@ -23,6 +23,9 @@ final class AppState {
     let keychain: KeychainManager
     let supabase: SupabaseManager
 
+    /// Per-tool confirmation policy for destructive AI assistant actions (M11 guardrails).
+    let aiGuardrails: AIGuardrailsPolicy
+
     /// SwiftData local cache for instant loads and offline reading.
     private(set) var articleCache: ArticleCache?
 
@@ -108,6 +111,7 @@ final class AppState {
 #endif
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
         self.supabase = SupabaseManager.shared
+        self.aiGuardrails = AIGuardrailsPolicy(defaults: resolvedDefaults)
     }
 
     /// Initialize the SwiftData article cache. Call once after the model container is available.

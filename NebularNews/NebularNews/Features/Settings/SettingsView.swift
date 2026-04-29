@@ -147,6 +147,19 @@ struct SettingsView: View {
                 Text("System follows your device's light/dark mode setting.")
             }
 
+            // MARK: - Advanced
+            Section {
+                NavigationLink {
+                    AIGuardrailsSettingsView()
+                } label: {
+                    Label("AI Guardrails", systemImage: "shield.lefthalf.filled")
+                }
+            } header: {
+                Label("Advanced", systemImage: "gearshape.2")
+            } footer: {
+                Text("Per-action confirmation policies for the AI assistant.")
+            }
+
             // MARK: - About
             Section {
                 if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,

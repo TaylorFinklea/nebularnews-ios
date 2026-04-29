@@ -82,6 +82,17 @@ struct AIAssistantSheetView: View {
 
                 inputBar
             }
+            .sheet(item: $coordinator.pendingProposal) { proposal in
+                AIToolConfirmationSheet(
+                    proposal: proposal,
+                    onConfirm: { edits, dontAskAgain in
+                        Task { await coordinator.resolveProposal(approve: true, edits: edits, dontAskAgain: dontAskAgain) }
+                    },
+                    onReject: {
+                        Task { await coordinator.resolveProposal(approve: false) }
+                    }
+                )
+            }
             .navigationTitle("AI Assistant")
             .inlineNavigationBarTitle()
             .toolbar {

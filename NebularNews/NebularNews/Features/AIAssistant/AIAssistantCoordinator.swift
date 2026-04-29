@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import os
+import Combine
 
 /// Central coordinator for the floating AI assistant.
 ///
@@ -37,6 +38,19 @@ final class AIAssistantCoordinator {
     /// Injected by the overlay view; handles client-side tool calls.
     /// Returns a (summary, succeeded) pair for confirmation-chip rendering.
     var clientToolHandler: ((String, [String: AnyCodable]) -> (summary: String, succeeded: Bool))?
+
+    // MARK: - Guardrails (M11)
+
+    /// A pending tool proposal awaiting user confirmation. Set when a
+    /// `tool_call_propose` SSE event arrives; cleared when resolved.
+    var pendingProposal: AIToolConfirmationSheet.PendingProposal?
+
+    /// A pending undo toast for tools running under "Undo only" policy.
+    var pendingUndoToast: AIUndoToast.PendingUndoToast?
+    private var undoToastTask: Task<Void, Never>?
+
+    /// Injected by the overlay — provides the current guardrail policies.
+    var guardrailsPolicy: AIGuardrailsPolicy?
 
     private let logger = Logger(subsystem: "com.nebularnews", category: "AIAssistant")
 
@@ -76,13 +90,16 @@ final class AIAssistantCoordinator {
         isSending = false
         isStreaming = true
 
+        let policies = guardrailsPolicy?.snapshot()
         let stream = StreamingChatService.shared.streamAssistantMessage(
             content: content,
             pageContext: context,
-            threadId: currentThreadId
+            threadId: currentThreadId,
+            guardrailPolicies: policies
         )
 
         var finalContent = ""
+        var proposalReceived = false
         for await delta in stream {
             switch delta {
             case .text(let text):
@@ -100,11 +117,26 @@ final class AIAssistantCoordinator {
                     undoTool: undoTool,
                     undoArgsB64: undoArgsB64
                 )
+                // Show undo toast if this is a governed tool under "Undo only" policy.
+                if let undoTool, !undoTool.isEmpty, let undoArgsB64, !undoArgsB64.isEmpty,
+                   AIGuardrailsPolicy.governedTools.contains(name),
+                   guardrailsPolicy?.mode(for: name) == .undoOnly {
+                    showUndoToast(summary: summary, undoTool: undoTool, undoArgsB64: undoArgsB64)
+                }
             case .toolClientCall(let name, let args):
                 // Dispatch locally and render the result as a chip.
                 let result = clientToolHandler?(name, args) ?? (summary: "Unhandled action: \(name)", succeeded: false)
                 streamingContent += AssistantMessageParser.toolMarker(name: name, summary: result.summary, succeeded: result.succeeded)
+            case .toolProposal(let id, let name, _, let summary, let detail, let contextHint):
+                pendingProposal = .init(
+                    proposeId: id, toolName: name, summary: summary,
+                    detail: detail, contextHint: contextHint
+                )
+                isStreaming = false
+                proposalReceived = true
+                break
             }
+            if proposalReceived { break }
         }
 
         // The backend emits tool chips via SSE events *in addition to* including
@@ -180,6 +212,119 @@ final class AIAssistantCoordinator {
             logger.error("Undo failed: \(error.localizedDescription)")
             appendToolChipToLastAssistantMessage(name: "undo", summary: "Undo failed", succeeded: false)
         }
+    }
+
+    // MARK: - Proposal resolution
+
+    /// Called when the user approves or rejects a pending tool proposal.
+    func resolveProposal(
+        approve: Bool,
+        edits: [String: AnyCodable]? = nil,
+        dontAskAgain: Bool = false
+    ) async {
+        guard let p = pendingProposal else { return }
+        pendingProposal = nil
+
+        if dontAskAgain {
+            guardrailsPolicy?.setMode(.undoOnly, for: p.toolName)
+        }
+
+        isStreaming = true
+        streamingContent = ""
+
+        let stream = StreamingChatService.shared.streamConfirmTool(
+            proposeId: p.proposeId,
+            decision: approve ? "approve" : "reject",
+            edits: edits
+        )
+
+        var finalContent = ""
+        var proposalReceived = false
+        for await delta in stream {
+            switch delta {
+            case .text(let text):
+                streamingContent += text
+            case .done(let content, _):
+                finalContent = content
+            case .error(let msg):
+                if msg == "proposal_expired" {
+                    // Expired — show a soft inline message.
+                    streamingContent += "\n\n*That action timed out. Ask again if you'd still like to do it.*"
+                    finalContent = streamingContent
+                } else {
+                    errorMessage = msg
+                }
+            case .toolServerResult(let name, let summary, let succeeded, let undoTool, let undoArgsB64):
+                streamingContent += AssistantMessageParser.toolMarker(
+                    name: name, summary: summary, succeeded: succeeded,
+                    undoTool: undoTool, undoArgsB64: undoArgsB64
+                )
+                if let undoTool, !undoTool.isEmpty, let undoArgsB64, !undoArgsB64.isEmpty,
+                   AIGuardrailsPolicy.governedTools.contains(name),
+                   guardrailsPolicy?.mode(for: name) == .undoOnly {
+                    showUndoToast(summary: summary, undoTool: undoTool, undoArgsB64: undoArgsB64)
+                }
+            case .toolClientCall(let name, let args):
+                let result = clientToolHandler?(name, args) ?? (summary: "Unhandled action: \(name)", succeeded: false)
+                streamingContent += AssistantMessageParser.toolMarker(name: name, summary: result.summary, succeeded: result.succeeded)
+            case .toolProposal(let id, let name, _, let summary, let detail, let contextHint):
+                // Chained proposal — set it and stop this drain.
+                pendingProposal = .init(
+                    proposeId: id, toolName: name, summary: summary,
+                    detail: detail, contextHint: contextHint
+                )
+                isStreaming = false
+                proposalReceived = true
+                break
+            }
+            if proposalReceived { break }
+        }
+
+        isStreaming = false
+
+        if !finalContent.isEmpty {
+            let (cleanContent, parsedSuggestions) = AssistantMessageParser.extractSuggestions(from: finalContent)
+            let assistantMsg = CompanionChatMessage(
+                id: UUID().uuidString, threadId: currentThreadId ?? "", role: "assistant",
+                content: cleanContent, tokenCount: nil, provider: nil, model: nil,
+                createdAt: Int(Date().timeIntervalSince1970)
+            )
+            messages.append(assistantMsg)
+            streamingContent = ""
+            if !parsedSuggestions.isEmpty {
+                suggestedQuestions = parsedSuggestions
+            }
+        } else if !streamingContent.isEmpty {
+            // Streaming content was set but finalContent wasn't — use streaming content.
+            let (cleanContent, _) = AssistantMessageParser.extractSuggestions(from: streamingContent)
+            let assistantMsg = CompanionChatMessage(
+                id: UUID().uuidString, threadId: currentThreadId ?? "", role: "assistant",
+                content: cleanContent, tokenCount: nil, provider: nil, model: nil,
+                createdAt: Int(Date().timeIntervalSince1970)
+            )
+            messages.append(assistantMsg)
+            streamingContent = ""
+        }
+    }
+
+    // MARK: - Undo toast
+
+    private func showUndoToast(summary: String, undoTool: String, undoArgsB64: String) {
+        // Replace any existing toast — only one at a time.
+        undoToastTask?.cancel()
+        pendingUndoToast = .init(summary: summary, undoTool: undoTool, undoArgsB64: undoArgsB64)
+
+        undoToastTask = Task {
+            try? await Task.sleep(nanoseconds: 7_000_000_000) // 7 seconds
+            if !Task.isCancelled {
+                pendingUndoToast = nil
+            }
+        }
+    }
+
+    func dismissUndoToast() {
+        undoToastTask?.cancel()
+        pendingUndoToast = nil
     }
 
     private func appendToolChipToLastAssistantMessage(name: String, summary: String, succeeded: Bool) {
