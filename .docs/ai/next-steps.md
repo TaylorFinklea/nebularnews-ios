@@ -2,11 +2,13 @@
 
 ## Push Notification Service Extension — in progress
 
-- [x] Backend: `mutable-content: 1` flag + brief payload `bullets` array + lead `image_url` — **(this session)**
-- [ ] User creates NSE target in Xcode (File → New → Target → Notification Service Extension; product name `NebularNewsNotifyService`, bundle id `com.nebularnews.ios.NotifyService`, embed in NebularNews)
-- [ ] Customize generated `NotificationService.swift` — image download with 8s timeout, body rewrite to 2 bullets, graceful fallback in `serviceExtensionTimeWillExpire()`
-- [ ] macOS xcodebuild clean (NSE skipped on macOS destination)
-- [ ] Device verification: install from Xcode → trigger brief via "Preview next brief" → confirm image + 2 bullets land on lock screen
+- [x] Backend: `mutable-content: 1` flag + brief payload `bullets` array + lead `image_url` — **(shipped 2026-04-26)**
+- [x] NSE target `NebularNewsNotifyService` exists and builds — verified 2026-04-29 (all three xcodebuild targets pass)
+- [x] `NotificationService.swift` — image download with 8s timeout, body rewrite to 2 bullets, graceful fallback in `serviceExtensionTimeWillExpire()` — verified 2026-04-29
+- [x] macOS xcodebuild clean (`NebularNewsNotifyService.appex` embeds without blocking macOS build) — verified 2026-04-29
+- [ ] B1: Seed R2 bucket `nebularnews-fallback-images` with 30 generic editorial JPEGs + CNAME `r2-fallback.nebularnews.com`
+- [ ] B3: Deploy backend with R2 fallback rotation (`npx wrangler deploy --env production` from `/Users/tfinklea/git/nebularnews`)
+- [ ] Device verification: install from Xcode → trigger brief via admin "Trigger brief" → confirm image + 2 bullets land on lock screen
 
 ## Design-wait deferred (after design lands)
 

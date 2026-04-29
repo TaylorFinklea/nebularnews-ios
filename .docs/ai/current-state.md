@@ -41,9 +41,14 @@ Site-wide design mockups (consumer reader + admin) are in flight. Used the wait 
 - `nebularnews-web`: `4f982a5` (HEAD) — pushed
 - `nebularnews-ios`: `7f5360e` (HEAD) — pushed
 
-### Next: Push Notification Service Extension (in progress as of this update)
+### Push Notification Service Extension — shipped (2026-04-29)
 
-Brief push notifications get an image preview + 2-bullet body via a new iOS NSE target. Backend payload enrichment (`mutable-content: 1` + `bullets` + `image_url`) is the first deliverable. User creates the Xcode target manually; I customize the generated stub.
+iOS NSE target `NebularNewsNotifyService` verified and polished. All three xcodebuild targets (macOS, generic iOS, NSE-only) pass. `NebularNewsNotifyService.appex` embeds correctly in `NebularNews.app/PlugIns/`. Backend updated with deterministic R2 fallback image rotation (`fallbackImageForBriefId`) in both `scheduled-briefs.ts` and `admin.ts` so `image_url` is always non-null post-B1 pool seeding.
+
+**Pending manual steps before device verification:**
+- B1: Seed the R2 bucket `nebularnews-fallback-images` with 30 JPEG images and CNAME `r2-fallback.nebularnews.com`.
+- B3: Deploy backend after bucket is seeded (`npx wrangler deploy --env production` from `/Users/tfinklea/git/nebularnews`).
+- Device: Install build → trigger brief via admin "Trigger brief" → confirm image + 2-bullet body on lock screen.
 
 ---
 

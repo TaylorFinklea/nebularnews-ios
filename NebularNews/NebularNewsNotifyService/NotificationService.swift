@@ -41,8 +41,12 @@ class NotificationService: UNNotificationServiceExtension {
         let userInfo = request.content.userInfo
 
         // 1. Body enrichment from `bullets` array.
+        // Server-trimmed to ≤80 chars per bullet (see scheduled-briefs.ts).
+        // We render the first 2 stacked under the title with a single newline.
+        // Single-bullet briefs render as one line (no trailing newline).
         if let bullets = userInfo["bullets"] as? [String], !bullets.isEmpty {
-            mutable.body = bullets.prefix(2).joined(separator: "\n")
+            let take = bullets.prefix(2)
+            mutable.body = take.joined(separator: "\n")
         }
 
         // 2. Image attachment, gated on a parseable URL.
