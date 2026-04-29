@@ -53,8 +53,9 @@ step "Bumping version ($BUMP_TYPE)..."
 cd "$PROJECT_DIR"
 
 OLD_BUILD=$(agvtool what-version -terse | tail -1)
-# Read MARKETING_VERSION directly from project.pbxproj (agvtool can't resolve it without Info.plist)
-OLD_VERSION=$(grep -m1 'MARKETING_VERSION = ' NebularNews.xcodeproj/project.pbxproj | sed 's/.*= //;s/;.*//' | tr -d '[:space:]')
+# Read marketing version from Info.plist — that's the actual source of truth at
+# archive time. project.pbxproj's MARKETING_VERSION is stale and unused here.
+OLD_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Config/NebularNewsApp-Info.plist)
 
 NEW_BUILD=$((OLD_BUILD + 1))
 agvtool new-version -all "$NEW_BUILD" > /dev/null
