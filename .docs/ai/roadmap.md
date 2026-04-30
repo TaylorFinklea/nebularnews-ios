@@ -16,10 +16,11 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 
 Active items. Trim as completed.
 
-### Now (Push Notification Service Extension finishing)
-- B1: Seed R2 bucket `nebularnews-fallback-images` with 30 generic editorial JPEGs + CNAME `r2-fallback.nebularnews.com`.
-- B3: Deploy backend with R2 fallback rotation (`npx wrangler deploy --env production` from `/Users/tfinklea/git/nebularnews`).
-- Device verification: install from Xcode → trigger brief via admin "Trigger brief" → confirm image + 2 bullets land on lock screen.
+### Now (Verify in a phase or two)
+- **Fallback-image admin** (`/admin/fallback-images`): generate ≥1 OpenAI slot + ≥1 Imagen 3 slot end-to-end; confirm `https://r2-fallback.nebularnews.com/fallback-NNN.jpg` returns 200 after Save.
+- **Brief lock-screen render**: trigger an admin brief for a user with no candidate images → confirm NSE shows a fallback image + 2 bullets on the lock screen (full pipeline: rotation hash → R2 public URL → NSE attachment).
+- Populate the rest of the 30-slot pool when convenient (one-time chore, not blocking).
+- Device verification across the four 2026-04-29 specs: AI confirm-sheet for destructive sparkle tools; two-device 412 race on feed settings; airplane-mode queue inspector flow.
 
 ### Next (M17 admin web unblock)
 - Apple Services ID `com.nebularnews.web` (dev portal) + Return URL `https://api.nebularnews.com/api/auth/callback/apple` + `admin.nebularnews.com` domain verification — follow `nebularnews-web/APPLE_SETUP.md`.
