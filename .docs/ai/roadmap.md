@@ -12,6 +12,42 @@ NebularNews — iOS-first RSS reader with AI enrichment, powered by Supabase.
 - **iOS**: `/Users/tfinklea/git/nebularnews-ios` — SwiftUI + Supabase Swift SDK
 - **Backend**: `/Users/tfinklea/git/nebularnews-api` — Edge Functions + PostgREST + RLS
 
+## Now / Next / Later
+
+Active items. Trim as completed.
+
+### Now (Push Notification Service Extension finishing)
+- B1: Seed R2 bucket `nebularnews-fallback-images` with 30 generic editorial JPEGs + CNAME `r2-fallback.nebularnews.com`.
+- B3: Deploy backend with R2 fallback rotation (`npx wrangler deploy --env production` from `/Users/tfinklea/git/nebularnews`).
+- Device verification: install from Xcode → trigger brief via admin "Trigger brief" → confirm image + 2 bullets land on lock screen.
+
+### Next (M17 admin web unblock)
+- Apple Services ID `com.nebularnews.web` (dev portal) + Return URL `https://api.nebularnews.com/api/auth/callback/apple` + `admin.nebularnews.com` domain verification — follow `nebularnews-web/APPLE_SETUP.md`.
+- Host Apple domain-verification file at `admin.nebularnews.com/.well-known/apple-developer-domain-association.txt` via SvelteKit `static/`.
+- Mint web client-secret JWT with the existing `.p8` (key id `Z4D9B5P5F6`) and set it as Wrangler secret `APPLE_CLIENT_SECRET_WEB` (prod env).
+- `wrangler secret put APPLE_SERVICES_ID --env production` → `com.nebularnews.web`.
+- Update `src/lib/auth.ts` to hand better-auth a multi-audience Apple clientId once the real flow is ready to test.
+- CF dashboard → Pages → `nebularnews-admin` → Custom domain → add `admin.nebularnews.com`.
+- First real end-to-end sign-in test on the custom domain; turn off `DEV_BYPASS_ENABLED` for prod.
+- Watch Steel/Browserless costs for the first 24–48h post-deploy — 574 feeds just flipped from rss_only to auto_fetch_on_empty.
+- Spot-check iOS: open an article that was empty yesterday, confirm it now has content after the retry cron picked it up.
+- Admin web → Articles → `Empty only` filter → confirm the retry cron is draining the backlog over time.
+
+### Later — design-wait deferred (after design lands)
+- Audit-log web UI on the admin (data-only ship today).
+- Provider usage tile on the dashboard (data-only ship today).
+- iOS reading streaks (design-touchy).
+- AI-assistant "navigate to article" TODO (small).
+- Article-type push notifications via NSE (backend doesn't currently emit them).
+
+### Later — Phase C candidates (consumer web reader)
+- `app.nebularnews.com` SvelteKit reader: Today, article detail, brief history, sparkle chat.
+- CORS tightening on the Workers API — currently `*`; lock to admin + app + native scheme before consumer launch.
+
+### Watch (next 24–72h)
+- Quality-based escalation (chunk 4) might be too aggressive at 0.25 threshold — watch `avg_extraction_quality` on dashboard.
+- 17 articles with `no_readable_content` marker that didn't get backfilled — see if retry cron quarantines them naturally.
+
 ---
 
 ## Phases
@@ -119,13 +155,10 @@ M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9.
 
 ## Backlog
 
-<!-- tier3_owner: claude -->
-
-> Items that run **alongside phases**, not blocked by them.
-> Tagged by tier so the right model handles each item.
+> Items that run **alongside phases**, not blocked by them. Any agent can pick up any item; tier hints are advice, not gating.
 >
-> **`[minor]`** — Sonnet / GPT-5.4 / Gemini 3.1 Pro. May span a few files, requires some codebase understanding.
-> **`[trivial]`** — Haiku / OSS models / Mini / Flash. Single-commit, clear instructions, minimal context needed.
+> **`[minor]`** — Sonnet candidate. May span a few files, requires some codebase understanding.
+> **`[trivial]`** — Haiku candidate. Single-commit, clear instructions, minimal context needed.
 
 ### iOS — Code Quality
 
