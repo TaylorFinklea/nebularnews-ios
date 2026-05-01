@@ -15,6 +15,9 @@ struct ProfileView: View {
     @State private var isLoading = true
     @State private var userEmail: String?
 
+    /// Mirror MainTabView's @AppStorage so the toggle here flips the same key.
+    @AppStorage("showArticlesTab") private var showArticlesTab = false
+
     // AI Keys
     @State private var hasAnthropicKey = false
     @State private var hasOpenAIKey = false
@@ -57,18 +60,19 @@ struct ProfileView: View {
 
             // MARK: - Reading
 
-            if let settings {
-                Section {
+            Section {
+                if let settings {
                     Picker("Summary style", selection: summaryStyleBinding(settings)) {
                         ForEach(Self.summaryStyles, id: \.self) { style in
                             Text(style.capitalized).tag(style)
                         }
                     }
-                } header: {
-                    Label("Reading", systemImage: "book")
-                } footer: {
-                    Text("Controls the format of AI-generated article summaries.")
                 }
+                Toggle("Show Articles tab", isOn: $showArticlesTab)
+            } header: {
+                Label("Reading", systemImage: "book")
+            } footer: {
+                Text("The Articles tab is a flat firehose of every unread article you have access to. Today's chat-first brief is the primary surface; turn this on if you want a raw list to scroll through.")
             }
 
             // MARK: - AI Keys

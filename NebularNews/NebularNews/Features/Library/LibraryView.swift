@@ -13,6 +13,11 @@ struct LibraryView: View {
     @State private var isLoading = false
     @State private var showCreateSheet = false
 
+    /// Mirror MainTabView's setting. When the dedicated Articles tab is
+    /// hidden (default), surface a "Browse all articles" link in Library
+    /// so the firehose stays one tap away.
+    @AppStorage("showArticlesTab") private var showArticlesTab = false
+
     var body: some View {
         NavigationStack {
             List {
@@ -20,6 +25,10 @@ struct LibraryView: View {
                     ErrorBanner(message: errorMessage) { Task { await loadAll() } }
                         .listRowInsets(.init())
                         .listRowBackground(Color.clear)
+                }
+
+                if !showArticlesTab {
+                    browseAllSection
                 }
 
                 savedSection
@@ -61,6 +70,26 @@ struct LibraryView: View {
     }
 
     // MARK: - Sections
+
+    private var browseAllSection: some View {
+        Section {
+            NavigationLink {
+                CompanionArticlesView(showSettings: $showSettings)
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Browse all articles")
+                            .font(.body)
+                        Text("The full firehose with filters and search.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "newspaper")
+                }
+            }
+        }
+    }
 
     private var savedSection: some View {
         Section {
