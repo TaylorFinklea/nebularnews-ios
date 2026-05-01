@@ -1,4 +1,3 @@
-import Auth
 import NebularNewsKit
 import SwiftUI
 
