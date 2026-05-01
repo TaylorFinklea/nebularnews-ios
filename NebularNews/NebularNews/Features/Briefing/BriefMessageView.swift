@@ -27,7 +27,33 @@ struct BriefMessageView: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             ForEach(brief.bullets) { bullet in
-                BriefBulletCard(bullet: bullet, onAction: onAction)
+                BulletSwipeContainer(
+                    leading: [
+                        .init(
+                            label: "Like",
+                            systemImage: "hand.thumbsup.fill",
+                            tint: .green,
+                            perform: { onAction(.reactUp(articleIds: bullet.sources.map(\.articleId))) }
+                        )
+                    ],
+                    trailing: [
+                        .init(
+                            label: "Dislike",
+                            systemImage: "hand.thumbsdown.fill",
+                            tint: .orange,
+                            perform: { onAction(.reactDown(articleIds: bullet.sources.map(\.articleId))) }
+                        ),
+                        .init(
+                            label: "Dismiss",
+                            systemImage: "xmark",
+                            tint: .red,
+                            perform: { onAction(.dismiss(signature: BriefBulletCard.signature(for: bullet),
+                                                          articleIds: bullet.sources.map(\.articleId))) }
+                        )
+                    ]
+                ) {
+                    BriefBulletCard(bullet: bullet, onAction: onAction)
+                }
             }
         }
         .padding(16)
@@ -99,19 +125,14 @@ struct BriefBulletCard: View {
         }
     }
 
+    /// Reactions and dismiss live in the leading/trailing swipe actions
+    /// on `BulletSwipeContainer`; this row keeps Save (high-frequency
+    /// affirmative action) and Tell me more (the emphasized assistant
+    /// hand-off).
     private var actionChips: some View {
         HStack(spacing: 6) {
             chip(systemImage: "bookmark", label: "Save") {
                 onAction(.save(articleIds: allArticleIds))
-            }
-            chip(systemImage: "hand.thumbsup", label: nil) {
-                onAction(.reactUp(articleIds: allArticleIds))
-            }
-            chip(systemImage: "hand.thumbsdown", label: nil) {
-                onAction(.reactDown(articleIds: allArticleIds))
-            }
-            chip(systemImage: "xmark", label: "Dismiss") {
-                onAction(.dismiss(signature: shortSignature, articleIds: allArticleIds))
             }
             Spacer(minLength: 4)
             chip(systemImage: "sparkles", label: "Tell me more", emphasized: true) {
@@ -122,7 +143,9 @@ struct BriefBulletCard: View {
 
     /// First ~60 chars of the bullet, used as the initial topic signature
     /// in the dismiss sheet (user can edit it there before confirming).
-    private var shortSignature: String {
+    /// Exposed at the type level so the parent swipe container can build
+    /// the dismiss action without re-deriving the rule.
+    static func signature(for bullet: SeededBrief.Bullet) -> String {
         let trimmed = bullet.text.trimmingCharacters(in: .whitespaces)
         if trimmed.count <= 60 { return trimmed }
         let cutoff = trimmed.index(trimmed.startIndex, offsetBy: 60)

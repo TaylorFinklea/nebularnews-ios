@@ -239,6 +239,25 @@ struct TodayBriefingView: View {
         .padding(.vertical, 8)
     }
 
+    /// Open the floating AI assistant sheet and seed it with `prompt`.
+    /// Used by the bullet "Tell me more" action so the deeper exploration
+    /// happens in the assistant thread rather than the inline Today thread.
+    private func openAssistantWith(prompt: String) async {
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        coordinator.currentContext = AIPageContext(
+            pageType: "today_brief",
+            pageLabel: "Today brief",
+            briefSummary: messages.first(where: { $0.kind == "brief_seed" })?.content
+        )
+        // Switch the coordinator off the __today_brief__ thread so the
+        // assistant thread receives the message; loadCurrentThread fetches
+        // /api/chat/assistant and overwrites currentThreadId.
+        await coordinator.loadCurrentThread()
+        coordinator.isSheetPresented = true
+        await coordinator.sendMessage(trimmed)
+    }
+
     private func sendFollowUp(_ text: String) async {
         // Reuse the assistant streaming pipeline. The message is appended to
         // the same `__today_brief__` thread so the AI has full context of
@@ -270,7 +289,7 @@ struct TodayBriefingView: View {
         case .dismiss(let signature, let articleIds):
             dismissContext = DismissContext(signature: signature, articleIds: articleIds)
         case .tellMeMore(let prompt):
-            Task { await sendFollowUp("Tell me more about: \(prompt)") }
+            Task { await openAssistantWith(prompt: "Tell me more about: \(prompt)") }
         case .openArticle(let articleId):
             if let url = URL(string: "nebularnews://article/\(articleId)") {
                 deepLinkRouter.handle(url)
@@ -297,6 +316,12 @@ struct TodayBriefingView: View {
     /// Tool result envelope. The undo spec is intentionally generic over
     /// the args: undo_save_articles and undo_react_to_articles both take
     /// `{ article_ids: [String] }`, so a single decoder shape suffices.
+    ///
+    /// The Swift property uses camelCase because APIClient's decoder applies
+    /// `convertFromSnakeCase` — incoming `article_ids` is converted to
+    /// `articleIds` before key matching. The undo blob re-encode in
+    /// `appendToolChip` runs `convertToSnakeCase` so the server's undo
+    /// handler still gets `article_ids`.
     private struct ExecToolResult: Decodable {
         let summary: String
         let succeeded: Bool
@@ -308,7 +333,7 @@ struct TodayBriefingView: View {
         }
 
         struct ArticleIdsArgs: Codable {
-            let article_ids: [String]
+            let articleIds: [String]
         }
     }
 
@@ -344,7 +369,10 @@ struct TodayBriefingView: View {
     /// the actual mutation — the message here is purely UI feedback.
     private func appendToolChip(name: String, summary: String, succeeded: Bool, undo: ExecToolResult.UndoSpec?) {
         let undoBlob: String? = {
-            guard let undo, let data = try? JSONEncoder().encode(undo.args) else { return nil }
+            guard let undo else { return nil }
+            let snakeEncoder = JSONEncoder()
+            snakeEncoder.keyEncodingStrategy = .convertToSnakeCase
+            guard let data = try? snakeEncoder.encode(undo.args) else { return nil }
             return data.base64EncodedString()
         }()
         let marker = AssistantMessageParser.toolMarker(
