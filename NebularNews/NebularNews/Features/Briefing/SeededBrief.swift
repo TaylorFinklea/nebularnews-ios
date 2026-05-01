@@ -27,6 +27,17 @@ struct SeededBrief: Decodable {
             let title: String?
             let canonicalUrl: String?
             var id: String { articleId }
+
+            // SeededBrief.parse uses a vanilla JSONDecoder (no key strategy)
+            // because the outer struct already has snake_case CodingKeys.
+            // Map the snake_case JSON fields explicitly so enriched sources
+            // actually decode — otherwise `bullet.sources` falls back to
+            // empty and reactions hit the server with article_ids: [].
+            enum CodingKeys: String, CodingKey {
+                case articleId = "article_id"
+                case title
+                case canonicalUrl = "canonical_url"
+            }
         }
 
         // Custom init handles both shapes:
