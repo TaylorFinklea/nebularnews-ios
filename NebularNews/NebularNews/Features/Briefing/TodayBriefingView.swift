@@ -153,25 +153,28 @@ struct TodayBriefingView: View {
 
     // MARK: - Message list
 
+    /// Native List drives the chat thread so each brief bullet gets
+    /// SwiftUI's `.swipeActions` for free — no custom drag gesture
+    /// fighting the parent ScrollView for vertical scroll. Brief seeds
+    /// expand into a Section (header + bullet rows); other chat messages
+    /// render as a single transparent row containing the bubble.
     @ViewBuilder
     private var messageList: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    ForEach(messages) { msg in
-                        messageRow(msg)
-                            .id(msg.id)
-                            .padding(.horizontal)
-                    }
-                    if !errorMessage.isEmpty {
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                            .padding(.horizontal)
-                    }
+            List {
+                ForEach(messages) { msg in
+                    messageRows(for: msg)
                 }
-                .padding(.vertical, 12)
+                if !errorMessage.isEmpty {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .onChange(of: messages.count) {
                 if let last = messages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -181,11 +184,56 @@ struct TodayBriefingView: View {
     }
 
     @ViewBuilder
-    private func messageRow(_ msg: CompanionChatMessage) -> some View {
+    private func messageRows(for msg: CompanionChatMessage) -> some View {
         if msg.kind == "brief_seed", let brief = SeededBrief.parse(content: msg.content) {
-            BriefMessageView(brief: brief, onAction: handleBulletAction)
+            briefSection(brief: brief, anchorId: msg.id)
         } else {
             AssistantChatBubble(message: msg) { _ in }
+                .id(msg.id)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+        }
+    }
+
+    @ViewBuilder
+    private func briefSection(brief: SeededBrief, anchorId: String) -> some View {
+        Section {
+            ForEach(brief.bullets) { bullet in
+                BriefBulletCard(bullet: bullet, onAction: handleBulletAction)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                        Button {
+                            handleBulletAction(.reactUp(articleIds: bullet.sources.map(\.articleId)))
+                        } label: {
+                            Label("Like", systemImage: "hand.thumbsup.fill")
+                        }
+                        .tint(.green)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button {
+                            handleBulletAction(.dismiss(
+                                signature: BriefBulletCard.signature(for: bullet),
+                                articleIds: bullet.sources.map(\.articleId)
+                            ))
+                        } label: {
+                            Label("Dismiss", systemImage: "xmark")
+                        }
+                        .tint(.red)
+                        Button {
+                            handleBulletAction(.reactDown(articleIds: bullet.sources.map(\.articleId)))
+                        } label: {
+                            Label("Dislike", systemImage: "hand.thumbsdown.fill")
+                        }
+                        .tint(.orange)
+                    }
+            }
+        } header: {
+            BriefSectionHeader(brief: brief)
+                .id(anchorId)
+                .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 16))
         }
     }
 
@@ -278,7 +326,7 @@ struct TodayBriefingView: View {
 
     // MARK: - Bullet actions
 
-    private func handleBulletAction(_ action: BriefMessageView.BulletAction) {
+    private func handleBulletAction(_ action: BriefBulletAction) {
         switch action {
         case .save(let articleIds):
             Task { await execSave(articleIds: articleIds) }

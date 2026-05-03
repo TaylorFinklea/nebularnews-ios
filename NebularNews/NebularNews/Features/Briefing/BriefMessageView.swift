@@ -1,90 +1,68 @@
 import SwiftUI
 
-/// Renders a `brief_seed` chat message as the centerpiece of the Today
-/// tab. Sits in the chat thread above any text follow-ups; structured
-/// data (bullets + sources + actions) replaces what would otherwise be
-/// a plain text bubble.
-struct BriefMessageView: View {
-    let brief: SeededBrief
-    /// Action callback. Args:
-    ///   .save        — bullet's source article ids
-    ///   .reactUp     — bullet's source article ids
-    ///   .reactDown   — bullet's source article ids
-    ///   .dismiss     — the bullet itself (need text + ids for the sheet)
-    ///   .tellMeMore  — bullet's text becomes the user follow-up prompt
-    let onAction: (BulletAction) -> Void
+/// Bullet-level action emitted by the Today brief surface. Dispatched
+/// either by inline buttons (Save, Tell me more) or by native swipe
+/// actions on each List row (Like, Dislike, Dismiss).
+enum BriefBulletAction {
+    case save(articleIds: [String])
+    case reactUp(articleIds: [String])
+    case reactDown(articleIds: [String])
+    case dismiss(signature: String, articleIds: [String])
+    case tellMeMore(prompt: String)
+    case openArticle(articleId: String)
+}
 
-    enum BulletAction {
-        case save(articleIds: [String])
-        case reactUp(articleIds: [String])
-        case reactDown(articleIds: [String])
-        case dismiss(signature: String, articleIds: [String])
-        case tellMeMore(prompt: String)
-        case openArticle(articleId: String)
-    }
+/// Compact section header for a brief seed. Renders the brief's display
+/// title with a sparkle gradient accent and a subdued generation
+/// timestamp. Designed to sit at the top of a List Section so the
+/// bullets below feel grouped without a heavy outer card frame.
+struct BriefSectionHeader: View {
+    let brief: SeededBrief
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            header
-            ForEach(brief.bullets) { bullet in
-                BulletSwipeContainer(
-                    leading: [
-                        .init(
-                            label: "Like",
-                            systemImage: "hand.thumbsup.fill",
-                            tint: .green,
-                            perform: { onAction(.reactUp(articleIds: bullet.sources.map(\.articleId))) }
-                        )
-                    ],
-                    trailing: [
-                        .init(
-                            label: "Dislike",
-                            systemImage: "hand.thumbsdown.fill",
-                            tint: .orange,
-                            perform: { onAction(.reactDown(articleIds: bullet.sources.map(\.articleId))) }
-                        ),
-                        .init(
-                            label: "Dismiss",
-                            systemImage: "xmark",
-                            tint: .red,
-                            perform: { onAction(.dismiss(signature: BriefBulletCard.signature(for: bullet),
-                                                          articleIds: bullet.sources.map(\.articleId))) }
-                        )
-                    ]
-                ) {
-                    BriefBulletCard(bullet: bullet, onAction: onAction)
-                }
-            }
-        }
-        .padding(16)
-        .background(Color.platformSecondaryBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(brief.displayTitle)
-                .font(.title3.bold())
-            if let generatedAt = brief.generatedAt {
-                Text(Date(timeIntervalSince1970: TimeInterval(generatedAt) / 1000).formatted(date: .abbreviated, time: .shortened))
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "sparkles")
+                .font(.body.weight(.semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.purple, .blue],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(brief.displayTitle)
+                    .font(.title3.bold())
+                    .foregroundStyle(.primary)
+                if let generatedAt = brief.generatedAt {
+                    Text(
+                        Date(timeIntervalSince1970: TimeInterval(generatedAt) / 1000)
+                            .formatted(date: .abbreviated, time: .shortened)
+                    )
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
             }
+            Spacer()
         }
+        .textCase(nil)
     }
 }
 
-/// One bullet inside a brief message: text, source pills, action chips.
-/// Tapping a source navigates to the article detail; tapping an action
-/// chip fires `onAction` for the parent to dispatch.
+/// One bullet inside a brief: text, source pills, action chips. Tapping
+/// a source navigates to article detail; tapping an action chip fires
+/// `onAction` for the parent to dispatch. Reactions and dismiss live on
+/// the parent List row's native swipe actions, so this view only renders
+/// Save (high-frequency affirmative) and Tell me more (assistant
+/// hand-off).
 struct BriefBulletCard: View {
     let bullet: SeededBrief.Bullet
-    let onAction: (BriefMessageView.BulletAction) -> Void
+    let onAction: (BriefBulletAction) -> Void
 
     private var allArticleIds: [String] { bullet.sources.map(\.articleId) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(bullet.text)
                 .font(.subheadline)
                 .multilineTextAlignment(.leading)
@@ -95,9 +73,9 @@ struct BriefBulletCard: View {
 
             actionChips
         }
-        .padding(12)
-        .background(Color.platformSystemBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(GlassRoundedBackground(cornerRadius: 14))
     }
 
     private var sourcePills: some View {
@@ -125,10 +103,6 @@ struct BriefBulletCard: View {
         }
     }
 
-    /// Reactions and dismiss live in the leading/trailing swipe actions
-    /// on `BulletSwipeContainer`; this row keeps Save (high-frequency
-    /// affirmative action) and Tell me more (the emphasized assistant
-    /// hand-off).
     private var actionChips: some View {
         HStack(spacing: 6) {
             chip(systemImage: "bookmark", label: "Save") {
@@ -142,9 +116,9 @@ struct BriefBulletCard: View {
     }
 
     /// First ~60 chars of the bullet, used as the initial topic signature
-    /// in the dismiss sheet (user can edit it there before confirming).
-    /// Exposed at the type level so the parent swipe container can build
-    /// the dismiss action without re-deriving the rule.
+    /// in the dismiss sheet (user can edit before confirming). Static so
+    /// the parent List section can build the swipe action without
+    /// re-deriving the rule.
     static func signature(for bullet: SeededBrief.Bullet) -> String {
         let trimmed = bullet.text.trimmingCharacters(in: .whitespaces)
         if trimmed.count <= 60 { return trimmed }
