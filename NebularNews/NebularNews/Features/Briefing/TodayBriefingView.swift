@@ -19,6 +19,11 @@ struct TodayBriefingView: View {
     @State private var inputText = ""
     @State private var dismissContext: DismissContext?
     @State private var dismissService: DismissedTopicService?
+    /// Local navigation target for bullet tap-to-open. Pushed onto the
+    /// surrounding NavigationStack via `.navigationDestination(item:)` so
+    /// we don't have to round-trip through DeepLinkRouter (which is wired
+    /// to the legacy CompanionTodayView, not this chat-first surface).
+    @State private var openArticleId: String?
 
     private struct DismissContext: Identifiable {
         let id = UUID()
@@ -50,6 +55,11 @@ struct TodayBriefingView: View {
                     }
                     .disabled(isLoading)
                 }
+            }
+            // navigationDestination must live inside the NavigationStack
+            // so taps on a brief bullet actually push CompanionArticleDetailView.
+            .navigationDestination(item: $openArticleId) { articleId in
+                CompanionArticleDetailView(articleId: articleId)
             }
         }
         .task {
@@ -339,9 +349,10 @@ struct TodayBriefingView: View {
         case .tellMeMore(let prompt):
             Task { await openAssistantWith(prompt: "Tell me more about: \(prompt)") }
         case .openArticle(let articleId):
-            if let url = URL(string: "nebularnews://article/\(articleId)") {
-                deepLinkRouter.handle(url)
-            }
+            // Push directly via the NavigationStack-bound state. Going
+            // through DeepLinkRouter would no-op here because the legacy
+            // CompanionTodayView is what observes pendingArticleId.
+            openArticleId = articleId
         }
     }
 
