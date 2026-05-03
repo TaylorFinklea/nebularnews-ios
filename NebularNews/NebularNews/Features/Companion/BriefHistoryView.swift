@@ -107,9 +107,20 @@ struct BriefHistoryView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
-                Text("\(brief.bullets.count) bullet\(brief.bullets.count == 1 ? "" : "s")")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
+                    if let topic = brief.topicTagName {
+                        Text("#\(topic)")
+                            .font(.caption2.weight(.medium))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.accentColor.opacity(0.12))
+                            .foregroundStyle(Color.accentColor)
+                            .clipShape(Capsule())
+                    }
+                    Text("\(brief.bullets.count) bullet\(brief.bullets.count == 1 ? "" : "s")")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
         .padding(.vertical, 2)

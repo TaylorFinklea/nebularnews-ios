@@ -65,12 +65,21 @@ struct BriefDetailView: View {
             Image(systemName: detail.editionKind == "morning" ? "sunrise.fill" : detail.editionKind == "evening" ? "moon.stars.fill" : "sparkles")
                 .font(.title2)
                 .foregroundStyle(detail.editionKind == "morning" ? .orange : detail.editionKind == "evening" ? .indigo : .purple)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(kindLabel(detail.editionKind))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(generatedLabel(detail.generatedAt))
                     .font(.headline)
+                if let topic = detail.topicTagName {
+                    Text("#\(topic)")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.accentColor.opacity(0.12))
+                        .foregroundStyle(Color.accentColor)
+                        .clipShape(Capsule())
+                }
                 Text(windowLabel(detail: detail))
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -26,6 +26,8 @@ struct TodayBriefingView: View {
     @State private var openArticleId: String?
     /// Brief history sheet toggle; populated from a toolbar tap.
     @State private var showBriefHistory = false
+    /// Topic brief sheet toggle.
+    @State private var showTopicBrief = false
     /// Local navigation target for `nebularnews://brief/{id}` deep links
     /// fired from APNs taps or widgets while the user is on this view.
     @State private var openBriefId: String?
@@ -61,6 +63,14 @@ struct TodayBriefingView: View {
                         Image(systemName: "clock.arrow.circlepath")
                     }
                     .accessibilityLabel("Brief history")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showTopicBrief = true
+                    } label: {
+                        Image(systemName: "tag")
+                    }
+                    .accessibilityLabel("Topic brief")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -103,6 +113,11 @@ struct TodayBriefingView: View {
         }
         .sheet(isPresented: $showBriefHistory) {
             BriefHistoryView()
+        }
+        .sheet(isPresented: $showTopicBrief) {
+            TopicBriefSheet { newBriefId in
+                openBriefId = newBriefId
+            }
         }
         // Brief deep-link parity with CompanionTodayView. APNs taps and
         // widget URLs route through DeepLinkRouter.pendingBriefId; we
@@ -186,12 +201,17 @@ struct TodayBriefingView: View {
     private func regenerateBrief(suppressedTopics: [SuppressedTopicPayload]?) async throws {
         struct GenBody: Encodable {
             let lookback_hours: Int
+            let depth: String?
             let suppressed_topics: [SuppressedTopicPayload]?
         }
+        // Best-effort settings load — depth is optional server-side, so a
+        // failure here just falls through to the "summary" default rather
+        // than blocking the manual refresh.
+        let depth = (try? await appState.supabase.fetchSettings())?.newsBriefConfig.depth
         let _: BriefGenerateResponseEnvelope = try await APIClient.shared.request(
             method: "POST",
             path: "api/brief/generate",
-            body: GenBody(lookback_hours: 12, suppressed_topics: suppressedTopics)
+            body: GenBody(lookback_hours: 12, depth: depth, suppressed_topics: suppressedTopics)
         )
     }
 

@@ -393,6 +393,11 @@ struct CompanionBriefSummary: Codable, Identifiable {
     let scoreCutoff: Int
     let bullets: [CompanionNewsBrief.Bullet]
     let sourceArticleIds: [String]
+    /// Tag id this brief was filtered to. Nil for the all-news brief.
+    let topicTagId: String?
+    /// Joined tag name from the server response — saves the iOS side a
+    /// second tag lookup when rendering history rows.
+    let topicTagName: String?
 }
 
 struct CompanionBriefDetail: Codable, Identifiable {
@@ -413,6 +418,8 @@ struct CompanionBriefDetail: Codable, Identifiable {
     let bullets: [CompanionNewsBrief.Bullet]
     let sourceArticleIds: [String]
     let sourceArticles: [SourceArticle]
+    let topicTagId: String?
+    let topicTagName: String?
 }
 
 struct CompanionBriefHistoryPayload: Codable {
@@ -458,6 +465,11 @@ struct CompanionNewsBriefConfig: Codable {
     var eveningTime: String
     var lookbackHours: Int
     var scoreCutoff: Int
+    /// "headlines" | "summary" | "deep" — controls bullet count + words
+    /// per bullet. Server reads this from the `newsBriefDepth` setting
+    /// row; iOS defaults to "summary" when the row is missing so older
+    /// payloads decode without breaking.
+    var depth: String?
 }
 
 // MARK: - Tag list payload

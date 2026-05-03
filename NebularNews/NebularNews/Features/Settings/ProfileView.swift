@@ -241,6 +241,11 @@ struct ProfileView: View {
                             value: scoreCutoffBinding(settings),
                             in: 0...10
                         )
+                        Picker("Depth", selection: briefDepthBinding(settings)) {
+                            Text("Headlines").tag("headlines")
+                            Text("Summary").tag("summary")
+                            Text("Deep dive").tag("deep")
+                        }
                         Button {
                             appState.pendingBriefGeneration = true
                             dismiss()
@@ -533,6 +538,16 @@ struct ProfileView: View {
         Binding(
             get: { current.newsBriefConfig.scoreCutoff },
             set: { val in save { $0.newsBriefConfig.scoreCutoff = val } }
+        )
+    }
+
+    private func briefDepthBinding(_ current: CompanionSettingsPayload) -> Binding<String> {
+        Binding(
+            // Server defaults newsBriefDepth to "summary" but older payloads
+            // may not have shipped it yet — fall back here too so the picker
+            // never binds to nil.
+            get: { current.newsBriefConfig.depth ?? "summary" },
+            set: { val in save { $0.newsBriefConfig.depth = val } }
         )
     }
 }
