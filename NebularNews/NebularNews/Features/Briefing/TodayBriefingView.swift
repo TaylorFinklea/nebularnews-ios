@@ -24,6 +24,11 @@ struct TodayBriefingView: View {
     /// we don't have to round-trip through DeepLinkRouter (which is wired
     /// to the legacy CompanionTodayView, not this chat-first surface).
     @State private var openArticleId: String?
+    /// Brief history sheet toggle; populated from a toolbar tap.
+    @State private var showBriefHistory = false
+    /// Local navigation target for `nebularnews://brief/{id}` deep links
+    /// fired from APNs taps or widgets while the user is on this view.
+    @State private var openBriefId: String?
 
     private struct DismissContext: Identifiable {
         let id = UUID()
@@ -47,6 +52,16 @@ struct TodayBriefingView: View {
             }
             .navigationTitle("Today")
             .toolbar {
+                // Order matches the legacy CompanionTodayView (history left,
+                // refresh right) so the icons feel familiar to existing users.
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showBriefHistory = true
+                    } label: {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
+                    .accessibilityLabel("Brief history")
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await refresh() }
@@ -60,6 +75,9 @@ struct TodayBriefingView: View {
             // so taps on a brief bullet actually push CompanionArticleDetailView.
             .navigationDestination(item: $openArticleId) { articleId in
                 CompanionArticleDetailView(articleId: articleId)
+            }
+            .navigationDestination(item: $openBriefId) { briefId in
+                BriefDetailView(briefId: briefId)
             }
         }
         .task {
@@ -81,6 +99,25 @@ struct TodayBriefingView: View {
                     durationDays: duration,
                     allowResurfaceOnDevelopments: allowResurface
                 )
+            }
+        }
+        .sheet(isPresented: $showBriefHistory) {
+            BriefHistoryView()
+        }
+        // Brief deep-link parity with CompanionTodayView. APNs taps and
+        // widget URLs route through DeepLinkRouter.pendingBriefId; we
+        // observe and clear it so the push doesn't fire twice if both
+        // Today views happen to be in the hierarchy.
+        .onChange(of: deepLinkRouter.pendingBriefId) { _, newValue in
+            if let id = newValue {
+                openBriefId = id
+                deepLinkRouter.clearPendingBrief()
+            }
+        }
+        .onAppear {
+            if let id = deepLinkRouter.pendingBriefId {
+                openBriefId = id
+                deepLinkRouter.clearPendingBrief()
             }
         }
     }
