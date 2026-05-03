@@ -26,6 +26,16 @@ struct SeededBrief: Decodable {
             let articleId: String
             let title: String?
             let canonicalUrl: String?
+            /// Feed display name — populated by the backend's enrichBullets
+            /// step. Optional because pre-enrichment briefs (older payloads
+            /// or the cron raw shape) didn't include it.
+            let sourceName: String?
+            /// User-specific article score 0-5; absent for older briefs.
+            let score: Int?
+            /// Tag names for this article. Server emits `tags: []` when
+            /// none are attached, so distinguishing nil from empty isn't
+            /// useful — the decoder defaults to [] when missing.
+            let tags: [String]
             var id: String { articleId }
 
             // SeededBrief.parse uses a vanilla JSONDecoder (no key strategy)
@@ -37,6 +47,28 @@ struct SeededBrief: Decodable {
                 case articleId = "article_id"
                 case title
                 case canonicalUrl = "canonical_url"
+                case sourceName = "source_name"
+                case score
+                case tags
+            }
+
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                self.articleId = try c.decode(String.self, forKey: .articleId)
+                self.title = try c.decodeIfPresent(String.self, forKey: .title)
+                self.canonicalUrl = try c.decodeIfPresent(String.self, forKey: .canonicalUrl)
+                self.sourceName = try c.decodeIfPresent(String.self, forKey: .sourceName)
+                self.score = try c.decodeIfPresent(Int.self, forKey: .score)
+                self.tags = (try c.decodeIfPresent([String].self, forKey: .tags)) ?? []
+            }
+
+            init(articleId: String, title: String?, canonicalUrl: String?, sourceName: String? = nil, score: Int? = nil, tags: [String] = []) {
+                self.articleId = articleId
+                self.title = title
+                self.canonicalUrl = canonicalUrl
+                self.sourceName = sourceName
+                self.score = score
+                self.tags = tags
             }
         }
 

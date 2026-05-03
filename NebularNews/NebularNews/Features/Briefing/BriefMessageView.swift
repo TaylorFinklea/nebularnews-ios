@@ -49,26 +49,76 @@ struct BriefSectionHeader: View {
     }
 }
 
-/// One bullet inside a brief: text, source pills, action chips. Tapping
-/// a source navigates to article detail; tapping an action chip fires
-/// `onAction` for the parent to dispatch. Reactions and dismiss live on
-/// the parent List row's native swipe actions, so this view only renders
-/// Save (high-frequency affirmative) and Tell me more (assistant
-/// hand-off).
+/// One bullet inside a brief: text, metadata strip (source + score +
+/// tags), and action chips. Tapping the bullet body fires `.openArticle`
+/// for the primary source so the user can read the full article in
+/// detail view; reactions and dismiss are surfaced via the parent List
+/// row's native swipe actions.
 struct BriefBulletCard: View {
     let bullet: SeededBrief.Bullet
     let onAction: (BriefBulletAction) -> Void
 
     private var allArticleIds: [String] { bullet.sources.map(\.articleId) }
 
+    /// Source the user lands on when they tap the card. Highest scored
+    /// among the bullet's sources, falling back to the first one (which
+    /// preserves the AI's original ordering when no scores are present).
+    private var primarySource: SeededBrief.Bullet.Source? {
+        bullet.sources.max(by: { ($0.score ?? -1) < ($1.score ?? -1) })
+            ?? bullet.sources.first
+    }
+
+    /// Aggregated user score across the bullet's sources. Max is more
+    /// informative than average for "how relevant is this to me" — one
+    /// strong source is what makes the whole bullet matter.
+    private var aggregateScore: Int? {
+        let scores = bullet.sources.compactMap(\.score)
+        return scores.max()
+    }
+
+    /// Top tags across all sources, deduped, capped at 3 to keep the
+    /// metadata strip compact. Order preserves the first-seen order
+    /// across the source list (AI-picked sources come first).
+    private var aggregateTags: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for source in bullet.sources {
+            for tag in source.tags where !seen.contains(tag) {
+                seen.insert(tag)
+                result.append(tag)
+                if result.count >= 3 { return result }
+            }
+        }
+        return result
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(bullet.text)
-                .font(.subheadline)
-                .multilineTextAlignment(.leading)
+            // Tappable region: bullet text + metadata strip. Save and
+            // Tell me more sit outside this Button so their taps don't
+            // also navigate to the article.
+            Button {
+                if let id = primarySource?.articleId {
+                    onAction(.openArticle(articleId: id))
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(bullet.text)
+                        .font(.subheadline)
+                        .multilineTextAlignment(.leading)
+                        .foregroundStyle(.primary)
 
-            if !bullet.sources.isEmpty {
-                sourcePills
+                    if !bullet.sources.isEmpty {
+                        metadataStrip
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if !aggregateTags.isEmpty {
+                tagStrip
             }
 
             actionChips
@@ -78,28 +128,46 @@ struct BriefBulletCard: View {
         .modifier(GlassRoundedBackground(cornerRadius: 14))
     }
 
-    private var sourcePills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(bullet.sources) { source in
-                    Button {
-                        onAction(.openArticle(articleId: source.articleId))
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "link")
-                                .font(.caption2)
-                            Text(source.title ?? "Source")
-                                .font(.caption)
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.platformTertiaryFill)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+    /// Source name + score badge. Multi-source bullets show the primary
+    /// feed name with a "+N" indicator so the user knows how broadly
+    /// the bullet is corroborated.
+    @ViewBuilder
+    private var metadataStrip: some View {
+        HStack(spacing: 8) {
+            if let score = aggregateScore {
+                ScoreBadge(score: score)
             }
+            if let primary = primarySource?.sourceName {
+                let extras = max(bullet.sources.count - 1, 0)
+                Label {
+                    Text(extras > 0 ? "\(primary) +\(extras)" : primary)
+                        .font(.caption)
+                        .lineLimit(1)
+                } icon: {
+                    Image(systemName: "newspaper")
+                        .font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
+    private var tagStrip: some View {
+        HStack(spacing: 6) {
+            ForEach(aggregateTags, id: \.self) { tag in
+                Text("#\(tag)")
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.12))
+                    .foregroundStyle(Color.accentColor)
+                    .clipShape(Capsule())
+            }
+            Spacer()
         }
     }
 
