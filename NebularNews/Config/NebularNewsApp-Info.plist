@@ -27,6 +27,8 @@
 	<string>2.0.1</string>
 	<key>CFBundleVersion</key>
 	<string>20</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>KeychainService</key>
 	<string>$(KEYCHAIN_SERVICE)</string>
 	<key>MobileDefaultServerURL</key>

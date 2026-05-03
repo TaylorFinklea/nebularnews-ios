@@ -17,6 +17,15 @@ set -euo pipefail
 #   ASC_API_KEY_PATH   — path to .p8 key file
 #   ASC_API_KEY_ID     — key ID from App Store Connect
 #   ASC_API_ISSUER_ID  — issuer ID from App Store Connect
+#
+# Beta-group auto-assignment (optional — skips the manual "add my group to
+# this build" step in App Store Connect after every upload):
+#   ASC_APP_ID            — numeric App Store Connect app id
+#   ASC_BETA_GROUP_IDS    — comma-separated beta group ids
+# Run `./scripts/asc.rb list-apps` and `./scripts/asc.rb list-groups APP_ID`
+# once to discover the values, then export them in your shell profile.
+#
+# Skip the auto-assign for one run with: SKIP_BETA_ASSIGN=1
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -158,6 +167,33 @@ step "Committing version bump..."
 cd "$SCRIPT_DIR/.."
 git add -A NebularNews/NebularNews.xcodeproj NebularNews/Config/NebularNewsApp-Info.plist
 git commit -m "Release $NEW_VERSION (build $NEW_BUILD) to TestFlight"
+
+# ============================================================
+# 6. Assign to beta groups (optional)
+# ============================================================
+if [ "${SKIP_BETA_ASSIGN:-0}" = "1" ]; then
+  echo -e "\n${GREEN}✔ NebularNews $NEW_VERSION ($NEW_BUILD) uploaded to TestFlight${NC}"
+  echo "  Beta-group assignment skipped (SKIP_BETA_ASSIGN=1)."
+  exit 0
+fi
+
+if [ -n "${ASC_APP_ID:-}" ] && [ -n "${ASC_BETA_GROUP_IDS:-}" ]; then
+  step "Assigning build to beta groups..."
+  export ASC_API_KEY_PATH="$ASC_KEY_PATH"
+  export ASC_API_KEY_ID="$ASC_KEY_ID"
+  export ASC_API_ISSUER_ID="$ASC_ISSUER"
+
+  if BUILD_ID=$(/usr/bin/ruby "$SCRIPT_DIR/asc.rb" find-build "$ASC_APP_ID" "$NEW_VERSION" "$NEW_BUILD"); then
+    /usr/bin/ruby "$SCRIPT_DIR/asc.rb" add-to-groups "$BUILD_ID" "$ASC_BETA_GROUP_IDS" \
+      || echo "  ⚠ Beta-group assignment failed — assign manually in App Store Connect."
+  else
+    echo "  ⚠ Build did not register within the timeout — assign manually in App Store Connect."
+  fi
+else
+  echo -e "\n  ${GREEN}ℹ${NC} Beta-group assignment skipped — set ASC_APP_ID and ASC_BETA_GROUP_IDS to automate."
+  echo "    Discover ids: $SCRIPT_DIR/asc.rb list-apps"
+  echo "                  $SCRIPT_DIR/asc.rb list-groups <APP_ID>"
+fi
 
 # ============================================================
 # Done
