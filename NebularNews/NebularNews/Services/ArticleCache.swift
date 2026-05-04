@@ -29,7 +29,11 @@ final class ArticleCache {
         var descriptor = FetchDescriptor<CachedArticle>()
 
         switch sortOrder {
-        case .newest, .score, .unreadFirst:
+        case .newest, .score, .unreadFirst, .recentReads:
+            // Cache lacks lastReadAt today — fall through to cachedAt-desc
+            // for the recentReads case so the offline path returns
+            // something sensible. Online callers always see the
+            // server-driven recent_reads order.
             descriptor.sortBy = [SortDescriptor(\CachedArticle.cachedAt, order: .reverse)]
         case .oldest:
             descriptor.sortBy = [SortDescriptor(\CachedArticle.cachedAt, order: .forward)]
@@ -225,7 +229,13 @@ final class ArticleCache {
             scoreConfidence: cached.scoreConfidence,
             sourceName: cached.sourceName,
             sourceFeedId: cached.sourceFeedId,
-            tags: tags
+            tags: tags,
+            // Cached articles predate the engagement-tracking surface;
+            // surfacing them in Read history requires the live API path,
+            // so leaving these nil here is harmless — the offline cache
+            // just doesn't power the recent_reads sort.
+            lastReadAt: nil,
+            timeSpentMsTotal: nil
         )
     }
 

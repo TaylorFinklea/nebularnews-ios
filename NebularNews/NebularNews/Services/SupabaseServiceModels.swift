@@ -73,7 +73,13 @@ struct SupabaseArticleRow: Decodable {
             scoreConfidence: score?.confidence.map { Double($0) },
             sourceName: source?.feeds?.title,
             sourceFeedId: source?.feedId,
-            tags: tags
+            tags: tags,
+            // Legacy Supabase row converter — engagement timestamps were
+            // not modeled in this row shape. The active Workers API path
+            // populates these; this converter is dead code for new
+            // installs but kept for parity.
+            lastReadAt: nil,
+            timeSpentMsTotal: nil
         )
     }
 }

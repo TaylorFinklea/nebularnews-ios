@@ -27,6 +27,8 @@ struct LibraryView: View {
                         .listRowBackground(Color.clear)
                 }
 
+                readHistorySection
+
                 if !showArticlesTab {
                     browseAllSection
                 }
@@ -70,6 +72,29 @@ struct LibraryView: View {
     }
 
     // MARK: - Sections
+
+    /// Always-visible row at the top of Library — articles you've actually
+    /// opened with foreground engagement, newest-read first. Distinct
+    /// from Brief History (past briefs) and Saved (explicitly bookmarked).
+    private var readHistorySection: some View {
+        Section {
+            NavigationLink {
+                ReadHistoryView()
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Reading history")
+                            .font(.body)
+                        Text("Articles you've opened, newest first.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "clock.arrow.circlepath")
+                }
+            }
+        }
+    }
 
     private var browseAllSection: some View {
         Section {

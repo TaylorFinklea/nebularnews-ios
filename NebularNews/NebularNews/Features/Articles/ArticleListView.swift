@@ -209,12 +209,9 @@ struct ArticleListView: View {
             case .read: .read
             }
 
-            let sortOrder: SortOrder = switch filter.sortOrder {
-            case .newest: .newest
-            case .oldest: .oldest
-            case .score: .score
-            case .unreadFirst: .unreadFirst
-            }
+            // SortOrder is a typealias for CompanionSortOrder, so the
+            // mapping is identity — declared as a let for clarity.
+            let sortOrder: SortOrder = filter.sortOrder
 
             let payload = try await appState.supabase.fetchArticles(
                 query: searchText,
@@ -243,12 +240,9 @@ struct ArticleListView: View {
             case .read: .read
             }
 
-            let sortOrder: SortOrder = switch filter.sortOrder {
-            case .newest: .newest
-            case .oldest: .oldest
-            case .score: .score
-            case .unreadFirst: .unreadFirst
-            }
+            // SortOrder is a typealias for CompanionSortOrder, so the
+            // mapping is identity — declared as a let for clarity.
+            let sortOrder: SortOrder = filter.sortOrder
 
             let payload = try await appState.supabase.fetchArticles(
                 query: searchText,

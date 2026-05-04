@@ -95,6 +95,13 @@ struct CompanionArticleListItem: Codable, Identifiable {
     let sourceName: String?
     let sourceFeedId: String?
     let tags: [CompanionTag]?
+    /// Last time the user opened this article and accumulated foreground
+    /// time. Server only stamps this when time_spent_ms is positive, so
+    /// non-nil means "the user genuinely engaged with this", distinct
+    /// from `isRead` which can be set by a brief seeing the title.
+    /// Powers the Read history surface.
+    let lastReadAt: Int?
+    let timeSpentMsTotal: Int?
 
     var isReadBool: Bool { isRead == 1 }
 }
@@ -306,6 +313,9 @@ enum CompanionSortOrder: String, CaseIterable {
     case oldest = "oldest"
     case score = "score_desc"
     case unreadFirst = "unread_first"
+    /// Server filters to last_read_at IS NOT NULL and orders DESC.
+    /// Used by the Read history surface in Library.
+    case recentReads = "recent_reads"
 
     var label: String {
         switch self {
@@ -313,6 +323,7 @@ enum CompanionSortOrder: String, CaseIterable {
         case .oldest: "Oldest"
         case .score: "Best fit"
         case .unreadFirst: "Unread first"
+        case .recentReads: "Recently read"
         }
     }
 }
