@@ -81,16 +81,17 @@ struct ArticleService: Sendable {
         )
     }
 
-    func updateReadingPosition(articleId: String, percent: Int) async throws {
+    func updateReadingPosition(articleId: String, percent: Int, timeSpentMs: Int? = nil) async throws {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
 
         struct Body: Encodable {
             let percent: Int
+            let time_spent_ms: Int?
         }
         try await api.requestVoid(
             method: "POST",
             path: "api/articles/\(articleId)/reading-position",
-            body: Body(percent: percent)
+            body: Body(percent: percent, time_spent_ms: timeSpentMs)
         )
     }
 

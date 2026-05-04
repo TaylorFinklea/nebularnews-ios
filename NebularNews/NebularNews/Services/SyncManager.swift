@@ -28,6 +28,13 @@ struct TagPayload: Codable {
 
 struct ReadingPositionPayload: Codable {
     let percent: Int
+    /// Optional foreground duration delta in milliseconds for this
+    /// session. The server adds it to a cumulative total per article so
+    /// the Scoring v2 time_spent signal can aggregate engagement per
+    /// feed. Older queued payloads decode with nil and the server
+    /// treats absent as 0 — no behavior change for existing offline
+    /// sync queues.
+    let timeSpentMs: Int?
 }
 
 struct FeedSettingsPayload: Codable {
@@ -297,7 +304,7 @@ final class SyncManager {
             try await supabase.deleteFeed(id: action.articleId)
         case "reading_position":
             let payload = try JSONDecoder().decode(ReadingPositionPayload.self, from: Data(action.payload.utf8))
-            try await supabase.updateReadingPosition(articleId: action.articleId, percent: payload.percent)
+            try await supabase.updateReadingPosition(articleId: action.articleId, percent: payload.percent, timeSpentMs: payload.timeSpentMs)
         default:
             logger.warning("Unknown action type: \(action.actionType)")
         }
@@ -581,19 +588,27 @@ final class SyncManager {
     /// Record reading position (0-100) for an article. Non-throwing — last
     /// writer wins and a dropped position update isn't user-visible. Coalesces
     /// through the queue on offline/failure like other mutations.
-    func setReadingPosition(articleId: String, percent: Int) async {
+    ///
+    /// `timeSpentMs` is an optional foreground-duration delta for this
+    /// session. When non-nil it threads through the same payload so the
+    /// server can increment the cumulative total used by the Scoring v2
+    /// time_spent signal. Capped client-side at 30 minutes per call as
+    /// defense-in-depth (server caps too).
+    func setReadingPosition(articleId: String, percent: Int, timeSpentMs: Int? = nil) async {
         let clamped = max(0, min(100, percent))
-        let payload = ReadingPositionPayload(percent: clamped)
+        let cappedMs: Int? = timeSpentMs.map { max(0, min(30 * 60 * 1000, $0)) }
+        let payload = ReadingPositionPayload(percent: clamped, timeSpentMs: cappedMs)
         if isOffline {
             queueAction(type: "reading_position", articleId: articleId, payload: payload)
             return
         }
         do {
-            try await supabase.updateReadingPosition(articleId: articleId, percent: clamped)
+            try await supabase.updateReadingPosition(articleId: articleId, percent: clamped, timeSpentMs: cappedMs)
         } catch {
             queueAction(type: "reading_position", articleId: articleId, payload: payload)
         }
     }
+
 
     /// Unsubscribe (delete) a feed by id. Queues on offline/failure.
     func unsubscribeFeed(feedId: String) async throws {

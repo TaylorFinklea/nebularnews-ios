@@ -64,6 +64,14 @@ struct CompanionArticleDetailView: View {
     @State private var highlightText = ""
     @State private var exportedMarkdown: String?
     @State private var isFetchingContent = false
+    /// Foreground-engagement window opener. Set when the article view
+    /// appears (or returns from background); cleared when the view
+    /// disappears (or backgrounds). The delta becomes the
+    /// `time_spent_ms` increment that powers the Scoring v2 time_spent
+    /// signal, aggregated per feed on the server.
+    @State private var foregroundedAt: Date?
+
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -353,9 +361,43 @@ struct CompanionArticleDetailView: View {
         .onAppear {
             aiAssistant.hideFloatingButton = true
             pushAssistantContext()
+            foregroundedAt = Date()
         }
         .onDisappear {
             aiAssistant.hideFloatingButton = false
+            flushForegroundDelta()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Pause / resume the foreground window so time spent in
+            // background (e.g. user took a phone call mid-article)
+            // doesn't count as engagement. Only foreground -> active is
+            // a fresh window; backgrounding flushes the existing one.
+            if newPhase == .active {
+                foregroundedAt = Date()
+            } else {
+                flushForegroundDelta()
+            }
+        }
+    }
+
+    /// Compute the foreground-window delta and ship it to the server,
+    /// resetting the marker so re-entries don't double-count. Idempotent
+    /// when foregroundedAt is nil (paired calls during the same scene
+    /// phase fire-and-forget).
+    private func flushForegroundDelta() {
+        guard let appeared = foregroundedAt else { return }
+        foregroundedAt = nil
+        let ms = Int(Date().timeIntervalSince(appeared) * 1000)
+        // Drop sub-second blips — opening a stale push notification
+        // briefly shouldn't count as engagement and would just spam the
+        // server with no-op updates.
+        guard ms >= 1000 else { return }
+        Task {
+            await appState.syncManager?.setReadingPosition(
+                articleId: articleId,
+                percent: currentPositionPercent,
+                timeSpentMs: ms,
+            )
         }
     }
 
