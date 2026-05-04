@@ -433,6 +433,44 @@ struct CompanionTodayStats: Codable {
     let highFitUnread: Int
 }
 
+/// Weekly reading insights from `GET /api/insights/weekly`. The server
+/// caches one snapshot per user per week so calling this is cheap; if no
+/// AI provider is configured the backend returns a fallback narrative
+/// derived from the structured stats below. Inner `data` field is
+/// aliased to `stats` here so call sites read `insight.stats.articlesRead`
+/// instead of the awkward `insight.data.data.articlesRead`.
+struct CompanionWeeklyInsight: Codable {
+    let text: String
+    let stats: Stats?
+    let generatedAt: Int
+
+    struct Stats: Codable {
+        let articlesRead: Int
+        let topTopics: [Topic]
+        let topFeeds: [Feed]
+
+        struct Topic: Codable, Hashable {
+            let name: String
+            let cnt: Int
+        }
+
+        struct Feed: Codable, Hashable {
+            let title: String
+            let cnt: Int
+        }
+    }
+
+    /// Only `stats` needs an explicit alias — APIClient's decoder uses
+    /// `.convertFromSnakeCase`, which already turns JSON `generated_at`
+    /// into `generatedAt` before key lookup. Adding a snake_case
+    /// rawValue here would silently mis-match the converted key.
+    enum CodingKeys: String, CodingKey {
+        case text
+        case stats = "data"
+        case generatedAt
+    }
+}
+
 // MARK: - Save response
 
 struct CompanionSaveResponse: Codable {

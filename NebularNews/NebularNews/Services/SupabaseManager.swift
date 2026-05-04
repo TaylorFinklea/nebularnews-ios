@@ -251,6 +251,13 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.fetchBrief(id: id)
     }
 
+    /// Weekly reading insight (cached server-side per user, regenerates
+    /// once a week). Surfaces on Today as a dismissable card.
+    func fetchWeeklyInsight() async throws -> CompanionWeeklyInsight {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        return try await api.request(path: "api/insights/weekly")
+    }
+
     // MARK: - Device Token
 
     func registerDeviceToken(token: String) async throws {

@@ -19,6 +19,12 @@ struct TodayBriefingView: View {
     @State private var inputText = ""
     @State private var dismissContext: DismissContext?
     @State private var dismissService: DismissedTopicService?
+    /// Weekly Reading Insights card. nil while we haven't fetched (or
+    /// the fetch failed silently — this card is optional UX and a
+    /// failure shouldn't surface an error to the user). Renders above
+    /// the chat thread when present, fresh, and not dismissed.
+    @State private var weeklyInsight: CompanionWeeklyInsight?
+    @State private var insightDismissed: Bool = false
     /// Local navigation target for bullet tap-to-open. Pushed onto the
     /// surrounding NavigationStack via `.navigationDestination(item:)` so
     /// we don't have to round-trip through DeepLinkRouter (which is wired
@@ -41,6 +47,18 @@ struct TodayBriefingView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if shouldShowInsight, let insight = weeklyInsight {
+                    WeeklyInsightCard(insight: insight) {
+                        SeenInsightStore.markSeen(insight.generatedAt)
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            insightDismissed = true
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 if isLoading && messages.isEmpty {
                     ProgressView("Loading brief…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -97,6 +115,7 @@ struct TodayBriefingView: View {
             dismissService?.cleanup()
             await loadThread()
             await refreshIfStale()
+            await loadWeeklyInsight()
         }
         .sheet(item: $dismissContext) { ctx in
             DismissDurationSheet(
@@ -134,6 +153,30 @@ struct TodayBriefingView: View {
                 openBriefId = id
                 deepLinkRouter.clearPendingBrief()
             }
+        }
+    }
+
+    // MARK: - Weekly Insight
+
+    /// Show the insight card when we have one, the user hasn't tapped
+    /// dismiss this session, hasn't dismissed this generation in any
+    /// prior session (SeenInsightStore), and the snapshot is fresh
+    /// enough that resurfacing it makes sense (<= 7 days old).
+    private var shouldShowInsight: Bool {
+        guard let insight = weeklyInsight else { return false }
+        if insightDismissed { return false }
+        if SeenInsightStore.contains(insight.generatedAt) { return false }
+        let ageSec = Date().timeIntervalSince1970 - Double(insight.generatedAt) / 1000.0
+        return ageSec >= 0 && ageSec <= 7 * 24 * 3600
+    }
+
+    /// Fire-and-forget weekly insight load. Failures are silent — the
+    /// card is supplementary; an error here shouldn't surface alongside
+    /// the brief's own error UI.
+    private func loadWeeklyInsight() async {
+        guard weeklyInsight == nil else { return }
+        if let fetched = try? await appState.supabase.fetchWeeklyInsight() {
+            weeklyInsight = fetched
         }
     }
 
