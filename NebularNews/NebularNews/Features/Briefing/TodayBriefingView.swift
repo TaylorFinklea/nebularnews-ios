@@ -24,6 +24,9 @@ struct TodayBriefingView: View {
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var inputText = ""
+    /// Focus state for the input bar. Bound through @FocusState so the
+    /// keyboard accessory's Done button can flip it to false to dismiss.
+    @FocusState private var isInputFocused: Bool
 
     /// View-time filter — drop system context markers and surface the
     /// chat-visible messages in their server-emitted order.
@@ -317,8 +320,20 @@ struct TodayBriefingView: View {
             // same gesture Messages uses. Without this there's no way
             // to close the keyboard once the input bar steals focus.
             .scrollDismissesKeyboard(.interactively)
+            // Pin to the bottom on safe-area changes (keyboard appearing
+            // / dismissing) so the latest assistant message stays in
+            // view rather than getting hidden behind the keyboard.
+            .defaultScrollAnchor(.bottom)
             .onChange(of: messages.count) {
                 if let last = messages.last {
+                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
+                }
+            }
+            .onChange(of: isInputFocused) { _, focused in
+                // Belt-and-suspenders: when focus transitions to the
+                // input, force a scroll to the latest message in case
+                // the anchor pin doesn't catch a fast keyboard transition.
+                if focused, let last = messages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
@@ -434,6 +449,7 @@ struct TodayBriefingView: View {
         HStack(alignment: .bottom, spacing: 8) {
             TextField("Ask about today…", text: $inputText, axis: .vertical)
                 .textFieldStyle(.plain)
+                .focused($isInputFocused)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .background(Color.platformSecondaryBackground, in: RoundedRectangle(cornerRadius: 20))
@@ -453,6 +469,16 @@ struct TodayBriefingView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        // Keyboard accessory bar — gives the user an explicit Done
+        // affordance instead of relying on the interactive drag-to-
+        // dismiss gesture from Build 30 (which still works, just isn't
+        // discoverable on a chat surface).
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isInputFocused = false }
+            }
+        }
     }
 
     /// Sends a message into the unified Today/assistant thread. Used by
