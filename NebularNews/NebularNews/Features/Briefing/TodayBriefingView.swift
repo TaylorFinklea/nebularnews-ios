@@ -14,11 +14,22 @@ struct TodayBriefingView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(AIAssistantCoordinator.self) private var coordinator
 
-    @State private var thread: CompanionChatThread?
-    @State private var messages: [CompanionChatMessage] = []
+    /// Today renders `coordinator.messages` directly — single source
+    /// of truth shared with the floating overlay. The coordinator
+    /// commits the assistant reply locally the moment streaming
+    /// finishes (before the server has flushed to D1), so there's no
+    /// race between "streaming bubble disappears" and "persisted
+    /// message arrives" the way there was when Today maintained its
+    /// own messages array.
     @State private var isLoading = false
     @State private var errorMessage = ""
     @State private var inputText = ""
+
+    /// View-time filter — drop system context markers and surface the
+    /// chat-visible messages in their server-emitted order.
+    private var messages: [CompanionChatMessage] {
+        coordinator.messages.filter { $0.role != "system" }
+    }
     @State private var dismissContext: DismissContext?
     @State private var dismissService: DismissedTopicService?
     /// Weekly Reading Insights card. nil while we haven't fetched (or
@@ -198,23 +209,13 @@ struct TodayBriefingView: View {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
-        do {
-            // Today + overlay share the assistant thread. The server's
-            // GET /chat/assistant calls ensureTodayBriefSeed before
-            // returning, so the brief shows up in the message list as
-            // the latest assistant message.
-            let payload: CompanionChatPayload = try await APIClient.shared.request(
-                path: "api/chat/assistant"
-            )
-            thread = payload.thread
-            messages = payload.messages.filter { $0.role != "system" }
-            // Pin the coordinator to the same thread so sendMessage
-            // (used by the input bar + Tell me more) writes here.
-            coordinator.currentThreadId = payload.thread?.id
-            errorMessage = ""
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        // Coordinator owns the messages + thread id and is shared with
+        // the floating overlay. Its loadCurrentThread fetches
+        // /api/chat/assistant (which the server pre-seeds with the
+        // latest brief), populates coordinator.messages, and stores
+        // the threadId so subsequent sendMessage writes line up.
+        await coordinator.loadCurrentThread()
+        errorMessage = ""
     }
 
     /// Called once per view appearance. If the seeded brief is older than
@@ -324,13 +325,10 @@ struct TodayBriefingView: View {
             .onChange(of: coordinator.streamingContent) {
                 withAnimation { proxy.scrollTo("streamingBubble", anchor: .bottom) }
             }
-            .onChange(of: coordinator.isStreaming) { wasStreaming, isStreaming in
-                // Stream just ended — refresh from the server so the
-                // committed message replaces the transient bubble.
-                if wasStreaming && !isStreaming {
-                    Task { await loadThread() }
-                }
-            }
+            // No post-stream refresh needed — coordinator commits the
+            // assistant reply to coordinator.messages on the SSE done
+            // event, so the persisted bubble takes over from the
+            // streaming bubble in the same render cycle.
         }
     }
 
@@ -464,7 +462,7 @@ struct TodayBriefingView: View {
     /// in `messageList`, so this just kicks off the send.
     private func sendFollowUp(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, thread?.id != nil else { return }
+        guard !trimmed.isEmpty, coordinator.currentThreadId != nil else { return }
         coordinator.currentContext = AIPageContext(
             pageType: "today_brief",
             pageLabel: "Today brief",
@@ -584,7 +582,7 @@ struct TodayBriefingView: View {
         )
         let msg = CompanionChatMessage(
             id: UUID().uuidString,
-            threadId: thread?.id ?? "",
+            threadId: coordinator.currentThreadId ?? "",
             role: "assistant",
             content: marker,
             tokenCount: nil,
@@ -593,7 +591,7 @@ struct TodayBriefingView: View {
             createdAt: Int(Date().timeIntervalSince1970),
             messageKind: "tool_result"
         )
-        messages.append(msg)
+        coordinator.messages.append(msg)
     }
 
 }
