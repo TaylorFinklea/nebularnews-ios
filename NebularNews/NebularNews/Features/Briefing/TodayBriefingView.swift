@@ -83,6 +83,9 @@ struct TodayBriefingView: View {
                 } else {
                     messageList
                 }
+                if !coordinator.suggestedQuestions.isEmpty && !coordinator.isStreaming {
+                    suggestedQuestionsBar
+                }
                 Divider()
                 inputBar
             }
@@ -384,7 +387,14 @@ struct TodayBriefingView: View {
         if msg.kind == "brief_seed", let brief = SeededBrief.parse(content: msg.content) {
             briefSection(brief: brief, anchorId: msg.id)
         } else {
-            AssistantChatBubble(message: msg) { _ in }
+            // Push article detail when a committed bubble's article
+            // card is tapped. Without this the closure was a no-op,
+            // which is why mid-stream cards opened (they routed through
+            // the streaming bubble's handler) but committed cards
+            // appeared inert.
+            AssistantChatBubble(message: msg) { articleId in
+                openArticleId = articleId
+            }
                 .id(msg.id)
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
@@ -454,6 +464,39 @@ struct TodayBriefingView: View {
             .padding(.top, 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Suggested follow-ups
+
+    /// Coordinator harvests these from the assistant's hidden ">>"-prefix
+    /// suggestions. Renders as a horizontally-scrolling row of tappable
+    /// pills above the input bar; tapping clears the list and sends
+    /// the question into the same conversation.
+    private var suggestedQuestionsBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(coordinator.suggestedQuestions, id: \.self) { question in
+                    Button {
+                        coordinator.suggestedQuestions = []
+                        Task { await sendFollowUp(question) }
+                    } label: {
+                        Text(question)
+                            .font(.caption)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color.accentColor.opacity(0.10))
+                            .foregroundStyle(Color.accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .scrollClipDisabled()
     }
 
     // MARK: - Input

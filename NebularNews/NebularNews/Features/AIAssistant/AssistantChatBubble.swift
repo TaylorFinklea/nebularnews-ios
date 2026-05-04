@@ -84,10 +84,11 @@ struct AssistantSegmentView: View {
     var body: some View {
         switch segment {
         case .text(let text):
-            Text(LocalizedStringKey(text))
-                .font(.system(.body, design: .serif))
-                .lineSpacing(4)
-                .textSelection(.enabled)
+            // MarkdownText handles block-level syntax (###, ---, lists)
+            // that LocalizedStringKey alone misses; inline markdown
+            // (**bold**, *italic*) still flows through LocalizedStringKey
+            // inside each rendered line.
+            MarkdownText(content: text)
         case .articleCard(let id, let title):
             Button {
                 onArticleTap?(id)
