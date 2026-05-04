@@ -63,7 +63,25 @@ struct AssistantChatBubble: View {
     }
 
     @ViewBuilder
-    private func segmentView(_ segment: AssistantContentSegment) -> some View {
+    fileprivate func segmentView(_ segment: AssistantContentSegment) -> some View {
+        AssistantSegmentView(segment: segment, onArticleTap: onArticleTap)
+    }
+}
+
+/// Renders one parsed assistant segment (text / article card / tool
+/// chip). Extracted from AssistantChatBubble so the live-streaming
+/// bubble in TodayBriefingView can reuse the exact same visuals —
+/// during streaming, parsing `coordinator.streamingContent` and
+/// running each segment through this view replaces raw marker text
+/// like `[[tool:get_trending_topics:Fetched...]]` with the polished
+/// chip the user sees on committed messages.
+struct AssistantSegmentView: View {
+    @Environment(AIAssistantCoordinator.self) private var coordinator
+
+    let segment: AssistantContentSegment
+    var onArticleTap: ((String) -> Void)?
+
+    var body: some View {
         switch segment {
         case .text(let text):
             Text(LocalizedStringKey(text))

@@ -348,20 +348,33 @@ struct TodayBriefingView: View {
     }
 
     /// Mirrors AssistantChatBubble's assistant rendering for the live
-    /// streaming case: small sparkle avatar + secondary-tinted bubble.
+    /// streaming case: small sparkle avatar + secondary-tinted bubble
+    /// containing parsed segments. We run the same parser on
+    /// `coordinator.streamingContent` so finished tool/article markers
+    /// (`[[tool:...]]`, `[[article:...]]`) render as their polished
+    /// chips/cards the moment their closing `]]` arrives, instead of
+    /// staying as raw marker text until streaming completes. Each
+    /// segment gets its own row inside the bubble so a "thought, tool
+    /// call, more thought" sequence visually flows like Claude's UI.
     private var streamingBubble: some View {
-        HStack(alignment: .top, spacing: 8) {
+        let segments = AssistantMessageParser.parse(coordinator.streamingContent)
+        return HStack(alignment: .top, spacing: 8) {
             Image(systemName: "sparkles")
                 .font(.caption)
                 .foregroundStyle(.purple)
                 .frame(width: 24, height: 24)
                 .background(Color.purple.opacity(0.1), in: Circle())
-            Text(coordinator.streamingContent)
-                .font(.body)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color.platformSecondaryBackground)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                    AssistantSegmentView(segment: segment) { id in
+                        openArticleId = id
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.platformSecondaryBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             Spacer(minLength: 40)
         }
     }
