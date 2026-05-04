@@ -22,7 +22,7 @@ struct BriefBulletRow: View {
                             HStack(spacing: 4) {
                                 Image(systemName: "link")
                                     .font(.caption2)
-                                Text(source.title)
+                                Text(source.title ?? "Source")
                                     .font(.caption)
                             }
                             .foregroundStyle(.accent)

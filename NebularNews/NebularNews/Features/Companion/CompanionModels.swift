@@ -37,16 +37,66 @@ struct CompanionNewsBrief: Codable {
     struct Bullet: Codable, Identifiable {
         struct Source: Codable, Identifiable {
             let articleId: String
-            let title: String
+            /// Article title — optional because legacy cron-persisted
+            /// briefs synthesized sources from `source_article_ids` and
+            /// have no title to attach. New enriched briefs always
+            /// populate it.
+            let title: String?
             let canonicalUrl: String?
 
             var id: String { articleId }
+
+            init(articleId: String, title: String?, canonicalUrl: String?) {
+                self.articleId = articleId
+                self.title = title
+                self.canonicalUrl = canonicalUrl
+            }
         }
 
         let text: String
         let sources: [Source]
 
         var id: String { text }
+
+        /// Two server-side bullet shapes have shipped over time:
+        ///   - Enriched (current): `{ text, sources: [{article_id, title, ...}] }`
+        ///   - Legacy cron raw:    `{ text, source_article_ids: [String] }`
+        /// Both end up in `news_brief_editions.bullets_json` because the
+        /// scheduled-briefs cron originally persisted the AI's raw
+        /// output verbatim. This decoder accepts either, so brief
+        /// history doesn't blow up on pre-enrichment rows. Mirrors the
+        /// same dual-shape handling in SeededBrief.Bullet.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            self.text = try c.decode(String.self, forKey: .text)
+            if let enriched = try? c.decode([Source].self, forKey: .sources) {
+                self.sources = enriched
+            } else if let ids = try? c.decode([String].self, forKey: .sourceArticleIds) {
+                self.sources = ids.map { Source(articleId: $0, title: nil, canonicalUrl: nil) }
+            } else {
+                self.sources = []
+            }
+        }
+
+        /// Always re-emit the enriched shape — encoder is only used for
+        /// markdown export / share paths, never to round-trip back to
+        /// the server, so canonicalizing here is fine.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(text, forKey: .text)
+            try c.encode(sources, forKey: .sources)
+        }
+
+        /// CodingKey rawValues are camelCase even though the JSON is
+        /// snake_case — APIClient's decoder uses `convertFromSnakeCase`
+        /// which converts JSON keys to camelCase before lookup. Snake-
+        /// case rawValues here would silently mis-match the converted
+        /// key (the same bug we fixed on SeededBrief.Bullet.Source).
+        enum CodingKeys: String, CodingKey {
+            case text
+            case sources
+            case sourceArticleIds
+        }
     }
 
     let id: String?

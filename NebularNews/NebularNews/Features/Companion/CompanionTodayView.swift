@@ -96,7 +96,7 @@ struct CompanionTodayView: View {
                                                 .font(.subheadline)
                                             ForEach(bullet.sources) { source in
                                                 NavigationLink(destination: CompanionArticleDetailView(articleId: source.articleId)) {
-                                                    Text(source.title)
+                                                    Text(source.title ?? "Source")
                                                         .font(.caption)
                                                         .foregroundStyle(.accent)
                                                 }

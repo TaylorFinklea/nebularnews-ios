@@ -158,7 +158,7 @@ struct BriefDetailView: View {
         for bullet in detail.bullets {
             lines.append("- \(bullet.text)")
             for source in bullet.sources {
-                lines.append("  - [\(source.title)](nebularnews://article/\(source.articleId))")
+                lines.append("  - [\(source.title ?? "Source")](nebularnews://article/\(source.articleId))")
             }
         }
         return lines.joined(separator: "\n")
