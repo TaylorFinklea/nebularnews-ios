@@ -119,6 +119,12 @@ struct TodayBriefingView: View {
             await refreshIfStale()
             await loadWeeklyInsight()
         }
+        // Today IS the assistant conversation now; the floating FAB
+        // would just be a second handle to the same thread on the same
+        // surface. Hide while on Today, restore on disappear so other
+        // tabs (Discover / Library / article detail) keep the FAB.
+        .onAppear { coordinator.hideFloatingButton = true }
+        .onDisappear { coordinator.hideFloatingButton = false }
         .sheet(item: $dismissContext) { ctx in
             DismissDurationSheet(
                 signature: ctx.signature,
@@ -306,6 +312,10 @@ struct TodayBriefingView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            // Drag the message list down to dismiss the keyboard, the
+            // same gesture Messages uses. Without this there's no way
+            // to close the keyboard once the input bar steals focus.
+            .scrollDismissesKeyboard(.interactively)
             .onChange(of: messages.count) {
                 if let last = messages.last {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
