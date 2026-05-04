@@ -181,8 +181,16 @@ struct ReadHistoryView: View {
         return formatter.localizedString(for: date, relativeTo: .now)
     }
 
+    /// Human-friendly time-spent. Sub-minute reads show as "Xs read"
+    /// instead of always rounding up to "1m read" — when you only spent
+    /// 12 seconds on an article, that's signal worth surfacing rather
+    /// than rounding away.
     private func timeSpentLabel(_ ms: Int) -> String {
-        let minutes = max(1, Int(round(Double(ms) / 60_000.0)))
+        if ms < 60_000 {
+            let seconds = max(1, Int(round(Double(ms) / 1_000.0)))
+            return "\(seconds)s read"
+        }
+        let minutes = Int(round(Double(ms) / 60_000.0))
         return "\(minutes)m read"
     }
 

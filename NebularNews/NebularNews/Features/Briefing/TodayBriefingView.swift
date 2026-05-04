@@ -1,11 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// Chat-first Today tab. Renders a single thread (`__today_brief__`) where
-/// the most recent assistant message is a structured news brief and any
-/// follow-ups beneath it are normal text bubbles. The user can tap inline
-/// chips on each bullet (save, react, dismiss, tell me more) or type a
-/// free-form follow-up at the bottom.
+/// Chat-first Today tab. Renders the user's shared assistant thread —
+/// the same thread the floating AI overlay shows from elsewhere in the
+/// app, so Today and the overlay are two views onto one conversation.
+/// The brief seed lands as a structured assistant message inside that
+/// thread (server-side `ensureTodayBriefSeed` makes sure it's there);
+/// follow-ups, "Tell me more" replies, and freeform chat all sit
+/// alongside it instead of branching off into separate threads.
 struct TodayBriefingView: View {
     @Environment(AppState.self) private var appState
     @Environment(DeepLinkRouter.self) private var deepLinkRouter
@@ -191,11 +193,18 @@ struct TodayBriefingView: View {
         isLoading = true
         defer { isLoading = false }
         do {
+            // Today + overlay share the assistant thread. The server's
+            // GET /chat/assistant calls ensureTodayBriefSeed before
+            // returning, so the brief shows up in the message list as
+            // the latest assistant message.
             let payload: CompanionChatPayload = try await APIClient.shared.request(
-                path: "api/chat/__today_brief__"
+                path: "api/chat/assistant"
             )
             thread = payload.thread
             messages = payload.messages.filter { $0.role != "system" }
+            // Pin the coordinator to the same thread so sendMessage
+            // (used by the input bar + Tell me more) writes here.
+            coordinator.currentThreadId = payload.thread?.id
             errorMessage = ""
         } catch {
             errorMessage = error.localizedDescription
@@ -275,6 +284,18 @@ struct TodayBriefingView: View {
                 ForEach(messages) { msg in
                     messageRows(for: msg)
                 }
+                // Live-streaming bubble — coordinator.streamingContent
+                // grows as deltas arrive; once isStreaming flips to false
+                // we pull the persisted version from the server (see
+                // .onChange below) and this view disappears as the real
+                // assistant message takes over.
+                if coordinator.isStreaming && !coordinator.streamingContent.isEmpty {
+                    streamingBubble
+                        .id("streamingBubble")
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
+                }
                 if !errorMessage.isEmpty {
                     Text(errorMessage)
                         .font(.caption)
@@ -290,6 +311,35 @@ struct TodayBriefingView: View {
                     withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
             }
+            .onChange(of: coordinator.streamingContent) {
+                withAnimation { proxy.scrollTo("streamingBubble", anchor: .bottom) }
+            }
+            .onChange(of: coordinator.isStreaming) { wasStreaming, isStreaming in
+                // Stream just ended — refresh from the server so the
+                // committed message replaces the transient bubble.
+                if wasStreaming && !isStreaming {
+                    Task { await loadThread() }
+                }
+            }
+        }
+    }
+
+    /// Mirrors AssistantChatBubble's assistant rendering for the live
+    /// streaming case: small sparkle avatar + secondary-tinted bubble.
+    private var streamingBubble: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.caption)
+                .foregroundStyle(.purple)
+                .frame(width: 24, height: 24)
+                .background(Color.purple.opacity(0.1), in: Circle())
+            Text(coordinator.streamingContent)
+                .font(.body)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Color.platformSecondaryBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            Spacer(minLength: 40)
         }
     }
 
@@ -397,41 +447,20 @@ struct TodayBriefingView: View {
         .padding(.vertical, 8)
     }
 
-    /// Open the floating AI assistant sheet and seed it with `prompt`.
-    /// Used by the bullet "Tell me more" action so the deeper exploration
-    /// happens in the assistant thread rather than the inline Today thread.
-    private func openAssistantWith(prompt: String) async {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+    /// Sends a message into the unified Today/assistant thread. Used by
+    /// the input bar AND by the bullet "Tell me more" action — both
+    /// land in the same conversation and stream inline. The post-stream
+    /// refresh is handled by `.onChange(of: coordinator.isStreaming)`
+    /// in `messageList`, so this just kicks off the send.
+    private func sendFollowUp(_ text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, thread?.id != nil else { return }
         coordinator.currentContext = AIPageContext(
             pageType: "today_brief",
             pageLabel: "Today brief",
             briefSummary: messages.first(where: { $0.kind == "brief_seed" })?.content
         )
-        // Switch the coordinator off the __today_brief__ thread so the
-        // assistant thread receives the message; loadCurrentThread fetches
-        // /api/chat/assistant and overwrites currentThreadId.
-        await coordinator.loadCurrentThread()
-        coordinator.isSheetPresented = true
         await coordinator.sendMessage(trimmed)
-    }
-
-    private func sendFollowUp(_ text: String) async {
-        // Reuse the assistant streaming pipeline. The message is appended to
-        // the same `__today_brief__` thread so the AI has full context of
-        // what was in the brief.
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let threadId = thread?.id else { return }
-        let context = AIPageContext(
-            pageType: "today_brief",
-            pageLabel: "Today brief",
-            briefSummary: messages.first(where: { $0.kind == "brief_seed" })?.content
-        )
-        coordinator.currentContext = context
-        coordinator.currentThreadId = threadId
-        await coordinator.sendMessage(trimmed)
-        // Pull the latest server-side messages so chips & undo persist.
-        await loadThread()
     }
 
     // MARK: - Bullet actions
@@ -447,7 +476,9 @@ struct TodayBriefingView: View {
         case .dismiss(let signature, let articleIds):
             dismissContext = DismissContext(signature: signature, articleIds: articleIds)
         case .tellMeMore(let prompt):
-            Task { await openAssistantWith(prompt: "Tell me more about: \(prompt)") }
+            // Route inline through the same conversation — no overlay
+            // popup. Same pipeline as the input bar.
+            Task { await sendFollowUp("Tell me more about: \(prompt)") }
         case .openArticle(let articleId):
             // Push directly via the NavigationStack-bound state. Going
             // through DeepLinkRouter would no-op here because the legacy

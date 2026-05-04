@@ -121,6 +121,11 @@ struct CompanionArticleDetailView: View {
                                         ScoreBadge(score: score)
                                     }
                                 }
+                                if let ms = payload.timeSpentMsTotal, ms > 0 {
+                                    Label(timeSpentLabel(ms), systemImage: "clock")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -378,6 +383,18 @@ struct CompanionArticleDetailView: View {
                 flushForegroundDelta()
             }
         }
+    }
+
+    /// "You've read this for X" copy. Sub-minute reads show as
+    /// "You've read this for Xs" so a 20-second open doesn't round
+    /// to "1m" and feel exaggerated.
+    private func timeSpentLabel(_ ms: Int) -> String {
+        if ms < 60_000 {
+            let seconds = max(1, Int(round(Double(ms) / 1_000.0)))
+            return "You've read this for \(seconds)s"
+        }
+        let minutes = Int(round(Double(ms) / 60_000.0))
+        return "You've read this for \(minutes)m"
     }
 
     /// Compute the foreground-window delta and ship it to the server,

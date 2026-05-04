@@ -173,6 +173,12 @@ struct CompanionArticleDetailPayload: Codable {
     // server from article_read_state. Used by CompanionArticleDetailView to
     // auto-restore scroll on reopen (M16 Tier 2). Nil = nothing to restore.
     var readPositionPercent: Int?
+    /// Cumulative foreground time on this article (ms). Powers the
+    /// "you've read this for Xm" indicator in the detail header.
+    var timeSpentMsTotal: Int?
+    /// Most recent foreground engagement timestamp (epoch ms). Useful
+    /// for "last opened 2 days ago" copy without a separate query.
+    var lastReadAt: Int?
 }
 
 struct CompanionArticle: Codable {
