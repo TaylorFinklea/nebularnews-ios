@@ -531,7 +531,10 @@ struct CompanionAssistantPersistResult: Codable {
 
 /// One Agent conversation row in the Agent tab list (Build 37).
 /// Backed by `chat_threads` server-side; APIClient's decoder converts
-/// snake_case → camelCase automatically (no explicit CodingKeys).
+/// snake_case → camelCase automatically. Decoder is lenient so a
+/// stray null on a numeric column (legacy rows) doesn't fail the
+/// whole list. `messageCount` defaults to 0; timestamps default to 0
+/// and the row sorts to the bottom in that degenerate case.
 struct AgentConversationSummary: Codable, Identifiable, Equatable {
     let id: String
     let articleId: String?
@@ -541,6 +544,38 @@ struct AgentConversationSummary: Codable, Identifiable, Equatable {
     let updatedAt: Int
     let createdAt: Int
     let hasPinnedArticle: Bool
+
+    init(
+        id: String,
+        articleId: String?,
+        title: String?,
+        lastMessagePreview: String?,
+        messageCount: Int,
+        updatedAt: Int,
+        createdAt: Int,
+        hasPinnedArticle: Bool
+    ) {
+        self.id = id
+        self.articleId = articleId
+        self.title = title
+        self.lastMessagePreview = lastMessagePreview
+        self.messageCount = messageCount
+        self.updatedAt = updatedAt
+        self.createdAt = createdAt
+        self.hasPinnedArticle = hasPinnedArticle
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try c.decode(String.self, forKey: .id)
+        self.articleId = try? c.decode(String?.self, forKey: .articleId) ?? nil
+        self.title = try? c.decode(String?.self, forKey: .title) ?? nil
+        self.lastMessagePreview = try? c.decode(String?.self, forKey: .lastMessagePreview) ?? nil
+        self.messageCount = (try? c.decode(Int.self, forKey: .messageCount)) ?? 0
+        self.updatedAt = (try? c.decode(Int.self, forKey: .updatedAt)) ?? 0
+        self.createdAt = (try? c.decode(Int.self, forKey: .createdAt)) ?? 0
+        self.hasPinnedArticle = (try? c.decode(Bool.self, forKey: .hasPinnedArticle)) ?? false
+    }
 }
 
 /// `GET /api/chat/agent/conversations/:id` payload. `messages` is

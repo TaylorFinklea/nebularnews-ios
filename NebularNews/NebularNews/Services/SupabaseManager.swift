@@ -274,7 +274,29 @@ final class SupabaseManager: Sendable {
     /// that's brief_seed-only (those live on Today's brief history).
     func fetchAgentConversations() async throws -> [AgentConversationSummary] {
         guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
-        return try await api.request(path: "api/chat/agent/conversations")
+        do {
+            return try await api.request(path: "api/chat/agent/conversations")
+        } catch let error as DecodingError {
+            // Surface the failing key path / type info so we don't get
+            // the generic "data couldn't be read" string when something
+            // server-side returns an unexpected shape.
+            throw SupabaseManagerError.decodingFailed(detail: prettyDecodingError(error))
+        }
+    }
+
+    private func prettyDecodingError(_ error: DecodingError) -> String {
+        switch error {
+        case .typeMismatch(let type, let ctx):
+            return "type mismatch on \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): expected \(type)"
+        case .valueNotFound(let type, let ctx):
+            return "missing value at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): expected \(type)"
+        case .keyNotFound(let key, let ctx):
+            return "missing key '\(key.stringValue)' at \(ctx.codingPath.map(\.stringValue).joined(separator: "."))"
+        case .dataCorrupted(let ctx):
+            return "data corrupted at \(ctx.codingPath.map(\.stringValue).joined(separator: ".")): \(ctx.debugDescription)"
+        @unknown default:
+            return error.localizedDescription
+        }
     }
 
     /// Create a new Agent conversation. Optional pinned article id

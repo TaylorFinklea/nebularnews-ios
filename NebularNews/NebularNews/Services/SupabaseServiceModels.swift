@@ -4,6 +4,7 @@ import NebularNewsKit
 enum SupabaseManagerError: LocalizedError {
     case notAuthenticated
     case invalidResponse
+    case decodingFailed(detail: String)
 
     var errorDescription: String? {
         switch self {
@@ -11,6 +12,8 @@ enum SupabaseManagerError: LocalizedError {
             return "You must be signed in to perform this action."
         case .invalidResponse:
             return "The server returned an unexpected response."
+        case .decodingFailed(let detail):
+            return "Decoding failed: \(detail)"
         }
     }
 }
