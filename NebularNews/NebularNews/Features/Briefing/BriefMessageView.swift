@@ -57,6 +57,11 @@ struct BriefSectionHeader: View {
 struct BriefBulletCard: View {
     let bullet: SeededBrief.Bullet
     let onAction: (BriefBulletAction) -> Void
+    /// When false, hide Save / Tell-me-more chips. The parent view is
+    /// also expected to skip its `.swipeActions` modifier so the card
+    /// renders fully read-only — used by DayConversationView for past
+    /// days where retroactively saving / dismissing would be confusing.
+    var interactive: Bool = true
 
     private var allArticleIds: [String] { bullet.sources.map(\.articleId) }
 
@@ -121,7 +126,9 @@ struct BriefBulletCard: View {
                 tagStrip
             }
 
-            actionChips
+            if interactive {
+                actionChips
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -251,6 +251,22 @@ final class SupabaseManager: Sendable {
         try await enrichmentService.fetchBrief(id: id)
     }
 
+    /// Daily conversation history — list every day with at least one
+    /// message in the assistant thread. Server groups by user-local day.
+    func fetchConversationDays() async throws -> [CompanionConversationDay] {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        let payload: CompanionConversationDaysPayload = try await api.request(
+            path: "api/chat/assistant/days"
+        )
+        return payload.days
+    }
+
+    /// Read-only message list for one historical day (`YYYY-MM-DD`).
+    func fetchConversationDay(date: String) async throws -> CompanionConversationDayDetail {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        return try await api.request(path: "api/chat/assistant/day/\(date)")
+    }
+
     /// Weekly reading insight (cached server-side per user, regenerates
     /// once a week). Surfaces on Today as a dismissable card.
     func fetchWeeklyInsight() async throws -> CompanionWeeklyInsight {

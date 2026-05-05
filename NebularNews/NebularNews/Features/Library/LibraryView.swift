@@ -27,6 +27,8 @@ struct LibraryView: View {
                         .listRowBackground(Color.clear)
                 }
 
+                conversationHistorySection
+
                 readHistorySection
 
                 if !showArticlesTab {
@@ -73,9 +75,34 @@ struct LibraryView: View {
 
     // MARK: - Sections
 
+    /// Always-visible row at the top of Library — past chat days
+    /// grouped by user-local day. Briefs live inside each day's
+    /// conversation now, so this is where you scroll back through
+    /// what your assistant + briefs looked like.
+    private var conversationHistorySection: some View {
+        Section {
+            NavigationLink {
+                DailyConversationsView()
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Conversation history")
+                            .font(.body)
+                        Text("Briefs and chats grouped by day.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                }
+            }
+        }
+    }
+
     /// Always-visible row at the top of Library — articles you've actually
     /// opened with foreground engagement, newest-read first. Distinct
-    /// from Brief History (past briefs) and Saved (explicitly bookmarked).
+    /// from Conversation History (per-day chats including briefs) and
+    /// Saved (explicitly bookmarked).
     private var readHistorySection: some View {
         Section {
             NavigationLink {

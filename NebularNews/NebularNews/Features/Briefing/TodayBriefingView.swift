@@ -46,8 +46,11 @@ struct TodayBriefingView: View {
     /// we don't have to round-trip through DeepLinkRouter (which is wired
     /// to the legacy CompanionTodayView, not this chat-first surface).
     @State private var openArticleId: String?
-    /// Brief history sheet toggle; populated from a toolbar tap.
-    @State private var showBriefHistory = false
+    /// Daily-conversations sheet toggle; populated from a toolbar tap.
+    /// Replaces the legacy brief-only history surface — the brief now
+    /// lives inside each day's chat thread, so the history view groups
+    /// by day instead of by brief artifact.
+    @State private var showDailyConversations = false
     /// Topic brief sheet toggle.
     @State private var showTopicBrief = false
     /// Local navigation target for `nebularnews://brief/{id}` deep links
@@ -95,11 +98,11 @@ struct TodayBriefingView: View {
                 // refresh right) so the icons feel familiar to existing users.
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        showBriefHistory = true
+                        showDailyConversations = true
                     } label: {
                         Image(systemName: "clock.arrow.circlepath")
                     }
-                    .accessibilityLabel("Brief history")
+                    .accessibilityLabel("Conversation history")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -155,8 +158,8 @@ struct TodayBriefingView: View {
                 )
             }
         }
-        .sheet(isPresented: $showBriefHistory) {
-            BriefHistoryView()
+        .sheet(isPresented: $showDailyConversations) {
+            DailyConversationsView()
         }
         .sheet(isPresented: $showTopicBrief) {
             TopicBriefSheet { newBriefId in

@@ -494,6 +494,28 @@ struct CompanionBriefHistoryPayload: Codable {
     let nextBefore: Int?
 }
 
+/// One day's worth of activity in the user's assistant thread, used by
+/// the Daily Conversations history surface. Server buckets by user-
+/// local day (read from newsBriefTimezone setting) so an 11:59 PM
+/// brief stays on its own day even when UTC has rolled over.
+struct CompanionConversationDay: Codable, Identifiable {
+    let day: String           // YYYY-MM-DD in user-local tz
+    let messageCount: Int
+    let hasBrief: Bool
+    let preview: String?
+
+    var id: String { day }
+}
+
+struct CompanionConversationDaysPayload: Codable {
+    let days: [CompanionConversationDay]
+}
+
+struct CompanionConversationDayDetail: Codable {
+    let day: String
+    let messages: [CompanionChatMessage]
+}
+
 struct CompanionTodayStats: Codable {
     let unreadTotal: Int
     let newToday: Int
