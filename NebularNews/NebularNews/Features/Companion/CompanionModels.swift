@@ -516,6 +516,19 @@ struct CompanionConversationDayDetail: Codable {
     let messages: [CompanionChatMessage]
 }
 
+/// Server response from `POST /api/chat/assistant/persist`. Returned
+/// after on-device AI generation completes, so the iOS client can
+/// reconcile message ids with the canonical thread row when needed.
+/// No explicit `CodingKeys` — `APIClient`'s decoder uses
+/// `.convertFromSnakeCase`, which maps `thread_id` → `threadId` etc.
+/// Adding snake_case rawValues here would break that mapping (see
+/// `feedback_snake_case_encoding.md`).
+struct CompanionAssistantPersistResult: Codable {
+    let threadId: String
+    let userMessageId: String
+    let assistantMessageId: String
+}
+
 struct CompanionTodayStats: Codable {
     let unreadTotal: Int
     let newToday: Int

@@ -31,6 +31,14 @@ final class AIAssistantCoordinator {
     var errorMessage = ""
     var suggestedQuestions: [String] = []
 
+    /// Small caption to render above the streaming bubble while a
+    /// response is generating. Today only the on-device tier surfaces a
+    /// badge; paid + BYOK paths look the same as before. `nil` when no
+    /// caption should be shown.
+    var tierBadge: String? {
+        AIRouting.shared.current.streamingBadge
+    }
+
     // MARK: - History
 
     var recentThreads: [AssistantThreadSummary] = []
@@ -91,12 +99,34 @@ final class AIAssistantCoordinator {
         isStreaming = true
 
         let policies = guardrailsPolicy?.snapshot()
-        let stream = StreamingChatService.shared.streamAssistantMessage(
-            content: content,
-            pageContext: context,
-            threadId: currentThreadId,
-            guardrailPolicies: policies
-        )
+        // Free-tier (no BYOK key, no subscription, Apple Intelligence available)
+        // runs the response on-device via FoundationModels. BYOK + paid go
+        // through the server SSE path with full MCP tool support. The
+        // `.unavailable` case (older device with no key or sub) short-
+        // circuits to a clear error rather than letting the server return
+        // an opaque 503.
+        let tier = AIRouting.shared.current
+        let stream: AsyncStream<StreamingChatService.ChatDelta>
+        switch tier {
+        case .onDevice:
+            stream = OnDeviceAssistantStream.streamOnDeviceAssistant(
+                content: content,
+                history: messages,
+                articleSnapshot: nil
+            )
+        case .byok, .subscription:
+            stream = StreamingChatService.shared.streamAssistantMessage(
+                content: content,
+                pageContext: context,
+                threadId: currentThreadId,
+                guardrailPolicies: policies
+            )
+        case .unavailable:
+            stream = AsyncStream { continuation in
+                continuation.yield(.error("AI is not configured. Add an API key in Settings or subscribe to enable chat."))
+                continuation.finish()
+            }
+        }
 
         var finalContent = ""
         var proposalReceived = false

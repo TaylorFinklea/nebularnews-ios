@@ -371,6 +371,18 @@ struct TodayBriefingView: View {
                 .frame(width: 24, height: 24)
                 .background(Color.purple.opacity(0.1), in: Circle())
             VStack(alignment: .leading, spacing: 6) {
+                // Free-tier on-device path surfaces a small caption so the
+                // user knows responses are running locally. Other tiers
+                // render unchanged.
+                if let badge = coordinator.tierBadge {
+                    HStack(spacing: 4) {
+                        Image(systemName: "iphone.gen3")
+                            .font(.caption2)
+                        Text(badge)
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(.secondary)
+                }
                 ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
                     AssistantSegmentView(segment: segment) { id in
                         openArticleId = id

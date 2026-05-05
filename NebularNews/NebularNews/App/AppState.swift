@@ -54,6 +54,10 @@ final class AppState {
     /// Per-tool confirmation policy for destructive AI assistant actions (M11 guardrails).
     let aiGuardrails: AIGuardrailsPolicy
 
+    /// Active AI tier (on-device / BYOK / subscription / unavailable).
+    /// Read by StreamingChatService at send time to pick the inference path.
+    let aiRouting: AIRouting
+
     /// SwiftData local cache for instant loads and offline reading.
     private(set) var articleCache: ArticleCache?
 
@@ -143,6 +147,7 @@ final class AppState {
         self.keychain = KeychainManager(service: resolvedConfiguration.keychainService)
         self.supabase = SupabaseManager.shared
         self.aiGuardrails = AIGuardrailsPolicy(defaults: resolvedDefaults)
+        self.aiRouting = AIRouting.shared
     }
 
     /// Initialize the SwiftData article cache. Call once after the model container is available.
@@ -167,11 +172,13 @@ final class AppState {
         } catch {
             hasSession = false
         }
+        await aiRouting.refresh()
     }
 
     func completeSignIn() {
         hasSession = true
         hasCompletedOnboarding = true
+        Task { await aiRouting.refresh() }
     }
 
     func completeFeedSelection() {

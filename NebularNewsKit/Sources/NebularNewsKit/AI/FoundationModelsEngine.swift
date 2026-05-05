@@ -157,6 +157,66 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
         messages: [GenerationChatMessage],
         articleContext: ArticleSnapshot?
     ) async throws -> ChatGenerationOutput {
+        let (prompt, systemMsg) = Self.buildChatPrompt(messages: messages, articleContext: articleContext)
+        let text = try await respond(to: prompt, instructions: systemMsg)
+        return ChatGenerationOutput(content: text, provider: provider, modelIdentifier: modelIdentifier)
+    }
+
+    /// Streams an on-device chat response token-by-token. The backing
+    /// `LanguageModelSession.streamResponse` yields snapshots containing
+    /// the cumulative string so far, so we diff against the previous
+    /// snapshot to surface only the newly generated suffix as a delta.
+    public func streamChat(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                guard Self.runtimeAvailable else {
+                    continuation.finish(throwing: FoundationModelsEngineError.unavailable)
+                    return
+                }
+
+                let (prompt, systemMsg) = Self.buildChatPrompt(messages: messages, articleContext: articleContext)
+
+                #if canImport(FoundationModels)
+                if #available(iOS 26.0, macOS 26.0, *) {
+                    do {
+                        let session = LanguageModelSession(instructions: systemMsg)
+                        let options = GenerationOptions(sampling: .greedy)
+                        let stream = session.streamResponse(to: prompt, options: options)
+                        var previous = ""
+                        for try await snapshot in stream {
+                            if Task.isCancelled { break }
+                            // For text-only streams, `snapshot.content` is the
+                            // cumulative String generated so far. String
+                            // interpolation is robust whether content is
+                            // `String` or `String.PartiallyGenerated` (which
+                            // is `String` in practice for plain text).
+                            let current = "\(snapshot.content)"
+                            if current.count > previous.count {
+                                let delta = String(current.dropFirst(previous.count))
+                                continuation.yield(delta)
+                                previous = current
+                            }
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                    return
+                }
+                #endif
+                continuation.finish(throwing: FoundationModelsEngineError.unavailable)
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private static func buildChatPrompt(
+        messages: [GenerationChatMessage],
+        articleContext: ArticleSnapshot?
+    ) -> (prompt: String, systemMsg: String) {
         var contextParts: [String] = []
 
         if let article = articleContext {
@@ -173,15 +233,15 @@ public struct FoundationModelsEngine: ArticleGenerationEngine {
             .map { "\($0.role == "user" ? "User" : "Assistant"): \($0.content)" }
             .joined(separator: "\n\n")
 
-        let systemMsg = messages.first(where: { $0.role == "system" })?.content ?? "You are an expert news analyst. Be concise and thorough."
+        let systemMsg = messages.first(where: { $0.role == "system" })?.content
+            ?? "You are an expert news analyst. Be concise and thorough."
 
         let prompt = """
         \(contextParts.isEmpty ? "" : contextParts.joined(separator: "\n") + "\n\n---\n\n")
         \(conversationHistory)
         """
 
-        let text = try await respond(to: prompt, instructions: systemMsg)
-        return ChatGenerationOutput(content: text, provider: provider, modelIdentifier: modelIdentifier)
+        return (prompt, systemMsg)
     }
 
     public func generateBrief(

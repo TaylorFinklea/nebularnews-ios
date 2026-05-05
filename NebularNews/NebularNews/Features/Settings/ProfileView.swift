@@ -18,6 +18,10 @@ struct ProfileView: View {
     /// Mirror MainTabView's @AppStorage so the toggle here flips the same key.
     @AppStorage("showArticlesTab") private var showArticlesTab = false
 
+    /// First-run flag for the on-device AI explainer sheet.
+    @AppStorage("seenOnDeviceOnboarding") private var seenOnDeviceOnboarding = false
+    @State private var showOnDeviceOnboarding = false
+
     // AI Keys
     @State private var hasAnthropicKey = false
     @State private var hasOpenAIKey = false
@@ -75,6 +79,31 @@ struct ProfileView: View {
                 Text("The Articles tab is a flat firehose of every unread article you have access to. Today's chat-first brief is the primary surface; turn this on if you want a raw list to scroll through.")
             }
 
+            // MARK: - AI Provider
+
+            Section {
+                let tier = appState.aiRouting.current
+                LabeledContent("Active") {
+                    Text(tier.displayLabel).foregroundStyle(.secondary)
+                }
+                Text(tier.caption)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button {
+                    // StoreKit IAP wiring is the next slice; this stub keeps
+                    // the affordance discoverable so users know a sub is
+                    // coming. Disabled tint hints at "not yet" without
+                    // hiding the row.
+                } label: {
+                    Label("Subscribe — coming soon", systemImage: "sparkle")
+                }
+                .disabled(true)
+            } header: {
+                Label("AI Provider", systemImage: "brain")
+            } footer: {
+                Text("Free uses Apple Intelligence on this device. Add an API key below to use a paid model with the full tool suite.")
+            }
+
             // MARK: - AI Keys
 
             Section {
@@ -116,14 +145,6 @@ struct ProfileView: View {
 
             if let usage = usageSummary {
                 Section {
-                    if let tier = usage.tier {
-                        LabeledContent("Plan", value: tier.capitalized)
-                    } else if hasAnthropicKey || hasOpenAIKey {
-                        LabeledContent("Plan", value: "BYOK")
-                    } else {
-                        LabeledContent("Plan", value: "On-Device")
-                    }
-
                     if usage.daily.limit > 0 {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
@@ -361,6 +382,22 @@ struct ProfileView: View {
         .overlay { if isLoading && settings == nil { ProgressView() } }
         .task {
             await loadInitialData()
+            // First-run explainer for free-tier users on iOS 26 with
+            // Apple Intelligence available. Once dismissed it never
+            // reappears (per-device flag).
+            if !seenOnDeviceOnboarding && appState.aiRouting.current == .onDevice {
+                showOnDeviceOnboarding = true
+            }
+        }
+        .sheet(isPresented: $showOnDeviceOnboarding) {
+            OnDeviceOnboardingSheet {
+                seenOnDeviceOnboarding = true
+                showOnDeviceOnboarding = false
+            } onAddKey: {
+                seenOnDeviceOnboarding = true
+                showOnDeviceOnboarding = false
+                showAnthropicKeyEntry = true
+            }
         }
         .alert("Anthropic API Key", isPresented: $showAnthropicKeyEntry) {
             SecureField("sk-ant-...", text: $pendingKeyValue)

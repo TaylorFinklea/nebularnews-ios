@@ -267,6 +267,27 @@ final class SupabaseManager: Sendable {
         return try await api.request(path: "api/chat/assistant/day/\(date)")
     }
 
+    /// Persist a {user, assistant} turn the iOS client generated locally
+    /// (free-tier on-device AI). The server only stores the rows; no LLM
+    /// is invoked. Used by `OnDeviceAssistantStream` to keep
+    /// `DailyConversationsView` in sync with what the user sees on Today.
+    @discardableResult
+    func persistAssistantMessages(
+        userMessage: String,
+        assistantMessage: String
+    ) async throws -> CompanionAssistantPersistResult {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        struct Body: Encodable {
+            let user_message: String
+            let assistant_message: String
+        }
+        return try await api.request(
+            method: "POST",
+            path: "api/chat/assistant/persist",
+            body: Body(user_message: userMessage, assistant_message: assistantMessage)
+        )
+    }
+
     /// Weekly reading insight (cached server-side per user, regenerates
     /// once a week). Surfaces on Today as a dismissable card.
     func fetchWeeklyInsight() async throws -> CompanionWeeklyInsight {
