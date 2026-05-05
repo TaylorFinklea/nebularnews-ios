@@ -29,6 +29,24 @@ struct CompanionDiscoverView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 24) {
+                            // Browse-all row (Build 37: moved from Library).
+                            // Surfaces the full firehose with filters + search
+                            // as the discoverable entry into "show me everything."
+                            NavigationLink(destination: CompanionArticlesView(showSettings: $showSettings)) {
+                                HStack {
+                                    Label("Browse all articles", systemImage: "newspaper")
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundStyle(.secondary)
+                                        .font(.caption)
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal)
+
                             // Feeds row
                             NavigationLink(destination: CompanionFeedsView()) {
                                 HStack {

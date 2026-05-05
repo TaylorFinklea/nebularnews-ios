@@ -97,6 +97,19 @@ final class AppState {
     /// Flag: the next render of CompanionArticleDetailView for this article id should open it.
     var pendingArticleOpen: String?
 
+    /// Build 37: when set, the Agent tab on next appearance should
+    /// create a fresh conversation (optionally pinned to an article)
+    /// and auto-send `prompt` if non-nil. Cleared by Agent after handle.
+    /// Used by Today's "Tell me more" action and the article-detail
+    /// "Open in Agent" button.
+    var pendingAgentConversation: PendingAgentConversation?
+
+    struct PendingAgentConversation: Equatable {
+        let articleId: String?
+        let articleTitle: String?
+        let prompt: String?
+    }
+
     struct PendingArticlesFilter: Equatable {
         var read: String?      // "unread" | "read" | "all"
         var minScore: Int?

@@ -7,6 +7,7 @@ import Observation
 /// - `nebularnews://today` — switch to the Today tab
 /// - `nebularnews://article/{id}` — navigate to a specific article
 /// - `nebularnews://brief/{id}` — open a specific news brief detail view
+/// - `nebularnews://agent/{conversationId}` — switch to Agent tab + push that conversation
 /// - `nebularnews://auth-callback` — handled by Supabase Auth (not routed here)
 /// - `nebularnews://oauth/callback` — handled by legacy OAuth (not routed here)
 @MainActor
@@ -18,6 +19,10 @@ final class DeepLinkRouter {
 
     /// The brief ID the user wants to open. Today view observes this and pushes BriefDetailView.
     var pendingBriefId: String?
+
+    /// The Agent conversation id the user wants to open. AgentConversationsView
+    /// observes this and pushes the conversation. Cleared after read.
+    var pendingAgentConversationId: String?
 
     /// Process an incoming deep link URL.
     /// Returns `true` if the URL was handled.
@@ -52,6 +57,16 @@ final class DeepLinkRouter {
             }
             return false
 
+        case "agent":
+            // URL: nebularnews://agent/{conversationId}
+            let pathComponents = url.pathComponents.filter { $0 != "/" }
+            if let conversationId = pathComponents.first, !conversationId.isEmpty {
+                pendingAgentConversationId = conversationId
+                return true
+            }
+            // Bare nebularnews://agent — just switch to the tab.
+            return true
+
         case "auth-callback", "oauth":
             // Handled by Supabase Auth / legacy OAuth — not our concern
             return false
@@ -68,5 +83,9 @@ final class DeepLinkRouter {
 
     func clearPendingBrief() {
         pendingBriefId = nil
+    }
+
+    func clearPendingAgentConversation() {
+        pendingAgentConversationId = nil
     }
 }

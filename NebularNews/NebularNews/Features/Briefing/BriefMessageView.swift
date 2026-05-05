@@ -8,7 +8,7 @@ enum BriefBulletAction {
     case reactUp(articleIds: [String])
     case reactDown(articleIds: [String])
     case dismiss(signature: String, articleIds: [String])
-    case tellMeMore(prompt: String)
+    case tellMeMore(prompt: String, articleId: String?)
     case openArticle(articleId: String)
 }
 
@@ -185,7 +185,7 @@ struct BriefBulletCard: View {
             }
             Spacer(minLength: 4)
             chip(systemImage: "sparkles", label: "Tell me more", emphasized: true) {
-                onAction(.tellMeMore(prompt: bullet.text))
+                onAction(.tellMeMore(prompt: bullet.text, articleId: primarySource?.articleId))
             }
         }
     }

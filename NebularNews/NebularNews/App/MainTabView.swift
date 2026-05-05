@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
+    @Environment(DeepLinkRouter.self) private var deepLinkRouter
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -16,11 +17,10 @@ struct MainTabView: View {
     @AppStorage("showArticlesTab") private var showArticlesTab = false
 
     enum RootSection: String, CaseIterable {
-        // M18 dropped 'articles' (the firehose) in favor of the chat-first
-        // briefing surface as Today. The case is restored as opt-in so deep
-        // links and AI tool calls (`navigate_to_tab`) can still route to it
-        // when the user has it enabled.
-        case today, discover, articles, library
+        // Build 37 split Today (brief-only) from Agent (ChatGPT-style
+        // multi-conversation chat). The opt-in `articles` firehose is
+        // unchanged but no longer the default — Discover hosts it now.
+        case today, agent, discover, articles, library
     }
 
     @State private var selectedTab: RootSection? = .today
@@ -48,6 +48,12 @@ struct MainTabView: View {
             selectedTab = target
             appState.pendingTabSwitch = nil
         }
+        .onChange(of: deepLinkRouter.pendingAgentConversationId) { _, newValue in
+            // Switching to the Agent tab on deep-link arrival; the
+            // conversation push happens inside AgentConversationsView
+            // by reading + clearing the same pending property.
+            if newValue != nil { selectedTab = .agent }
+        }
     }
 
     private var splitViewBody: some View {
@@ -64,6 +70,8 @@ struct MainTabView: View {
             switch selectedTab ?? .today {
             case .today:
                 TodayBriefingView()
+            case .agent:
+                AgentConversationsView()
             case .discover:
                 CompanionDiscoverView(showSettings: $showSettings)
             case .articles:
@@ -72,9 +80,6 @@ struct MainTabView: View {
                 LibraryView(showSettings: $showSettings)
             }
         }
-        #if os(iOS)
-        .overlay { AIAssistantOverlay() }
-        #endif
     }
 
     #if os(iOS)
@@ -82,6 +87,10 @@ struct MainTabView: View {
         TabView {
             Tab("Today", systemImage: "sun.max") {
                 TodayBriefingView()
+            }
+
+            Tab("Agent", systemImage: "sparkles") {
+                AgentConversationsView()
             }
 
             Tab("Discover", systemImage: "safari") {
@@ -100,10 +109,6 @@ struct MainTabView: View {
             .badge(companionSavedCount)
         }
         .tint(.accent)
-        // The chat-first Today tab has its own input bar; the floating
-        // AI overlay still appears on Discover / Library so users can
-        // ask follow-ups while browsing those surfaces.
-        .overlay { AIAssistantOverlay() }
     }
     #endif
 
@@ -111,6 +116,9 @@ struct MainTabView: View {
         List(selection: $selectedTab) {
             NavigationLink(value: RootSection.today) {
                 Label("Today", systemImage: "sun.max")
+            }
+            NavigationLink(value: RootSection.agent) {
+                Label("Agent", systemImage: "sparkles")
             }
             NavigationLink(value: RootSection.discover) {
                 Label("Discover", systemImage: "safari")

@@ -1,60 +1,47 @@
 import SwiftUI
 import SwiftData
 
-/// Chat-first Today tab. Renders the user's shared assistant thread —
-/// the same thread the floating AI overlay shows from elsewhere in the
-/// app, so Today and the overlay are two views onto one conversation.
-/// The brief seed lands as a structured assistant message inside that
-/// thread (server-side `ensureTodayBriefSeed` makes sure it's there);
-/// follow-ups, "Tell me more" replies, and freeform chat all sit
-/// alongside it instead of branching off into separate threads.
+/// Brief-only Today tab (Build 37). Renders the user's most recent
+/// brief seed and surfaces brief history via the toolbar clock. All
+/// chat — both freeform and "Tell me more" follow-ups from a brief
+/// bullet — now lives in the dedicated Agent tab, so Today stays calm
+/// and scannable. The unified-thread experiment from Build 29 was
+/// reversed because chat history piled up above the brief; users now
+/// get a "morning paper" surface here and a ChatGPT-style conversation
+/// list one tab over.
 struct TodayBriefingView: View {
     @Environment(AppState.self) private var appState
     @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Environment(\.modelContext) private var modelContext
     @Environment(AIAssistantCoordinator.self) private var coordinator
 
-    /// Today renders `coordinator.messages` directly — single source
-    /// of truth shared with the floating overlay. The coordinator
-    /// commits the assistant reply locally the moment streaming
-    /// finishes (before the server has flushed to D1), so there's no
-    /// race between "streaming bubble disappears" and "persisted
-    /// message arrives" the way there was when Today maintained its
-    /// own messages array.
     @State private var isLoading = false
     @State private var errorMessage = ""
-    @State private var inputText = ""
-    /// Focus state for the input bar. Bound through @FocusState so the
-    /// keyboard accessory's Done button can flip it to false to dismiss.
-    @FocusState private var isInputFocused: Bool
 
-    /// View-time filter — drop system context markers and surface the
-    /// chat-visible messages in their server-emitted order.
-    private var messages: [CompanionChatMessage] {
-        coordinator.messages.filter { $0.role != "system" }
+    /// View-time filter — surface ONLY brief seed rows. Anything else
+    /// in the assistant thread (legacy chat from pre-Build 37) is
+    /// reachable from the Agent tab's "Earlier conversation" entry.
+    private var briefSeeds: [CompanionChatMessage] {
+        coordinator.messages.filter { $0.kind == "brief_seed" }
     }
     @State private var dismissContext: DismissContext?
     @State private var dismissService: DismissedTopicService?
     /// Weekly Reading Insights card. nil while we haven't fetched (or
     /// the fetch failed silently — this card is optional UX and a
     /// failure shouldn't surface an error to the user). Renders above
-    /// the chat thread when present, fresh, and not dismissed.
+    /// the brief when present, fresh, and not dismissed.
     @State private var weeklyInsight: CompanionWeeklyInsight?
     @State private var insightDismissed: Bool = false
     /// Local navigation target for bullet tap-to-open. Pushed onto the
-    /// surrounding NavigationStack via `.navigationDestination(item:)` so
-    /// we don't have to round-trip through DeepLinkRouter (which is wired
-    /// to the legacy CompanionTodayView, not this chat-first surface).
+    /// surrounding NavigationStack via `.navigationDestination(item:)`.
     @State private var openArticleId: String?
-    /// Daily-conversations sheet toggle; populated from a toolbar tap.
-    /// Replaces the legacy brief-only history surface — the brief now
-    /// lives inside each day's chat thread, so the history view groups
-    /// by day instead of by brief artifact.
-    @State private var showDailyConversations = false
+    /// Brief history sheet toggle (the pre-Build 35 surface, restored
+    /// because chat history is now per-conversation in Agent and the
+    /// daily-grouped view no longer makes sense for Today).
+    @State private var showBriefHistory = false
     /// Topic brief sheet toggle.
     @State private var showTopicBrief = false
-    /// Local navigation target for `nebularnews://brief/{id}` deep links
-    /// fired from APNs taps or widgets while the user is on this view.
+    /// Local navigation target for `nebularnews://brief/{id}` deep links.
     @State private var openBriefId: String?
 
     private struct DismissContext: Identifiable {
@@ -78,31 +65,24 @@ struct TodayBriefingView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
 
-                if isLoading && messages.isEmpty {
+                if isLoading && briefSeeds.isEmpty {
                     ProgressView("Loading brief…")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if messages.isEmpty {
+                } else if briefSeeds.isEmpty {
                     emptyState
                 } else {
-                    messageList
+                    briefList
                 }
-                if !coordinator.suggestedQuestions.isEmpty && !coordinator.isStreaming {
-                    suggestedQuestionsBar
-                }
-                Divider()
-                inputBar
             }
             .navigationTitle("Today")
             .toolbar {
-                // Order matches the legacy CompanionTodayView (history left,
-                // refresh right) so the icons feel familiar to existing users.
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        showDailyConversations = true
+                        showBriefHistory = true
                     } label: {
                         Image(systemName: "clock.arrow.circlepath")
                     }
-                    .accessibilityLabel("Conversation history")
+                    .accessibilityLabel("Brief history")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -121,8 +101,6 @@ struct TodayBriefingView: View {
                     .disabled(isLoading)
                 }
             }
-            // navigationDestination must live inside the NavigationStack
-            // so taps on a brief bullet actually push CompanionArticleDetailView.
             .navigationDestination(item: $openArticleId) { articleId in
                 CompanionArticleDetailView(articleId: articleId)
             }
@@ -139,12 +117,6 @@ struct TodayBriefingView: View {
             await refreshIfStale()
             await loadWeeklyInsight()
         }
-        // Today IS the assistant conversation now; the floating FAB
-        // would just be a second handle to the same thread on the same
-        // surface. Hide while on Today, restore on disappear so other
-        // tabs (Discover / Library / article detail) keep the FAB.
-        .onAppear { coordinator.hideFloatingButton = true }
-        .onDisappear { coordinator.hideFloatingButton = false }
         .sheet(item: $dismissContext) { ctx in
             DismissDurationSheet(
                 signature: ctx.signature,
@@ -158,8 +130,8 @@ struct TodayBriefingView: View {
                 )
             }
         }
-        .sheet(isPresented: $showDailyConversations) {
-            DailyConversationsView()
+        .sheet(isPresented: $showBriefHistory) {
+            BriefHistoryView()
         }
         .sheet(isPresented: $showTopicBrief) {
             TopicBriefSheet { newBriefId in
@@ -234,7 +206,7 @@ struct TodayBriefingView: View {
     /// request the cron would otherwise issue.
     private func refreshIfStale() async {
         guard !isLoading else { return }
-        let seed = messages.first(where: { $0.kind == "brief_seed" })
+        let seed = briefSeeds.first
         let nowMs = Int(Date().timeIntervalSince1970 * 1000)
 
         // Parse generated_at out of the seed JSON; missing seed counts as
@@ -286,135 +258,31 @@ struct TodayBriefingView: View {
     /// Opaque envelope — we don't render the response, just need to await it.
     private struct BriefGenerateResponseEnvelope: Decodable {}
 
-    // MARK: - Message list
+    // MARK: - Brief list
 
-    /// Native List drives the chat thread so each brief bullet gets
-    /// SwiftUI's `.swipeActions` for free — no custom drag gesture
-    /// fighting the parent ScrollView for vertical scroll. Brief seeds
-    /// expand into a Section (header + bullet rows); other chat messages
-    /// render as a single transparent row containing the bubble.
+    /// Brief-only List. Each brief seed renders as a Section (header +
+    /// bullet rows with native swipeActions for Like / Dismiss /
+    /// Dislike). Chat lives in the Agent tab now — no input, no
+    /// streaming bubble, no suggested-questions row on this surface.
     @ViewBuilder
-    private var messageList: some View {
-        ScrollViewReader { proxy in
-            List {
-                ForEach(messages) { msg in
-                    messageRows(for: msg)
-                }
-                // Live-streaming bubble — coordinator.streamingContent
-                // grows as deltas arrive; once isStreaming flips to false
-                // we pull the persisted version from the server (see
-                // .onChange below) and this view disappears as the real
-                // assistant message takes over.
-                if coordinator.isStreaming && !coordinator.streamingContent.isEmpty {
-                    streamingBubble
-                        .id("streamingBubble")
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-                }
-                if !errorMessage.isEmpty {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+    private var briefList: some View {
+        List {
+            ForEach(briefSeeds) { msg in
+                if let brief = SeededBrief.parse(content: msg.content) {
+                    briefSection(brief: brief, anchorId: msg.id)
                 }
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            // Drag the message list down to dismiss the keyboard, the
-            // same gesture Messages uses. Without this there's no way
-            // to close the keyboard once the input bar steals focus.
-            .scrollDismissesKeyboard(.interactively)
-            // Pin to the bottom on safe-area changes (keyboard appearing
-            // / dismissing) so the latest assistant message stays in
-            // view rather than getting hidden behind the keyboard.
-            .defaultScrollAnchor(.bottom)
-            .onChange(of: messages.count) {
-                if let last = messages.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
+            if !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
             }
-            .onChange(of: isInputFocused) { _, focused in
-                // Belt-and-suspenders: when focus transitions to the
-                // input, force a scroll to the latest message in case
-                // the anchor pin doesn't catch a fast keyboard transition.
-                if focused, let last = messages.last {
-                    withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-                }
-            }
-            .onChange(of: coordinator.streamingContent) {
-                withAnimation { proxy.scrollTo("streamingBubble", anchor: .bottom) }
-            }
-            // No post-stream refresh needed — coordinator commits the
-            // assistant reply to coordinator.messages on the SSE done
-            // event, so the persisted bubble takes over from the
-            // streaming bubble in the same render cycle.
         }
-    }
-
-    /// Mirrors AssistantChatBubble's assistant rendering for the live
-    /// streaming case: small sparkle avatar + secondary-tinted bubble
-    /// containing parsed segments. We run the same parser on
-    /// `coordinator.streamingContent` so finished tool/article markers
-    /// (`[[tool:...]]`, `[[article:...]]`) render as their polished
-    /// chips/cards the moment their closing `]]` arrives, instead of
-    /// staying as raw marker text until streaming completes. Each
-    /// segment gets its own row inside the bubble so a "thought, tool
-    /// call, more thought" sequence visually flows like Claude's UI.
-    private var streamingBubble: some View {
-        let segments = AssistantMessageParser.parse(coordinator.streamingContent)
-        return HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "sparkles")
-                .font(.caption)
-                .foregroundStyle(.purple)
-                .frame(width: 24, height: 24)
-                .background(Color.purple.opacity(0.1), in: Circle())
-            VStack(alignment: .leading, spacing: 6) {
-                // Free-tier on-device path surfaces a small caption so the
-                // user knows responses are running locally. Other tiers
-                // render unchanged.
-                if let badge = coordinator.tierBadge {
-                    HStack(spacing: 4) {
-                        Image(systemName: "iphone.gen3")
-                            .font(.caption2)
-                        Text(badge)
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(.secondary)
-                }
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
-                    AssistantSegmentView(segment: segment) { id in
-                        openArticleId = id
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.platformSecondaryBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Spacer(minLength: 40)
-        }
-    }
-
-    @ViewBuilder
-    private func messageRows(for msg: CompanionChatMessage) -> some View {
-        if msg.kind == "brief_seed", let brief = SeededBrief.parse(content: msg.content) {
-            briefSection(brief: brief, anchorId: msg.id)
-        } else {
-            // Push article detail when a committed bubble's article
-            // card is tapped. Without this the closure was a no-op,
-            // which is why mid-stream cards opened (they routed through
-            // the streaming bubble's handler) but committed cards
-            // appeared inert.
-            AssistantChatBubble(message: msg) { articleId in
-                openArticleId = articleId
-            }
-                .id(msg.id)
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 12))
-        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable { await refresh() }
     }
 
     @ViewBuilder
@@ -481,93 +349,6 @@ struct TodayBriefingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Suggested follow-ups
-
-    /// Coordinator harvests these from the assistant's hidden ">>"-prefix
-    /// suggestions. Renders as a horizontally-scrolling row of tappable
-    /// pills above the input bar; tapping clears the list and sends
-    /// the question into the same conversation.
-    private var suggestedQuestionsBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(coordinator.suggestedQuestions, id: \.self) { question in
-                    Button {
-                        coordinator.suggestedQuestions = []
-                        Task { await sendFollowUp(question) }
-                    } label: {
-                        Text(question)
-                            .font(.caption)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(Color.accentColor.opacity(0.10))
-                            .foregroundStyle(Color.accentColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .scrollClipDisabled()
-    }
-
-    // MARK: - Input
-
-    private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Ask about today…", text: $inputText, axis: .vertical)
-                .textFieldStyle(.plain)
-                .focused($isInputFocused)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.platformSecondaryBackground, in: RoundedRectangle(cornerRadius: 20))
-                .lineLimit(1...5)
-
-            Button {
-                let text = inputText
-                inputText = ""
-                Task { await sendFollowUp(text) }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                     ? Color.secondary : Color.accentColor)
-            }
-            .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        // Keyboard accessory bar — gives the user an explicit Done
-        // affordance instead of relying on the interactive drag-to-
-        // dismiss gesture from Build 30 (which still works, just isn't
-        // discoverable on a chat surface).
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { isInputFocused = false }
-            }
-        }
-    }
-
-    /// Sends a message into the unified Today/assistant thread. Used by
-    /// the input bar AND by the bullet "Tell me more" action — both
-    /// land in the same conversation and stream inline. The post-stream
-    /// refresh is handled by `.onChange(of: coordinator.isStreaming)`
-    /// in `messageList`, so this just kicks off the send.
-    private func sendFollowUp(_ text: String) async {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, coordinator.currentThreadId != nil else { return }
-        coordinator.currentContext = AIPageContext(
-            pageType: "today_brief",
-            pageLabel: "Today brief",
-            briefSummary: messages.first(where: { $0.kind == "brief_seed" })?.content
-        )
-        await coordinator.sendMessage(trimmed)
-    }
-
     // MARK: - Bullet actions
 
     private func handleBulletAction(_ action: BriefBulletAction) {
@@ -580,10 +361,17 @@ struct TodayBriefingView: View {
             Task { await execReact(articleIds: articleIds, value: -1) }
         case .dismiss(let signature, let articleIds):
             dismissContext = DismissContext(signature: signature, articleIds: articleIds)
-        case .tellMeMore(let prompt):
-            // Route inline through the same conversation — no overlay
-            // popup. Same pipeline as the input bar.
-            Task { await sendFollowUp("Tell me more about: \(prompt)") }
+        case .tellMeMore(let prompt, let articleId):
+            // Switch to the Agent tab and queue a fresh conversation
+            // pinned to the bullet's primary article. The Agent root
+            // view picks up `pendingAgentConversation`, creates the
+            // conversation, auto-sends the prompt, and clears the flag.
+            appState.pendingAgentConversation = AppState.PendingAgentConversation(
+                articleId: articleId,
+                articleTitle: nil,
+                prompt: "Tell me more about: \(prompt)"
+            )
+            appState.pendingTabSwitch = "agent"
         case .openArticle(let articleId):
             // Push directly via the NavigationStack-bound state. Going
             // through DeepLinkRouter would no-op here because the legacy

@@ -27,17 +27,11 @@ struct LibraryView: View {
                         .listRowBackground(Color.clear)
                 }
 
-                conversationHistorySection
-
-                readHistorySection
-
-                if !showArticlesTab {
-                    browseAllSection
-                }
-
                 savedSection
 
                 collectionsSection
+
+                readHistorySection
             }
             .overlay {
                 if isLoading && savedArticles.isEmpty && collections.isEmpty {
@@ -75,30 +69,6 @@ struct LibraryView: View {
 
     // MARK: - Sections
 
-    /// Always-visible row at the top of Library — past chat days
-    /// grouped by user-local day. Briefs live inside each day's
-    /// conversation now, so this is where you scroll back through
-    /// what your assistant + briefs looked like.
-    private var conversationHistorySection: some View {
-        Section {
-            NavigationLink {
-                DailyConversationsView()
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Conversation history")
-                            .font(.body)
-                        Text("Briefs and chats grouped by day.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                }
-            }
-        }
-    }
-
     /// Always-visible row at the top of Library — articles you've actually
     /// opened with foreground engagement, newest-read first. Distinct
     /// from Conversation History (per-day chats including briefs) and
@@ -118,26 +88,6 @@ struct LibraryView: View {
                     }
                 } icon: {
                     Image(systemName: "clock.arrow.circlepath")
-                }
-            }
-        }
-    }
-
-    private var browseAllSection: some View {
-        Section {
-            NavigationLink {
-                CompanionArticlesView(showSettings: $showSettings)
-            } label: {
-                Label {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Browse all articles")
-                            .font(.body)
-                        Text("The full firehose with filters and search.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "newspaper")
                 }
             }
         }

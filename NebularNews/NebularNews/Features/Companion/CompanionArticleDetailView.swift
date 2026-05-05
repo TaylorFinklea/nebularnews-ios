@@ -56,7 +56,6 @@ struct CompanionArticleDetailView: View {
     @State private var acceptingSuggestion: String?
     @State private var isSaved = false
     @State private var savingBookmark = false
-    @State private var showingChat = false
     @State private var showingAddToCollection = false
     @State private var isSummarizing = false
     @State private var isGeneratingKeyPoints = false
@@ -319,12 +318,6 @@ struct CompanionArticleDetailView: View {
                         Task { await saveReaction(value: draft.value, reasonCodes: selectedCodes) }
                     }
                 }
-                .sheet(isPresented: $showingChat) {
-                    CompanionArticleChatView(
-                        articleId: articleId,
-                        articleTitle: payload.article.title
-                    )
-                }
                 .sheet(isPresented: $showingAddToCollection) {
                     AddToCollectionSheet(articleId: articleId)
                 }
@@ -364,12 +357,10 @@ struct CompanionArticleDetailView: View {
             }
         }
         .onAppear {
-            aiAssistant.hideFloatingButton = true
             pushAssistantContext()
             foregroundedAt = Date()
         }
         .onDisappear {
-            aiAssistant.hideFloatingButton = false
             flushForegroundDelta()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -459,7 +450,16 @@ struct CompanionArticleDetailView: View {
         Spacer()
 
         Button {
-            showingChat = true
+            // Build 37: chat now lives in the dedicated Agent tab.
+            // Queue a fresh conversation pinned to this article and
+            // switch tabs; the Agent root view handles creation +
+            // auto-push.
+            appState.pendingAgentConversation = AppState.PendingAgentConversation(
+                articleId: articleId,
+                articleTitle: payload.article.title,
+                prompt: nil
+            )
+            appState.pendingTabSwitch = "agent"
         } label: {
             Label("Chat", systemImage: "bubble.left.and.text.bubble.right")
         }

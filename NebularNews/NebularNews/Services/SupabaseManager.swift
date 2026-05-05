@@ -267,10 +267,63 @@ final class SupabaseManager: Sendable {
         return try await api.request(path: "api/chat/assistant/day/\(date)")
     }
 
+    // MARK: - Agent conversations (Build 37)
+
+    /// List the user's Agent conversations, newest first. Server-side
+    /// filter excludes the legacy multi-chat sentinel and any thread
+    /// that's brief_seed-only (those live on Today's brief history).
+    func fetchAgentConversations() async throws -> [AgentConversationSummary] {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        return try await api.request(path: "api/chat/agent/conversations")
+    }
+
+    /// Create a new Agent conversation. Optional pinned article id
+    /// (used when "Tell me more" or "Open in Agent" originated the
+    /// conversation). Title is left null until the first user message
+    /// commits — server auto-titles via heuristic.
+    func createAgentConversation(articleId: String? = nil, title: String? = nil) async throws -> AgentConversationSummary {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        struct Body: Encodable { let articleId: String?; let title: String? }
+        return try await api.request(
+            method: "POST",
+            path: "api/chat/agent/conversations",
+            body: Body(articleId: articleId, title: title)
+        )
+    }
+
+    /// Load full message list for one conversation. Server filters out
+    /// system markers + brief_seed rows so the Agent surface renders
+    /// directly without per-row guards.
+    func fetchAgentConversation(id: String) async throws -> AgentConversationDetail {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        return try await api.request(path: "api/chat/agent/conversations/\(id)")
+    }
+
+    /// Rename a conversation. Length is server-capped at 120 chars.
+    func renameAgentConversation(id: String, title: String) async throws {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        struct Body: Encodable { let title: String }
+        try await api.requestVoid(
+            method: "PATCH",
+            path: "api/chat/agent/conversations/\(id)",
+            body: Body(title: title)
+        )
+    }
+
+    /// Soft-delete a conversation. Messages stay in the DB; the row
+    /// vanishes from the list and from the chat thread fetch.
+    func deleteAgentConversation(id: String) async throws {
+        guard api.hasSession else { throw SupabaseManagerError.notAuthenticated }
+        try await api.requestVoid(
+            method: "DELETE",
+            path: "api/chat/agent/conversations/\(id)"
+        )
+    }
+
     /// Persist a {user, assistant} turn the iOS client generated locally
     /// (free-tier on-device AI). The server only stores the rows; no LLM
-    /// is invoked. Used by `OnDeviceAssistantStream` to keep
-    /// `DailyConversationsView` in sync with what the user sees on Today.
+    /// is invoked. Used by `OnDeviceAssistantStream` to keep the Agent
+    /// conversation list in sync with what the user sees on-device.
     @discardableResult
     func persistAssistantMessages(
         userMessage: String,

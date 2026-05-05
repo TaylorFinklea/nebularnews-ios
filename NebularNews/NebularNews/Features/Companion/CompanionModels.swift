@@ -529,6 +529,36 @@ struct CompanionAssistantPersistResult: Codable {
     let assistantMessageId: String
 }
 
+/// One Agent conversation row in the Agent tab list (Build 37).
+/// Backed by `chat_threads` server-side; APIClient's decoder converts
+/// snake_case → camelCase automatically (no explicit CodingKeys).
+struct AgentConversationSummary: Codable, Identifiable, Equatable {
+    let id: String
+    let articleId: String?
+    let title: String?
+    let lastMessagePreview: String?
+    let messageCount: Int
+    let updatedAt: Int
+    let createdAt: Int
+    let hasPinnedArticle: Bool
+}
+
+/// `GET /api/chat/agent/conversations/:id` payload. `messages` is
+/// already filtered server-side to exclude system markers and
+/// `brief_seed` rows, so the Agent surface can render straight through.
+struct AgentConversationDetail: Codable {
+    let thread: AgentConversationThread
+    let messages: [CompanionChatMessage]
+
+    struct AgentConversationThread: Codable {
+        let id: String
+        let articleId: String?
+        let title: String?
+        let createdAt: Int
+        let updatedAt: Int
+    }
+}
+
 struct CompanionTodayStats: Codable {
     let unreadTotal: Int
     let newToday: Int
