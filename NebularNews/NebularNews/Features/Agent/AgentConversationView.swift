@@ -12,6 +12,7 @@ struct AgentConversationView: View {
     @Environment(AppState.self) private var appState
     @Environment(AgentConversationsCoordinator.self) private var conversations
     @Environment(AIAssistantCoordinator.self) private var coordinator
+    @Environment(DeepLinkRouter.self) private var deepLinkRouter
     @Environment(\.dismiss) private var dismiss
 
     let conversationId: String
@@ -219,6 +220,18 @@ struct AgentConversationView: View {
             pageType: "agent",
             pageLabel: "Agent"
         )
+        // Wire client-tool dispatch — used to live on the deleted FAB.
+        // generate_brief_now / open_article / navigate_to_tab /
+        // set_articles_filter all dispatch through here.
+        coordinator.clientToolHandler = { [appState, deepLinkRouter] name, args in
+            let result = AssistantActionDispatcher.dispatch(
+                toolName: name,
+                args: args,
+                appState: appState,
+                deepLinkRouter: deepLinkRouter
+            )
+            return (summary: result.summary, succeeded: result.succeeded)
+        }
 
         isLoading = true
         // Use the agent-specific endpoint instead of the legacy
