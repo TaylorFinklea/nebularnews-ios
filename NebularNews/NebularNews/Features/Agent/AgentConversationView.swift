@@ -24,7 +24,13 @@ struct AgentConversationView: View {
     @FocusState private var isInputFocused: Bool
 
     private var visibleMessages: [CompanionChatMessage] {
-        coordinator.messages.filter { $0.role != "system" }
+        // Belt-and-suspenders client filter: server-side load already
+        // strips system markers and brief_seed rows, but we re-filter
+        // here so any stale state from the shared coordinator doesn't
+        // leak a brief seed's raw JSON into the chat surface.
+        coordinator.messages.filter { msg in
+            msg.role != "system" && msg.kind != "brief_seed"
+        }
     }
 
     var body: some View {
@@ -215,7 +221,17 @@ struct AgentConversationView: View {
         )
 
         isLoading = true
-        await coordinator.loadThread(conversationId)
+        // Use the agent-specific endpoint instead of the legacy
+        // /api/chat/assistant route — the agent endpoint filters out
+        // system markers and brief_seed rows server-side, which is
+        // critical for the migrated __assistant__ thread that still
+        // has the old brief seeds inline.
+        do {
+            let detail = try await SupabaseManager.shared.fetchAgentConversation(id: conversationId)
+            coordinator.messages = detail.messages
+        } catch {
+            coordinator.errorMessage = error.localizedDescription
+        }
         isLoading = false
 
         if !didConsumeAutoSend, let prompt = autoSendPrompt, !prompt.isEmpty {
